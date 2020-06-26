@@ -759,7 +759,7 @@ class BytecodeGenerator::TopLevelDeclarationsBuilder final : public ZoneObject {
         int start = array_index;
 #endif
         if (decl->IsFunctionDeclaration()) {
-          FunctionLiteral* f = static_cast<FunctionDeclaration*>(decl)->fun();
+          FunctionLiteral* f = static_cast<FunctionDeclaration*>(decl)->fun<FunctionLiteral>();
           Handle<SharedFunctionInfo> sfi(
               Compiler::GetSharedFunctionInfo(f, script, isolate));
           // Return a null handle if any initial values can't be created. Caller
@@ -788,7 +788,7 @@ class BytecodeGenerator::TopLevelDeclarationsBuilder final : public ZoneObject {
           data->set(array_index++, *var->raw_name()->string());
           DCHECK_EQ(start + kGlobalVariableDeclarationSize, array_index);
         } else {
-          FunctionLiteral* f = static_cast<FunctionDeclaration*>(decl)->fun();
+          FunctionLiteral* f = static_cast<FunctionDeclaration*>(decl)->fun<FunctionLiteral>();
           Handle<SharedFunctionInfo> sfi(
               Compiler::GetSharedFunctionInfo(f, script, isolate));
           // Return a null handle if any initial values can't be created. Caller
@@ -1583,14 +1583,14 @@ void BytecodeGenerator::VisitFunctionDeclaration(FunctionDeclaration* decl) {
       UNREACHABLE();
     case VariableLocation::PARAMETER:
     case VariableLocation::LOCAL: {
-      VisitFunctionLiteral(decl->fun());
+      VisitFunctionLiteral(decl->fun<FunctionLiteral>());
       BuildVariableAssignment(variable, Token::INIT, HoleCheckMode::kElided);
       break;
     }
     case VariableLocation::REPL_GLOBAL:
     case VariableLocation::CONTEXT: {
       DCHECK_EQ(0, execution_context()->ContextChainDepth(variable->scope()));
-      VisitFunctionLiteral(decl->fun());
+      VisitFunctionLiteral(decl->fun<FunctionLiteral>());
       builder()->StoreContextSlot(execution_context()->reg(), variable->index(),
                                   0);
       break;
@@ -1600,15 +1600,15 @@ void BytecodeGenerator::VisitFunctionDeclaration(FunctionDeclaration* decl) {
       builder()
           ->LoadLiteral(variable->raw_name())
           .StoreAccumulatorInRegister(args[0]);
-      VisitFunctionLiteral(decl->fun());
+      VisitFunctionLiteral(decl->fun<FunctionLiteral>());
       builder()->StoreAccumulatorInRegister(args[1]).CallRuntime(
           Runtime::kDeclareEvalFunction, args);
       break;
     }
   }
   DCHECK_IMPLIES(
-      eager_inner_literals_ != nullptr && decl->fun()->ShouldEagerCompile(),
-      IsInEagerLiterals(decl->fun(), *eager_inner_literals_));
+      eager_inner_literals_ != nullptr && decl->fun<FunctionLiteral>()->ShouldEagerCompile(),
+      IsInEagerLiterals(decl->fun<FunctionLiteral>(), *eager_inner_literals_));
 }
 
 void BytecodeGenerator::VisitModuleNamespaceImports() {
@@ -1656,7 +1656,7 @@ void BytecodeGenerator::VisitModuleDeclarations(Declaration::List* decls) {
       if (decl->IsFunctionDeclaration()) {
         DCHECK(var->IsExport());
         FunctionDeclaration* f = static_cast<FunctionDeclaration*>(decl);
-        AddToEagerLiteralsIfEager(f->fun());
+        AddToEagerLiteralsIfEager(f->fun<FunctionLiteral>());
         top_level_builder()->record_module_function_declaration();
       } else if (var->IsExport() && var->binding_needs_init()) {
         DCHECK(decl->IsVariableDeclaration());
@@ -1664,7 +1664,7 @@ void BytecodeGenerator::VisitModuleDeclarations(Declaration::List* decls) {
       }
     } else {
       RegisterAllocationScope register_scope(this);
-      Visit(decl);
+      VisitDeclaration(decl);
     }
   }
   BuildDeclareCall(Runtime::kDeclareModuleExports);
@@ -1680,7 +1680,7 @@ void BytecodeGenerator::VisitGlobalDeclarations(Declaration::List* decls) {
       if (decl->IsFunctionDeclaration()) {
         top_level_builder()->record_global_function_declaration();
         FunctionDeclaration* f = static_cast<FunctionDeclaration*>(decl);
-        AddToEagerLiteralsIfEager(f->fun());
+        AddToEagerLiteralsIfEager(f->fun<FunctionLiteral>());
       } else {
         top_level_builder()->record_global_variable_declaration();
       }
@@ -1697,7 +1697,7 @@ void BytecodeGenerator::VisitGlobalDeclarations(Declaration::List* decls) {
 void BytecodeGenerator::VisitDeclarations(Declaration::List* declarations) {
   for (Declaration* decl : *declarations) {
     RegisterAllocationScope register_scope(this);
-    Visit(decl);
+    VisitDeclaration(decl);
   }
 }
 
@@ -2556,7 +2556,7 @@ void BytecodeGenerator::VisitInitializeClassStaticElementsStatement(
 void BytecodeGenerator::BuildInvalidPropertyAccess(MessageTemplate tmpl,
                                                    Property* property) {
   RegisterAllocationScope register_scope(this);
-  const AstRawString* name = property->key()->AsVariableProxy()->raw_name();
+  const AstRawString* name = property->key()->AsVariableProxyExpression()->raw_name();
   RegisterList args = register_allocator()->NewRegisterList(2);
   builder()
       ->LoadLiteral(Smi::FromEnum(tmpl))
@@ -3179,7 +3179,7 @@ void BytecodeGenerator::VisitArrayLiteral(ArrayLiteral* expr) {
   BuildCreateArrayLiteral(expr->values(), expr);
 }
 
-void BytecodeGenerator::VisitVariableProxy(VariableProxy* proxy) {
+void BytecodeGenerator::VisitVariableProxyExpression(VariableProxyExpression* proxy) {
   builder()->SetExpressionPosition(proxy);
   BuildVariableLoad(proxy->var(), proxy->hole_check_mode());
 }
@@ -4122,8 +4122,8 @@ void BytecodeGenerator::BuildAssignment(
         // Split object literals into destructuring.
         BuildDestructuringArrayAssignment(pattern, op, lookup_hoisting_mode);
       } else {
-        DCHECK(lhs_data.expr()->IsVariableProxy());
-        VariableProxy* proxy = lhs_data.expr()->AsVariableProxy();
+        DCHECK(lhs_data.expr()->IsVariableProxyExpression());
+        VariableProxyExpression* proxy = lhs_data.expr()->AsVariableProxyExpression();
         BuildVariableAssignment(proxy->var(), op, proxy->hole_check_mode(),
                                 lookup_hoisting_mode);
       }
@@ -4205,7 +4205,7 @@ void BytecodeGenerator::VisitCompoundAssignment(CompoundAssignment* expr) {
   // the left-hand side value and performing a binary operation.
   switch (lhs_data.assign_type()) {
     case NON_PROPERTY: {
-      VariableProxy* proxy = expr->target()->AsVariableProxy();
+      VariableProxyExpression* proxy = expr->target()->AsVariableProxyExpression();
       BuildVariableLoad(proxy->var(), proxy->hole_check_mode());
       break;
     }
@@ -4878,7 +4878,7 @@ void BytecodeGenerator::BuildPrivateMethodIn(Variable* private_name,
 void BytecodeGenerator::BuildPrivateBrandCheck(Property* property,
                                                Register object,
                                                MessageTemplate tmpl) {
-  Variable* private_name = property->key()->AsVariableProxy()->var();
+  Variable* private_name = property->key()->AsVariableProxyExpression()->var();
   DCHECK(IsPrivateMethodOrAccessorVariableMode(private_name->mode()));
   ClassScope* scope = private_name->scope()->AsClassScope();
   if (private_name->is_static()) {
@@ -5080,7 +5080,7 @@ void BytecodeGenerator::VisitCall(Call* expr) {
         BuildPushUndefinedIntoRegisterList(&args);
       }
       // Load callee as a global variable.
-      VariableProxy* proxy = callee_expr->AsVariableProxy();
+      VariableProxyExpression* proxy = callee_expr->AsVariableProxyExpression();
       BuildVariableLoadForAccumulatorValue(proxy->var(),
                                            proxy->hole_check_mode());
       builder()->StoreAccumulatorInRegister(callee);
@@ -5088,14 +5088,14 @@ void BytecodeGenerator::VisitCall(Call* expr) {
     }
     case Call::WITH_CALL: {
       Register receiver = register_allocator()->GrowRegisterList(&args);
-      DCHECK(callee_expr->AsVariableProxy()->var()->IsLookupSlot());
+      DCHECK(callee_expr->AsVariableProxyExpression()->var()->IsLookupSlot());
       {
         RegisterAllocationScope inner_register_scope(this);
         Register name = register_allocator()->NewRegister();
 
         // Call %LoadLookupSlotForCall to get the callee and receiver.
         RegisterList result_pair = register_allocator()->NewRegisterList(2);
-        Variable* variable = callee_expr->AsVariableProxy()->var();
+        Variable* variable = callee_expr->AsVariableProxyExpression()->var();
         builder()
             ->LoadLiteral(variable->raw_name())
             .StoreAccumulatorInRegister(name)
@@ -5414,10 +5414,10 @@ void BytecodeGenerator::VisitVoid(UnaryOperation* expr) {
 }
 
 void BytecodeGenerator::VisitForTypeOfValue(Expression* expr) {
-  if (expr->IsVariableProxy()) {
+  if (expr->IsVariableProxyExpression()) {
     // Typeof does not throw a reference error on global variables, hence we
     // perform a non-contextual load in case the operand is a variable proxy.
-    VariableProxy* proxy = expr->AsVariableProxy();
+    VariableProxyExpression* proxy = expr->AsVariableProxyExpression();
     BuildVariableLoadForAccumulatorValue(proxy->var(), proxy->hole_check_mode(),
                                          INSIDE_TYPEOF);
   } else {
@@ -5511,12 +5511,12 @@ void BytecodeGenerator::VisitDelete(UnaryOperation* unary) {
       VisitForEffect(expr);
       builder()->LoadTrue();
     }
-  } else if (expr->IsVariableProxy() &&
-             !expr->AsVariableProxy()->is_new_target()) {
+  } else if (expr->IsVariableProxyExpression() &&
+             !expr->AsVariableProxyExpression()->is_new_target()) {
     // Delete of an unqualified identifier is allowed in sloppy mode but is
     // not allowed in strict mode.
     DCHECK(is_sloppy(language_mode()));
-    Variable* variable = expr->AsVariableProxy()->var();
+    Variable* variable = expr->AsVariableProxyExpression()->var();
     switch (variable->location()) {
       case VariableLocation::PARAMETER:
       case VariableLocation::LOCAL:
@@ -5569,7 +5569,7 @@ void BytecodeGenerator::VisitCountOperation(CountOperation* expr) {
   const AstRawString* name;
   switch (assign_type) {
     case NON_PROPERTY: {
-      VariableProxy* proxy = expr->expression()->AsVariableProxy();
+      VariableProxyExpression* proxy = expr->expression()->AsVariableProxyExpression();
       BuildVariableLoadForAccumulatorValue(proxy->var(),
                                            proxy->hole_check_mode());
       break;
@@ -5664,7 +5664,7 @@ void BytecodeGenerator::VisitCountOperation(CountOperation* expr) {
   builder()->SetExpressionPosition(expr);
   switch (assign_type) {
     case NON_PROPERTY: {
-      VariableProxy* proxy = expr->expression()->AsVariableProxy();
+      VariableProxyExpression* proxy = expr->expression()->AsVariableProxyExpression();
       BuildVariableAssignment(proxy->var(), expr->op(),
                               proxy->hole_check_mode());
       break;
@@ -5819,7 +5819,7 @@ void BytecodeGenerator::VisitCompareOperation(CompareOperation* expr) {
   } else {
     if (expr->op() == Token::IN && expr->left()->IsPrivateName()) {
       DCHECK(FLAG_harmony_private_brand_checks);
-      Variable* var = expr->left()->AsVariableProxy()->var();
+      Variable* var = expr->left()->AsVariableProxyExpression()->var();
       if (IsPrivateMethodOrAccessorVariableMode(var->mode())) {
         BuildPrivateMethodIn(var, expr->right());
         return;
@@ -6884,10 +6884,10 @@ FeedbackSlot BytecodeGenerator::GetCachedLoadICSlot(const Expression* expr,
   }
   FeedbackSlotCache::SlotKind slot_kind =
       FeedbackSlotCache::SlotKind::kLoadProperty;
-  if (!expr->IsVariableProxy()) {
+  if (!expr->IsVariableProxyExpression()) {
     return feedback_spec()->AddLoadICSlot();
   }
-  const VariableProxy* proxy = expr->AsVariableProxy();
+  const VariableProxyExpression* proxy = expr->AsVariableProxyExpression();
   FeedbackSlot slot(
       feedback_slot_cache()->Get(slot_kind, proxy->var()->index(), name));
   if (!slot.IsInvalid()) {
@@ -6925,10 +6925,10 @@ FeedbackSlot BytecodeGenerator::GetCachedStoreICSlot(const Expression* expr,
       is_strict(language_mode())
           ? FeedbackSlotCache::SlotKind::kStoreNamedStrict
           : FeedbackSlotCache::SlotKind::kStoreNamedSloppy;
-  if (!expr->IsVariableProxy()) {
+  if (!expr->IsVariableProxyExpression()) {
     return feedback_spec()->AddStoreICSlot(language_mode());
   }
-  const VariableProxy* proxy = expr->AsVariableProxy();
+  const VariableProxyExpression* proxy = expr->AsVariableProxyExpression();
   FeedbackSlot slot(
       feedback_slot_cache()->Get(slot_kind, proxy->var()->index(), name));
   if (!slot.IsInvalid()) {

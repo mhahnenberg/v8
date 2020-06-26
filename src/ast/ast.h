@@ -39,9 +39,10 @@ namespace internal {
 // Nodes of the abstract syntax tree. Only concrete classes are
 // enumerated here.
 
-#define DECLARATION_NODE_LIST(V) \
-  V(VariableDeclaration)         \
-  V(FunctionDeclaration)
+// TODO(binast): Declarations are now independent of the AST
+// #define DECLARATION_NODE_LIST(V) \
+//   V(VariableDeclarationNode)     \
+//   V(FunctionDeclarationNode)
 
 #define ITERATION_NODE_LIST(V) \
   V(DoWhileStatement)          \
@@ -105,14 +106,13 @@ namespace internal {
   V(ThisExpression)             \
   V(Throw)                      \
   V(UnaryOperation)             \
-  V(VariableProxy)              \
+  V(VariableProxyExpression)    \
   V(Yield)                      \
   V(YieldStar)
 
 #define FAILURE_NODE_LIST(V) V(FailureExpression)
 
 #define AST_NODE_LIST(V)                        \
-  DECLARATION_NODE_LIST(V)                      \
   STATEMENT_NODE_LIST(V)                        \
   EXPRESSION_NODE_LIST(V)
 
@@ -347,17 +347,37 @@ class Block final : public BreakableStatement {
       : Block(nullptr, 0, ignore_completion_value, is_breakable) {}
 };
 
-class Declaration : public AstNode {
+class VariableDeclaration;
+class FunctionDeclaration;
+
+class Declaration : public ZoneObject {
  public:
+  enum DeclType : uint8_t {
+    VariableDecl,
+    FunctionDecl,
+  };
+
   using List = base::ThreadedList<Declaration>;
 
   Variable* var() const { return var_; }
   void set_var(Variable* var) { var_ = var; }
 
+  DeclType type() const { return type_; }
+  bool IsVariableDeclaration() const { return type_ == VariableDecl; }
+  bool IsFunctionDeclaration() const { return type_ == FunctionDecl; }
+
+  inline VariableDeclaration* AsVariableDeclaration();
+  inline FunctionDeclaration* AsFunctionDeclaration();
+
+  int position() const { return start_pos_; }
+
  protected:
-  Declaration(int pos, NodeType type) : AstNode(pos, type), next_(nullptr) {}
+  friend class BinAstDeserializer;
+  Declaration(int pos, DeclType type) : start_pos_(pos), type_(type), var_(nullptr), next_(nullptr) {}
 
  private:
+  int start_pos_;
+  DeclType type_;
   Variable* var_;
   // Declarations list threaded through the declarations.
   Declaration** next() { return &next_; }
@@ -368,22 +388,22 @@ class Declaration : public AstNode {
 
 class VariableDeclaration : public Declaration {
  public:
+  bool is_nested() const { return is_nested_; }
   inline NestedVariableDeclaration* AsNested();
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstNodeFactory;
+  friend class BinAstDeserializer;
   friend Zone;
-
-  using IsNestedField = Declaration::NextBitField<bool, 1>;
 
  protected:
   explicit VariableDeclaration(int pos, bool is_nested = false)
-      : Declaration(pos, kVariableDeclaration) {
-    bit_field_ = IsNestedField::update(bit_field_, is_nested);
+      : Declaration(pos, Declaration::VariableDecl), is_nested_(is_nested)
+  {
   }
 
-  template <class T, int size>
-  using NextBitField = IsNestedField::Next<T, size>;
+  bool is_nested_;
 };
 
 // For var declarations that appear in a block scope.
@@ -395,6 +415,8 @@ class NestedVariableDeclaration final : public VariableDeclaration {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstNodeFactory;
+  friend class BinAstDeserializer;
   friend Zone;
 
   NestedVariableDeclaration(Scope* scope, int pos)
@@ -404,25 +426,152 @@ class NestedVariableDeclaration final : public VariableDeclaration {
   Scope* scope_;
 };
 
-inline NestedVariableDeclaration* VariableDeclaration::AsNested() {
-  return IsNestedField::decode(bit_field_)
-             ? static_cast<NestedVariableDeclaration*>(this)
-             : nullptr;
-}
-
 class FunctionDeclaration final : public Declaration {
  public:
-  FunctionLiteral* fun() const { return fun_; }
+  template<typename T>
+  T* fun() { return static_cast<T*>(fun_); }
+
+  template<typename T>
+  const T* fun() const { return static_cast<const T*>(fun_); }
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstNodeFactory;
+  friend class BinAstDeserializer;
   friend Zone;
 
-  FunctionDeclaration(FunctionLiteral* fun, int pos)
-      : Declaration(pos, kFunctionDeclaration), fun_(fun) {}
+  FunctionDeclaration(void* fun, int pos)
+      : Declaration(pos, Declaration::FunctionDecl), fun_(fun) {}
 
-  FunctionLiteral* fun_;
+  // This is a reference back to the FunctionLiteral AST node. This is a void* to avoid
+  // having to directly reference a particular AST type. Whoever consumes this needs to
+  // cast it themselves.
+  //
+  // The goal is to separate things so that the Scope hierarchy is indepedent of
+  // the AST types it's operating on. This is tricky with FunctionDeclarations since
+  // they need to refer back to their FunctionLiteral (an AST node) while the Scope
+  // maintains a list of Declarations.
+  void* fun_;
 };
+
+inline VariableDeclaration* Declaration::AsVariableDeclaration() {
+  return IsVariableDeclaration() ? static_cast<VariableDeclaration*>(this) : nullptr;
+}
+inline FunctionDeclaration* Declaration::AsFunctionDeclaration() {
+  return IsFunctionDeclaration() ? static_cast<FunctionDeclaration*>(this) : nullptr;
+}
+inline NestedVariableDeclaration* VariableDeclaration::AsNested() {
+  return is_nested() ? static_cast<NestedVariableDeclaration*>(this) : nullptr;
+}
+
+// class DeclarationNode : public AstNode {
+//  public:
+//   Declaration* declaration() { return decl_; }
+//   const Declaration* declaration() const { return decl_; }
+ 
+//   Variable* var() const { return declaration()->var(); }
+//   void set_var(Variable* var) { return declaration()->set_var(var); }
+
+//  protected:
+//   DeclarationNode(int pos, NodeType type, Declaration* decl) : AstNode(pos, type) {}
+
+//  private:
+//   Declaration* decl_;
+// };
+
+// class VariableDeclarationNode : public DeclarationNode {
+//  public:
+//   VariableDeclaration* var_decl() { return static_cast<VariableDeclaration*>(declaration()); }
+//   const VariableDeclaration* var_decl() const { return static_cast<const VariableDeclaration*>(declaration()); }
+
+//   bool is_nested() const { return var_decl()->is_nested(); }
+
+//  protected:
+//   explicit VariableDeclarationNode(VariableDeclaration* decl) : DeclarationNode(decl->position(), kVariableDeclarationNode, decl) {}
+
+//  private:
+//   friend class AstNodeFactory;
+// };
+
+// class NestedVariableDeclarationNode final : public VariableDeclarationNode {
+//  public:
+//   NestedVariableDeclaration* nested_var_decl() { return static_cast<NestedVariableDeclaration*>(declaration()); }
+//   const NestedVariableDeclaration* nested_var_decl() const { return static_cast<const NestedVariableDeclaration*>(declaration()); }
+
+//  private:
+//   friend class AstNodeFactory;
+
+//   NestedVariableDeclarationNode(NestedVariableDeclaration* decl) : VariableDeclarationNode(decl) {}
+// };
+
+// class FunctionDeclarationNode final : public DeclarationNode {
+//  public:
+//   FunctionLiteral* fun() const { return fun_; }
+
+//  private:
+//   friend class AstNodeFactory;
+
+//   FunctionDeclarationNode(FunctionLiteral* fun, int pos)
+//       : DeclarationNode(pos, kFunctionDeclarationNode, nullptr), fun_(fun) {}
+
+//   FunctionLiteral* fun_;
+// };
+
+
+// class VariableDeclaration : public Declaration {
+//  public:
+//   inline NestedVariableDeclaration* AsNested();
+
+//  private:
+//   friend class AstNodeFactory;
+
+//   using IsNestedField = Declaration::NextBitField<bool, 1>;
+
+//  protected:
+//   explicit VariableDeclaration(int pos, bool is_nested = false)
+//       : Declaration(pos, kVariableDeclaration) {
+//     bit_field_ = IsNestedField::update(bit_field_, is_nested);
+//   }
+
+//   template <class T, int size>
+//   using NextBitField = IsNestedField::Next<T, size>;
+// };
+
+// For var declarations that appear in a block scope.
+// Only distinguished from VariableDeclaration during Scope analysis,
+// so it doesn't get its own NodeType.
+// class NestedVariableDeclaration final : public VariableDeclaration {
+//  public:
+//   Scope* scope() const { return scope_; }
+
+//  private:
+//   friend class AstNodeFactory;
+
+//   NestedVariableDeclaration(Scope* scope, int pos)
+//       : VariableDeclaration(pos, true), scope_(scope) {}
+
+//   // Nested scope from which the declaration originated.
+//   Scope* scope_;
+// };
+
+// inline NestedVariableDeclaration* VariableDeclaration::AsNested() {
+//   return IsNestedField::decode(bit_field_)
+//              ? static_cast<NestedVariableDeclaration*>(this)
+//              : nullptr;
+// }
+
+// class FunctionDeclaration final : public Declaration {
+//  public:
+//   FunctionLiteral* fun() const { return fun_; }
+
+//  private:
+//   friend class AstNodeFactory;
+
+//   FunctionDeclaration(FunctionLiteral* fun, int pos)
+//       : Declaration(pos, kFunctionDeclaration), fun_(fun) {}
+
+//   FunctionLiteral* fun_;
+// };
 
 
 class IterationStatement : public BreakableStatement {
@@ -1406,7 +1555,7 @@ class ThisExpression final : public Expression {
   explicit ThisExpression(int pos) : Expression(pos, kThisExpression) {}
 };
 
-class VariableProxy final : public Expression {
+class VariableProxy final : public ZoneObject {
  public:
   bool IsValidReferenceExpression() const { return !is_new_target(); }
 
@@ -1424,6 +1573,8 @@ class VariableProxy final : public Expression {
     DCHECK_NOT_NULL(v);
     var_ = v;
   }
+
+  int position() const { return start_position_; }
 
   Scanner::Location location() {
     return Scanner::Location(position(), position() + raw_name()->length());
@@ -1494,13 +1645,15 @@ class VariableProxy final : public Expression {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstNodeFactory;
   friend Zone;
 
   VariableProxy(Variable* var, int start_position);
 
   VariableProxy(const AstRawString* name, VariableKind variable_kind,
                 int start_position)
-      : Expression(start_position, kVariableProxy),
+      : start_position_(start_position),
+        bit_field_(0),
         raw_name_(name),
         next_unresolved_(nullptr) {
     DCHECK_NE(THIS_VARIABLE, variable_kind);
@@ -1512,7 +1665,10 @@ class VariableProxy final : public Expression {
 
   explicit VariableProxy(const VariableProxy* copy_from);
 
-  using IsAssignedField = Expression::NextBitField<bool, 1>;
+  int start_position_;
+  uint32_t bit_field_;
+
+  using IsAssignedField = base::BitField<bool, 0, 1>;
   using IsResolvedField = IsAssignedField::Next<bool, 1>;
   using IsRemovedFromUnresolvedField = IsResolvedField::Next<bool, 1>;
   using IsNewTargetField = IsRemovedFromUnresolvedField::Next<bool, 1>;
@@ -1543,6 +1699,54 @@ class OptionalChain final : public Expression {
 
   Expression* expression_;
 };
+
+
+class VariableProxyExpression final : public Expression {
+ public:
+  bool IsValidReferenceExpression() const { return !proxy_->is_new_target(); }
+
+  Handle<String> name() const { return proxy_->name(); }
+  const AstRawString* raw_name() const { return proxy_->raw_name(); }
+
+  Variable* var() const { return proxy_->var(); }
+  void set_var(Variable* v) { proxy_->set_var(v); }
+
+  Scanner::Location location() {
+    return Scanner::Location(position(), position() + raw_name()->length());
+  }
+
+  bool is_assigned() const { return proxy_->is_assigned(); }
+  void set_is_assigned() { proxy_->set_is_assigned(); }
+  void clear_is_assigned() { proxy_->clear_is_assigned(); }
+
+  bool is_resolved() const { return proxy_->is_resolved(); }
+  void set_is_resolved() { proxy_->set_is_resolved(); }
+
+  bool is_new_target() const { return proxy_->is_new_target(); }
+  void set_is_new_target() { proxy_->set_is_new_target(); }
+
+  HoleCheckMode hole_check_mode() const { return proxy_->hole_check_mode(); }
+  void set_needs_hole_check() { proxy_->set_needs_hole_check(); }
+
+  bool IsPrivateName() const { return proxy_->IsPrivateName(); }
+
+  // Bind this proxy to the variable var.
+  void BindTo(Variable* var);
+
+  void mark_removed_from_unresolved() { proxy_->mark_removed_from_unresolved(); }
+
+ private:
+  friend class AstNodeFactory;
+  friend Zone;
+
+  VariableProxyExpression(VariableProxy* proxy)
+      : Expression(proxy->position(), kVariableProxyExpression),
+        proxy_(proxy) {
+  }
+
+  VariableProxy* proxy_;
+};
+
 
 // Assignments to a property will use one of several types of property access.
 // Otherwise, the assignment is to a non-property (a global, a local slot, a
@@ -1578,7 +1782,7 @@ class Property final : public Expression {
     if (property == nullptr) return NON_PROPERTY;
     if (property->IsPrivateReference()) {
       DCHECK(!property->IsSuperAccess());
-      VariableProxy* proxy = property->key()->AsVariableProxy();
+      VariableProxyExpression* proxy = property->key()->AsVariableProxyExpression();
       DCHECK_NOT_NULL(proxy);
       Variable* var = proxy->var();
 
@@ -2569,16 +2773,16 @@ class SuperPropertyReference final : public Expression {
 
 class SuperCallReference final : public Expression {
  public:
-  VariableProxy* new_target_var() const { return new_target_var_; }
-  VariableProxy* this_function_var() const { return this_function_var_; }
+  VariableProxyExpression* new_target_var() const { return new_target_var_; }
+  VariableProxyExpression* this_function_var() const { return this_function_var_; }
 
  private:
   friend class AstNodeFactory;
   friend Zone;
 
   // We take in ThisExpression* only as a proof that it was accessed.
-  SuperCallReference(VariableProxy* new_target_var,
-                     VariableProxy* this_function_var, int pos)
+  SuperCallReference(VariableProxyExpression* new_target_var,
+                     VariableProxyExpression* this_function_var, int pos)
       : Expression(pos, kSuperCallReference),
         new_target_var_(new_target_var),
         this_function_var_(this_function_var) {
@@ -2586,8 +2790,8 @@ class SuperCallReference final : public Expression {
     DCHECK(this_function_var->raw_name()->IsOneByteEqualTo(".this_function"));
   }
 
-  VariableProxy* new_target_var_;
-  VariableProxy* this_function_var_;
+  VariableProxyExpression* new_target_var_;
+  VariableProxyExpression* this_function_var_;
 };
 
 // This AST Node is used to represent a dynamic import call --
@@ -2689,8 +2893,27 @@ class AstVisitor {
  public:
   void Visit(AstNode* node) { impl()->Visit(node); }
 
+  void VisitDeclaration(Declaration* decl) {
+    switch (decl->type()) {
+      case Declaration::VariableDecl: {
+        impl()->VisitVariableDeclaration(static_cast<VariableDeclaration*>(decl));
+        break;
+      }
+      case Declaration::FunctionDecl: {
+        impl()->VisitFunctionDeclaration(static_cast<FunctionDeclaration*>(decl));
+        break;
+      }
+      default: {
+        UNREACHABLE();
+      }
+    }
+  }
+
+  // void VisitDeclaration(VariableDeclaration* decl) {}
+  // void VisitDeclaration(FunctionDeclaration* decl) {}
+
   void VisitDeclarations(Declaration::List* declarations) {
-    for (Declaration* decl : *declarations) Visit(decl);
+    for (Declaration* decl : *declarations) VisitDeclaration(decl);
   }
 
   void VisitStatements(const ZonePtrList<Statement>* statements) {
@@ -3040,6 +3263,10 @@ class AstNodeFactory final {
     return zone_->New<ArrayLiteral>(zone_, values, first_spread_index, pos);
   }
 
+  VariableProxyExpression* NewVariableProxyExpression(VariableProxy* proxy) {
+    return zone_->New<VariableProxyExpression>(proxy);
+  }
+
   VariableProxy* NewVariableProxy(Variable* var,
                                   int start_position = kNoSourcePosition) {
     return zone_->New<VariableProxy>(var, start_position);
@@ -3163,8 +3390,8 @@ class AstNodeFactory final {
     DCHECK_NOT_NULL(target);
     DCHECK_NOT_NULL(value);
 
-    if (op != Token::INIT && target->IsVariableProxy()) {
-      target->AsVariableProxy()->set_is_assigned();
+    if (op != Token::INIT && target->IsVariableProxyExpression()) {
+      target->AsVariableProxyExpression()->set_is_assigned();
     }
 
     if (op == Token::ASSIGN || op == Token::INIT) {
@@ -3275,8 +3502,8 @@ class AstNodeFactory final {
     return zone_->New<SuperPropertyReference>(home_object_var, pos);
   }
 
-  SuperCallReference* NewSuperCallReference(VariableProxy* new_target_var,
-                                            VariableProxy* this_function_var,
+  SuperCallReference* NewSuperCallReference(VariableProxyExpression* new_target_var,
+                                            VariableProxyExpression* this_function_var,
                                             int pos) {
     return zone_->New<SuperCallReference>(new_target_var, this_function_var,
                                           pos);

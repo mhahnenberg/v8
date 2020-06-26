@@ -902,6 +902,8 @@ struct ParserTypes<PreParser> {
   using FuncNameInferrer = PreParserFuncNameInferrer;
   using SourceRange = PreParserSourceRange;
   using SourceRangeScope = PreParserSourceRangeScope;
+  using AstValueFactory = v8::internal::AstValueFactory;
+  using AstRawString = AstRawString;
 };
 
 

@@ -97,6 +97,8 @@ class AstFunctionLiteralIdReindexChecker final
     // here, but that requires more advanced DCHECK support with formatting.
     DCHECK(visited_->find(lit) != visited_->end());
   }
+  bool VisitDeclaration(VariableDeclaration* decl) { return true; }
+  bool VisitDeclaration(FunctionDeclaration* decl) { return true; }
 
  private:
   const std::set<FunctionLiteral*>* visited_;

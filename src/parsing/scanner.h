@@ -326,11 +326,31 @@ class V8_EXPORT_PRIVATE Scanner {
     return LiteralContainsEscapes(next());
   }
 
-  const AstRawString* CurrentSymbol(AstValueFactory* ast_value_factory) const;
+  template<typename AstValueFactoryT>
+  const AstRawString* CurrentSymbol(AstValueFactoryT* ast_value_factory) const {
+    if (is_literal_one_byte()) {
+      return ast_value_factory->GetOneByteString(literal_one_byte_string());
+    }
+    return ast_value_factory->GetTwoByteString(literal_two_byte_string());
+  }
 
-  const AstRawString* NextSymbol(AstValueFactory* ast_value_factory) const;
+  template<typename AstValueFactoryT>
+  const AstRawString* NextSymbol(
+      AstValueFactoryT* ast_value_factory) const {
+    if (is_next_literal_one_byte()) {
+      return ast_value_factory->GetOneByteString(next_literal_one_byte_string());
+    }
+    return ast_value_factory->GetTwoByteString(next_literal_two_byte_string());
+  }
+
+  template<typename AstValueFactoryT>
   const AstRawString* CurrentRawSymbol(
-      AstValueFactory* ast_value_factory) const;
+      AstValueFactoryT* ast_value_factory) const {
+    if (is_raw_literal_one_byte()) {
+      return ast_value_factory->GetOneByteString(raw_literal_one_byte_string());
+    }
+    return ast_value_factory->GetTwoByteString(raw_literal_two_byte_string());
+  }
 
   double DoubleValue();
 

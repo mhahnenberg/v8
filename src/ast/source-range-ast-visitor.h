@@ -39,6 +39,8 @@ class SourceRangeAstVisitor final
   bool VisitNode(AstNode* node);
   void VisitTryCatchStatement(TryCatchStatement* stmt);
   void VisitTryFinallyStatement(TryFinallyStatement* stmt);
+  bool VisitDeclaration(VariableDeclaration* decl);
+  bool VisitDeclaration(FunctionDeclaration* decl);
 
   void MaybeRemoveContinuationRange(Statement* last_statement);
   void MaybeRemoveLastContinuationRange(ZonePtrList<Statement>* stmts);

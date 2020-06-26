@@ -93,6 +93,8 @@ class AstRawString final : public ZoneObject {
   friend class AstRawStringInternalizationKey;
   friend class AstStringConstants;
   friend class AstValueFactory;
+  friend class BinAstValueFactory;
+  friend class BinAstStringConstants;
   friend Zone;
 
   // Members accessed only by the AstValueFactory & related classes:
@@ -177,6 +179,7 @@ class AstConsString final : public ZoneObject {
 
  private:
   friend class AstValueFactory;
+  friend class BinAstValueFactory;
   friend Zone;
 
   AstConsString() : string_(), segment_({nullptr, nullptr}) {}

@@ -225,8 +225,8 @@ class V8_EXPORT_PRIVATE Scope : public NON_EXPORTED_BASE(ZoneObject) {
                                 VariableKind kind = NORMAL_VARIABLE);
   Variable* DeclareCatchVariableName(const AstRawString* name);
 
-  Variable* DeclareHomeObjectVariable(AstValueFactory* ast_value_factory);
-  Variable* DeclareStaticHomeObjectVariable(AstValueFactory* ast_value_factory);
+  Variable* DeclareHomeObjectVariable(const AstRawString* dot_home_object_string);
+  Variable* DeclareStaticHomeObjectVariable(const AstRawString* dot_static_home_object_string);
 
   // Declarations list.
   base::ThreadedList<Declaration>* declarations() { return &decls_; }
@@ -857,6 +857,8 @@ class V8_EXPORT_PRIVATE DeclarationScope : public Scope {
   // Creates a script scope.
   DeclarationScope(Zone* zone, AstValueFactory* ast_value_factory,
                    REPLMode repl_mode = REPLMode::kNo);
+  DeclarationScope(Zone* zone, const AstRawString* this_string,
+                   REPLMode repl_mode = REPLMode::kNo);
 
   FunctionKind function_kind() const { return function_kind_; }
 
@@ -990,10 +992,12 @@ class V8_EXPORT_PRIVATE DeclarationScope : public Scope {
     function_kind_ = kAsyncModule;
   }
 
-  void DeclareThis(AstValueFactory* ast_value_factory);
-  void DeclareArguments(AstValueFactory* ast_value_factory);
-  void DeclareDefaultFunctionVariables(AstValueFactory* ast_value_factory);
-
+  void DeclareThis(const AstRawString* this_string);
+  void DeclareArguments(const AstRawString* arguments_string);
+  void DeclareDefaultFunctionVariables(
+    const AstRawString* this_string,
+    const AstRawString* new_target_string,
+    const AstRawString* this_function_string);
   // Declare the function variable for a function literal. This variable
   // is in an intermediate scope between this function scope and the the
   // outer scope. Only possible for function scopes; at most one variable.
@@ -1014,7 +1018,7 @@ class V8_EXPORT_PRIVATE DeclarationScope : public Scope {
   // expects all parameters to be declared and from left to right.
   Variable* DeclareParameter(const AstRawString* name, VariableMode mode,
                              bool is_optional, bool is_rest,
-                             AstValueFactory* ast_value_factory, int position);
+                             const AstRawString* arguments_string, int position);
 
   // Makes sure that num_parameters_ and has_rest is correct for the preparser.
   void RecordParameter(bool is_rest);
@@ -1428,9 +1432,25 @@ class V8_EXPORT_PRIVATE ClassScope : public Scope {
   // and the current tail.
   void MigrateUnresolvedPrivateNameTail(AstNodeFactory* ast_node_factory,
                                         UnresolvedList::Iterator tail);
-  Variable* DeclareBrandVariable(AstValueFactory* ast_value_factory,
+
+  Variable* DeclareBrandVariable(const AstRawString* dot_brand_string,
                                  IsStaticFlag is_static_flag,
-                                 int class_token_pos);
+                                 int class_token_pos)
+  {
+    DCHECK_IMPLIES(GetRareData() != nullptr, GetRareData()->brand == nullptr);
+    bool was_added;
+    Variable* brand = Declare(zone(), dot_brand_string,
+                              VariableMode::kConst, NORMAL_VARIABLE,
+                              InitializationFlag::kNeedsInitialization,
+                              MaybeAssignedFlag::kNotAssigned, &was_added);
+    DCHECK(was_added);
+    brand->set_is_static_flag(is_static_flag);
+    brand->ForceContextAllocation();
+    brand->set_is_used();
+    EnsureRareData()->brand = brand;
+    brand->set_initializer_position(class_token_pos);
+    return brand;
+  }
 
   Variable* DeclareClassVariable(AstValueFactory* ast_value_factory,
                                  const AstRawString* name, int class_token_pos);

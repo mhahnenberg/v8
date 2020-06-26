@@ -50,6 +50,8 @@ class CallPrinter final : public AstVisitor<CallPrinter> {
 #define DECLARE_VISIT(type) void Visit##type(type* node);
   AST_NODE_LIST(DECLARE_VISIT)
 #undef DECLARE_VISIT
+  void VisitDeclaration(VariableDeclaration* decl);
+  void VisitDeclaration(FunctionDeclaration* decl);
 
  private:
   void Print(const char* str);
@@ -104,6 +106,8 @@ class AstPrinter final : public AstVisitor<AstPrinter> {
 #define DECLARE_VISIT(type) void Visit##type(type* node);
   AST_NODE_LIST(DECLARE_VISIT)
 #undef DECLARE_VISIT
+  void VisitDeclaration(VariableDeclaration* decl);
+  void VisitDeclaration(FunctionDeclaration* decl);
 
  private:
   friend class IndentedScope;

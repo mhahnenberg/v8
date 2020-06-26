@@ -19,7 +19,7 @@ class Parser;
 class DeclarationScope;
 class Scope;
 class Statement;
-class VariableProxy;
+class VariableProxyExpression;
 
 class Rewriter {
  public:
@@ -35,7 +35,7 @@ class Rewriter {
   // rewrite the body but then use the ".result" VariableProxy to resolve
   // the async promise that is the result of running a REPL script.
   // Returns base::nullopt in case something went wrong.
-  static base::Optional<VariableProxy*> RewriteBody(
+  static base::Optional<VariableProxyExpression*> RewriteBody(
       ParseInfo* info, Scope* scope, ZonePtrList<Statement>* body);
 };
 
