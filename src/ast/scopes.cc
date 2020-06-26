@@ -114,6 +114,11 @@ Scope::Scope(Zone* zone, Scope* outer_scope, ScopeType scope_type)
 DeclarationScope::DeclarationScope(Zone* zone,
                                    AstValueFactory* ast_value_factory,
                                    REPLMode repl_mode)
+    : DeclarationScope(zone, ast_value_factory->this_string(), repl_mode) {}
+
+DeclarationScope::DeclarationScope(Zone* zone,
+                                   const AstRawString* this_string,
+                                   REPLMode repl_mode)
     : Scope(zone),
       function_kind_(repl_mode == REPLMode::kYes ? kAsyncFunction
                                                  : kNormalFunction),
@@ -121,7 +126,7 @@ DeclarationScope::DeclarationScope(Zone* zone,
   DCHECK_EQ(scope_type_, SCRIPT_SCOPE);
   SetDefaults();
   is_repl_mode_scope_ = repl_mode == REPLMode::kYes;
-  receiver_ = DeclareDynamicGlobal(ast_value_factory->this_string(),
+  receiver_ = DeclareDynamicGlobal(this_string,
                                    THIS_VARIABLE, this);
 }
 
@@ -141,7 +146,7 @@ ModuleScope::ModuleScope(DeclarationScope* script_scope,
       module_descriptor_(new (avfactory->zone())
                              SourceTextModuleDescriptor(avfactory->zone())) {
   set_language_mode(LanguageMode::kStrict);
-  DeclareThis(avfactory);
+  DeclareThis(avfactory->this_string());
 }
 
 ModuleScope::ModuleScope(Isolate* isolate, Handle<ScopeInfo> scope_info,
@@ -549,8 +554,10 @@ void DeclarationScope::HoistSloppyBlockFunctions(AstNodeFactory* factory) {
       VariableProxy* source =
           factory->NewVariableProxy(sloppy_block_function->var());
       VariableProxy* target = factory->NewVariableProxy(var);
+      VariableProxyExpression* source_expr = factory->NewVariableProxyExpression(source);
+      VariableProxyExpression* target_expr = factory->NewVariableProxyExpression(target);
       Assignment* assignment = factory->NewAssignment(
-          sloppy_block_function->init(), target, source, pos);
+          sloppy_block_function->init(), target_expr, source_expr, pos);
       assignment->set_lookup_hoisting_mode(LookupHoistingMode::kLegacySloppy);
       Statement* statement = factory->NewExpressionStatement(assignment, pos);
       sloppy_block_function->set_statement(statement);
@@ -616,20 +623,20 @@ bool DeclarationScope::Analyze(ParseInfo* info) {
   return true;
 }
 
-void DeclarationScope::DeclareThis(AstValueFactory* ast_value_factory) {
+void DeclarationScope::DeclareThis(const AstRawString* this_string) {
   DCHECK(has_this_declaration());
 
   bool derived_constructor = IsDerivedConstructor(function_kind_);
 
   receiver_ = new (zone())
-      Variable(this, ast_value_factory->this_string(),
+      Variable(this, this_string,
                derived_constructor ? VariableMode::kConst : VariableMode::kVar,
                THIS_VARIABLE,
                derived_constructor ? kNeedsInitialization : kCreatedInitialized,
                kNotAssigned);
 }
 
-void DeclarationScope::DeclareArguments(AstValueFactory* ast_value_factory) {
+void DeclarationScope::DeclareArguments(const AstRawString* arguments_string) {
   DCHECK(is_function_scope());
   DCHECK(!is_arrow_scope());
 
@@ -638,7 +645,7 @@ void DeclarationScope::DeclareArguments(AstValueFactory* ast_value_factory) {
   // variable allocation.
   bool was_added;
   arguments_ =
-      Declare(zone(), ast_value_factory->arguments_string(), VariableMode::kVar,
+      Declare(zone(), arguments_string, VariableMode::kVar,
               NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, &was_added);
   if (!was_added && IsLexicalVariableMode(arguments_->mode())) {
     // Check if there's lexically declared variable named arguments to avoid
@@ -648,13 +655,15 @@ void DeclarationScope::DeclareArguments(AstValueFactory* ast_value_factory) {
 }
 
 void DeclarationScope::DeclareDefaultFunctionVariables(
-    AstValueFactory* ast_value_factory) {
+    const AstRawString* this_string,
+    const AstRawString* new_target_string,
+    const AstRawString* this_function_string) {
   DCHECK(is_function_scope());
   DCHECK(!is_arrow_scope());
 
-  DeclareThis(ast_value_factory);
+  DeclareThis(this_string);
   bool was_added;
-  new_target_ = Declare(zone(), ast_value_factory->new_target_string(),
+  new_target_ = Declare(zone(), new_target_string,
                         VariableMode::kConst, NORMAL_VARIABLE,
                         kCreatedInitialized, kNotAssigned, &was_added);
   DCHECK(was_added);
@@ -662,7 +671,7 @@ void DeclarationScope::DeclareDefaultFunctionVariables(
   if (IsConciseMethod(function_kind_) || IsClassConstructor(function_kind_) ||
       IsAccessorFunction(function_kind_)) {
     EnsureRareData()->this_function = Declare(
-        zone(), ast_value_factory->this_function_string(), VariableMode::kConst,
+        zone(), this_function_string, VariableMode::kConst,
         NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, &was_added);
     DCHECK(was_added);
   }
@@ -891,7 +900,7 @@ Variable* Scope::LookupInScopeInfo(const AstRawString* name, Scope* cache) {
 Variable* DeclarationScope::DeclareParameter(const AstRawString* name,
                                              VariableMode mode,
                                              bool is_optional, bool is_rest,
-                                             AstValueFactory* ast_value_factory,
+                                             const AstRawString* arguments_string,
                                              int position) {
   DCHECK(!already_resolved_);
   DCHECK(is_function_scope() || is_module_scope());
@@ -911,7 +920,7 @@ Variable* DeclarationScope::DeclareParameter(const AstRawString* name,
   var->set_initializer_position(position);
   params_.Add(var, zone());
   if (!is_rest) ++num_parameters_;
-  if (name == ast_value_factory->arguments_string()) {
+  if (name == arguments_string) {
     has_arguments_parameter_ = true;
   }
   // Params are automatically marked as used to make sure that the debugger and
@@ -1220,7 +1229,7 @@ void DeclarationScope::DeserializeReceiver(AstValueFactory* ast_value_factory) {
     return;
   }
   DCHECK(has_this_declaration());
-  DeclareThis(ast_value_factory);
+  DeclareThis(ast_value_factory->this_string());
   if (is_debug_evaluate_scope()) {
     receiver_->AllocateTo(VariableLocation::LOOKUP, -1);
   } else {
@@ -1533,7 +1542,7 @@ void DeclarationScope::ResetAfterPreparsing(AstValueFactory* ast_value_factory,
     variables_.Reset(ZoneAllocationPolicy(zone_));
     if (!IsArrowFunction(function_kind_)) {
       has_simple_parameters_ = true;
-      DeclareDefaultFunctionVariables(ast_value_factory);
+      DeclareDefaultFunctionVariables(ast_value_factory->this_string(), ast_value_factory->new_target_string(), ast_value_factory->this_function_string());
     }
   } else {
     // Make sure this scope isn't used for allocation anymore.
@@ -2806,23 +2815,23 @@ VariableProxy* ClassScope::ResolvePrivateNamesPartially() {
   return nullptr;
 }
 
-Variable* ClassScope::DeclareBrandVariable(AstValueFactory* ast_value_factory,
-                                           IsStaticFlag is_static_flag,
-                                           int class_token_pos) {
-  DCHECK_IMPLIES(GetRareData() != nullptr, GetRareData()->brand == nullptr);
-  bool was_added;
-  Variable* brand = Declare(zone(), ast_value_factory->dot_brand_string(),
-                            VariableMode::kConst, NORMAL_VARIABLE,
-                            InitializationFlag::kNeedsInitialization,
-                            MaybeAssignedFlag::kNotAssigned, &was_added);
-  DCHECK(was_added);
-  brand->set_is_static_flag(is_static_flag);
-  brand->ForceContextAllocation();
-  brand->set_is_used();
-  EnsureRareData()->brand = brand;
-  brand->set_initializer_position(class_token_pos);
-  return brand;
-}
+// Variable* ClassScope::DeclareBrandVariable(AstValueFactory* ast_value_factory,
+//                                            IsStaticFlag is_static_flag,
+//                                            int class_token_pos) {
+//   DCHECK_IMPLIES(GetRareData() != nullptr, GetRareData()->brand == nullptr);
+//   bool was_added;
+//   Variable* brand = Declare(zone(), ast_value_factory->dot_brand_string(),
+//                             VariableMode::kConst, NORMAL_VARIABLE,
+//                             InitializationFlag::kNeedsInitialization,
+//                             MaybeAssignedFlag::kNotAssigned, &was_added);
+//   DCHECK(was_added);
+//   brand->set_is_static_flag(is_static_flag);
+//   brand->ForceContextAllocation();
+//   brand->set_is_used();
+//   EnsureRareData()->brand = brand;
+//   brand->set_initializer_position(class_token_pos);
+//   return brand;
+// }
 
 Variable* ClassScope::DeclareClassVariable(AstValueFactory* ast_value_factory,
                                            const AstRawString* name,

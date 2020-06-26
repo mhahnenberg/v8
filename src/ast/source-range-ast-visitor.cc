@@ -71,6 +71,16 @@ bool SourceRangeAstVisitor::VisitNode(AstNode* node) {
   return true;
 }
 
+bool SourceRangeAstVisitor::VisitDeclaration(VariableDeclaration* decl) {
+  // TODO(binast): I don't think we need to worry about source map ranges for declarations (at least according to what gets inserted into the map by the parser).
+  return true;
+}
+
+bool SourceRangeAstVisitor::VisitDeclaration(FunctionDeclaration* decl) {
+  // TODO(binast): I don't think we need to worry about source map ranges for declarations (at least according to what gets inserted into the map by the parser).
+  return true;
+}
+
 void SourceRangeAstVisitor::MaybeRemoveContinuationRange(
     Statement* last_statement) {
   AstNodeSourceRanges* last_range = nullptr;

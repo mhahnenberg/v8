@@ -55,7 +55,8 @@ class Processor final : public AstVisitor<Processor> {
   Expression* SetResult(Expression* value) {
     result_assigned_ = true;
     VariableProxy* result_proxy = factory()->NewVariableProxy(result_);
-    return factory()->NewAssignment(Token::ASSIGN, result_proxy, value,
+    VariableProxyExpression* result_proxy_expr = factory()->NewVariableProxyExpression(result_proxy);
+    return factory()->NewAssignment(Token::ASSIGN, result_proxy_expr, value,
                                     kNoSourcePosition);
   }
 
@@ -253,12 +254,14 @@ void Processor::VisitTryFinallyStatement(TryFinallyStatement* node) {
     CHECK_NOT_NULL(closure_scope());
     Variable* backup = closure_scope()->NewTemporary(
         factory()->ast_value_factory()->dot_result_string());
-    Expression* backup_proxy = factory()->NewVariableProxy(backup);
-    Expression* result_proxy = factory()->NewVariableProxy(result_);
+    VariableProxy* backup_proxy = factory()->NewVariableProxy(backup);
+    VariableProxy* result_proxy = factory()->NewVariableProxy(result_);
+    VariableProxyExpression* backup_proxy_expr = factory()->NewVariableProxyExpression(backup_proxy);
+    VariableProxyExpression* result_proxy_expr = factory()->NewVariableProxyExpression(result_proxy);
     Expression* save = factory()->NewAssignment(
-        Token::ASSIGN, backup_proxy, result_proxy, kNoSourcePosition);
+        Token::ASSIGN, backup_proxy_expr, result_proxy_expr, kNoSourcePosition);
     Expression* restore = factory()->NewAssignment(
-        Token::ASSIGN, result_proxy, backup_proxy, kNoSourcePosition);
+        Token::ASSIGN, result_proxy_expr, backup_proxy_expr, kNoSourcePosition);
     node->finally_block()->statements()->InsertAt(
         0, factory()->NewExpressionStatement(save, kNoSourcePosition), zone());
     node->finally_block()->statements()->Add(
@@ -351,10 +354,10 @@ EXPRESSION_NODE_LIST(DEF_VISIT)
 
 
 // Declarations are never visited.
-#define DEF_VISIT(type) \
-  void Processor::Visit##type(type* expr) { UNREACHABLE(); }
-DECLARATION_NODE_LIST(DEF_VISIT)
-#undef DEF_VISIT
+// #define DEF_VISIT(type) \
+//   void Processor::Visit##type(type* expr) { UNREACHABLE(); }
+// DECLARATION_NODE_LIST(DEF_VISIT)
+// #undef DEF_VISIT
 
 
 // Assumes code has been parsed.  Mutates the AST, so the AST should not
@@ -381,7 +384,7 @@ bool Rewriter::Rewrite(ParseInfo* info) {
   return RewriteBody(info, scope, body).has_value();
 }
 
-base::Optional<VariableProxy*> Rewriter::RewriteBody(
+base::Optional<VariableProxyExpression*> Rewriter::RewriteBody(
     ParseInfo* info, Scope* scope, ZonePtrList<Statement>* body) {
   DisallowHeapAllocation no_allocation;
   DisallowHandleAllocation no_handles;
@@ -400,12 +403,13 @@ base::Optional<VariableProxy*> Rewriter::RewriteBody(
       int pos = kNoSourcePosition;
       VariableProxy* result_value =
           processor.factory()->NewVariableProxy(result, pos);
+      VariableProxyExpression* result_value_expr = processor.factory()->NewVariableProxyExpression(result_value);
       if (!info->flags().is_repl_mode()) {
         Statement* result_statement =
-            processor.factory()->NewReturnStatement(result_value, pos);
+            processor.factory()->NewReturnStatement(result_value_expr, pos);
         body->Add(result_statement, info->zone());
       }
-      return result_value;
+      return result_value_expr;
     }
 
     if (processor.HasStackOverflow()) {

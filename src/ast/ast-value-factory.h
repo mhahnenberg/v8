@@ -83,6 +83,8 @@ class AstRawString final : public ZoneObject {
   friend class AstRawStringInternalizationKey;
   friend class AstStringConstants;
   friend class AstValueFactory;
+  friend class BinAstValueFactory;
+  friend class BinAstStringConstants;
 
   // Members accessed only by the AstValueFactory & related classes:
   static bool Compare(void* a, void* b);
@@ -163,6 +165,7 @@ class AstConsString final : public ZoneObject {
 
  private:
   friend class AstValueFactory;
+  friend class BinAstValueFactory;
 
   AstConsString() : string_(), segment_({nullptr, nullptr}) {}
 

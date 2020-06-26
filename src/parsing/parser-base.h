@@ -233,6 +233,8 @@ class ParserBase {
   using FuncNameInferrerState = typename Types::FuncNameInferrer::State;
   using SourceRange = typename Types::SourceRange;
   using SourceRangeScope = typename Types::SourceRangeScope;
+  using AstValueFactory = typename Types::AstValueFactory;
+  using AstRawString = typename Types::AstRawString;
 
   // All implementation-specific methods must be called through this.
   Impl* impl() { return static_cast<Impl*>(this); }
@@ -759,7 +761,7 @@ class ParserBase {
 
   DeclarationScope* NewScriptScope(REPLMode repl_mode) const {
     return new (zone())
-        DeclarationScope(zone(), ast_value_factory(), repl_mode);
+        DeclarationScope(zone(), ast_value_factory()->this_string(), repl_mode);
   }
 
   DeclarationScope* NewVarblockScope() const {
@@ -810,7 +812,10 @@ class ParserBase {
 
     // TODO(verwaest): Move into the DeclarationScope constructor.
     if (!IsArrowFunction(kind)) {
-      result->DeclareDefaultFunctionVariables(ast_value_factory());
+      result->DeclareDefaultFunctionVariables(
+        ast_value_factory()->this_string(),
+        ast_value_factory()->new_target_string(),
+        ast_value_factory()->this_function_string());
     }
     return result;
   }
@@ -4241,7 +4246,7 @@ void ParserBase<Impl>::ParseFunctionBody(
     // Declare arguments after parsing the function since lexical 'arguments'
     // masks the arguments object. Declare arguments before declaring the
     // function var since the arguments object masks 'function arguments'.
-    function_scope->DeclareArguments(ast_value_factory());
+    function_scope->DeclareArguments(ast_value_factory()->arguments_string());
   }
 
   impl()->DeclareFunctionNameVar(function_name, function_syntax_kind,
@@ -4580,7 +4585,7 @@ typename ParserBase<Impl>::ExpressionT ParserBase<Impl>::ParseClassLiteral(
 
   if (class_info.requires_brand) {
     class_scope->DeclareBrandVariable(
-        ast_value_factory(), IsStaticFlag::kNotStatic, kNoSourcePosition);
+        ast_value_factory()->dot_brand_string(), IsStaticFlag::kNotStatic, kNoSourcePosition);
   }
 
   bool should_save_class_variable_index =
