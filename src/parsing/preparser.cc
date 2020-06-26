@@ -222,7 +222,7 @@ PreParser::PreParseResult PreParser::PreParseFunction(
       // 'arguments' masks the arguments object. Declare arguments before
       // declaring the function var since the arguments object masks 'function
       // arguments'.
-      function_scope->DeclareArguments(ast_value_factory());
+      function_scope->DeclareArguments(ast_value_factory()->arguments_string());
 
       DeclareFunctionNameVar(function_name, function_syntax_kind,
                              function_scope);

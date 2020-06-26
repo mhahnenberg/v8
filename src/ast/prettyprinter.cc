@@ -88,10 +88,10 @@ void CallPrinter::VisitBlock(Block* node) {
 }
 
 
-void CallPrinter::VisitVariableDeclaration(VariableDeclaration* node) {}
+void CallPrinter::VisitDeclaration(VariableDeclaration* decl) {}
 
 
-void CallPrinter::VisitFunctionDeclaration(FunctionDeclaration* node) {}
+void CallPrinter::VisitDeclaration(FunctionDeclaration* decl) {}
 
 
 void CallPrinter::VisitExpressionStatement(ExpressionStatement* node) {
@@ -307,7 +307,7 @@ void CallPrinter::VisitArrayLiteral(ArrayLiteral* node) {
 }
 
 
-void CallPrinter::VisitVariableProxy(VariableProxy* node) {
+void CallPrinter::VisitVariableProxyExpression(VariableProxyExpression* node) {
   if (is_user_js_) {
     PrintLiteral(node->name(), false);
   } else {
@@ -435,7 +435,7 @@ void CallPrinter::VisitCall(Call* node) {
   if (was_found) {
     // Bail out if the error is caused by a direct call to a variable in
     // non-user JS code. The variable name is meaningless due to minification.
-    if (!is_user_js_ && node->expression()->IsVariableProxy()) {
+    if (!is_user_js_ && node->expression()->IsVariableProxyExpression()) {
       done_ = true;
       return;
     }
@@ -470,7 +470,7 @@ void CallPrinter::VisitCallNew(CallNew* node) {
   if (was_found) {
     // Bail out if the error is caused by a direct call to a variable in
     // non-user JS code. The variable name is meaningless due to minification.
-    if (!is_user_js_ && node->expression()->IsVariableProxy()) {
+    if (!is_user_js_ && node->expression()->IsVariableProxyExpression()) {
       done_ = true;
       return;
     }
@@ -860,7 +860,21 @@ void AstPrinter::PrintOut(Isolate* isolate, AstNode* node) {
 void AstPrinter::PrintDeclarations(Declaration::List* declarations) {
   if (!declarations->is_empty()) {
     IndentedScope indent(this, "DECLS");
-    for (Declaration* decl : *declarations) Visit(decl);
+    for (Declaration* decl : *declarations) {
+      switch (decl->type()) {
+        case Declaration::VariableDecl: {
+          VisitDeclaration(static_cast<VariableDeclaration*>(decl));
+          break;
+        }
+        case Declaration::FunctionDecl: {
+          VisitDeclaration(static_cast<FunctionDeclaration*>(decl));
+          break;
+        }
+        default: {
+          UNREACHABLE();
+        }
+      }
+    }
   }
 }
 
@@ -896,18 +910,18 @@ void AstPrinter::VisitBlock(Block* node) {
 
 
 // TODO(svenpanne) Start with IndentedScope.
-void AstPrinter::VisitVariableDeclaration(VariableDeclaration* node) {
+void AstPrinter::VisitDeclaration(VariableDeclaration* node) {
   PrintLiteralWithModeIndented("VARIABLE", node->var(),
                                node->var()->raw_name());
 }
 
 
 // TODO(svenpanne) Start with IndentedScope.
-void AstPrinter::VisitFunctionDeclaration(FunctionDeclaration* node) {
+void AstPrinter::VisitDeclaration(FunctionDeclaration* node) {
   PrintIndented("FUNCTION ");
   PrintLiteral(node->var()->raw_name(), true);
   Print(" = function ");
-  PrintLiteral(node->fun()->raw_name(), false);
+  PrintLiteral(node->fun<FunctionLiteral>()->raw_name(), false);
   Print("\n");
 }
 
@@ -1259,7 +1273,7 @@ void AstPrinter::VisitArrayLiteral(ArrayLiteral* node) {
 }
 
 
-void AstPrinter::VisitVariableProxy(VariableProxy* node) {
+void AstPrinter::VisitVariableProxyExpression(VariableProxyExpression* node) {
   EmbeddedVector<char, 128> buf;
   int pos = SNPrintF(buf, "VAR PROXY");
 

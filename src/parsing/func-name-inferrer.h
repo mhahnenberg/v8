@@ -9,6 +9,7 @@
 
 #include "src/base/macros.h"
 #include "src/utils/pointer-with-payload.h"
+#include "src/ast/ast-value-factory.h"
 
 namespace v8 {
 namespace internal {
@@ -35,9 +36,14 @@ struct PointerWithPayloadTraits<AstRawString> {
 // and during parsing of the RHS, a function literal can be collected. After
 // parsing the RHS we can infer a name for function literals that do not have
 // a name.
+template <typename Types>
 class FuncNameInferrer {
  public:
-  explicit FuncNameInferrer(AstValueFactory* ast_value_factory);
+  using AstValueFactory = typename Types::AstValueFactory;
+  using FunctionLiteral = typename Types::FunctionLiteral;
+
+  explicit FuncNameInferrer(AstValueFactory* ast_value_factory)
+    : ast_value_factory_(ast_value_factory) {}
 
   FuncNameInferrer(const FuncNameInferrer&) = delete;
   FuncNameInferrer& operator=(const FuncNameInferrer&) = delete;
@@ -67,15 +73,30 @@ class FuncNameInferrer {
   bool IsOpen() const { return scope_depth_ > 0; }
 
   // Pushes an enclosing the name of enclosing function onto names stack.
-  void PushEnclosingName(const AstRawString* name);
+  void PushEnclosingName(const AstRawString* name) {
+    // Enclosing name is a name of a constructor function. To check
+    // that it is really a constructor, we check that it is not empty
+    // and starts with a capital letter.
+    if (!name->IsEmpty() && unibrow::Uppercase::Is(name->FirstCharacter())) {
+      names_stack_.push_back(Name(name, kEnclosingConstructorName));
+    }
+  }
 
   // Pushes an encountered name onto names stack when in collection state.
-  void PushLiteralName(const AstRawString* name);
+  void PushLiteralName(const AstRawString* name) {
+    if (IsOpen() && name != ast_value_factory_->prototype_string()) {
+      names_stack_.push_back(Name(name, kLiteralName));
+    }
+  }
 
-  void PushVariableName(const AstRawString* name);
+  void PushVariableName(const AstRawString* name) {
+    if (IsOpen() && name != ast_value_factory_->dot_result_string()) {
+      names_stack_.push_back(Name(name, kVariableName));
+    }
+  }
 
   // Adds a function to infer name for.
-  void AddFunction(FunctionLiteral* func_to_infer) {
+  void AddFunction(FunctionLiteral func_to_infer) {
     if (IsOpen()) {
       funcs_to_infer_.push_back(func_to_infer);
     }
@@ -85,7 +106,13 @@ class FuncNameInferrer {
     if (IsOpen() && !funcs_to_infer_.empty()) funcs_to_infer_.pop_back();
   }
 
-  void RemoveAsyncKeywordFromEnd();
+  void RemoveAsyncKeywordFromEnd() {
+    if (IsOpen()) {
+      CHECK_GT(names_stack_.size(), 0);
+      CHECK(names_stack_.back().name()->IsOneByteEqualTo("async"));
+      names_stack_.pop_back();
+    }
+  }
 
   // Infers a function name and leaves names collection state.
   void Infer() {
@@ -113,14 +140,42 @@ class FuncNameInferrer {
   };
 
   // Constructs a full name in dotted notation from gathered names.
-  AstConsString* MakeNameFromStack();
+  AstConsString* MakeNameFromStack() {
+    if (names_stack_.size() == 0) {
+      return ast_value_factory_->empty_cons_string();
+    }
+    AstConsString* result = ast_value_factory_->NewConsString();
+    auto it = names_stack_.begin();
+    while (it != names_stack_.end()) {
+      // Advance the iterator to be able to peek the next value.
+      auto current = it++;
+      // Skip consecutive variable declarations.
+      if (it != names_stack_.end() && current->type() == kVariableName &&
+          it->type() == kVariableName) {
+        continue;
+      }
+      // Add name. Separate names with ".".
+      Zone* zone = ast_value_factory_->zone();
+      if (!result->IsEmpty()) {
+        result->AddString(zone, ast_value_factory_->dot_string());
+      }
+      result->AddString(zone, current->name());
+    }
+    return result;
+  }
 
   // Performs name inferring for added functions.
-  void InferFunctionsNames();
+  void InferFunctionsNames() {
+    AstConsString* func_name = MakeNameFromStack();
+    for (FunctionLiteral func : funcs_to_infer_) {
+      func->set_raw_inferred_name(func_name);
+    }
+    funcs_to_infer_.resize(0);
+  }
 
   AstValueFactory* ast_value_factory_;
   std::vector<Name> names_stack_;
-  std::vector<FunctionLiteral*> funcs_to_infer_;
+  std::vector<FunctionLiteral> funcs_to_infer_;
   size_t scope_depth_ = 0;
 };
 

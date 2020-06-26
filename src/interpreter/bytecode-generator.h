@@ -56,6 +56,8 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
   void VisitGlobalDeclarations(Declaration::List* declarations);
   void VisitDeclarations(Declaration::List* declarations);
   void VisitStatements(const ZonePtrList<Statement>* statments);
+  void VisitVariableDeclaration(VariableDeclaration* decl);
+  void VisitFunctionDeclaration(FunctionDeclaration* decl);
 
  private:
   class AccumulatorPreservingScope;

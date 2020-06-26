@@ -59,13 +59,14 @@ FunctionLiteral* Parser::DefaultConstructor(const AstRawString* name,
       bool is_optional = false;
       Variable* constructor_args = function_scope->DeclareParameter(
           constructor_args_name, VariableMode::kTemporary, is_optional, is_rest,
-          ast_value_factory(), pos);
+          ast_value_factory()->arguments_string(), pos);
 
       Expression* call;
       {
         ScopedPtrList<Expression> args(pointer_buffer());
+        VariableProxy* proxy = factory()->NewVariableProxy(constructor_args);
         Spread* spread_args = factory()->NewSpread(
-            factory()->NewVariableProxy(constructor_args), pos, pos);
+            factory()->NewVariableProxyExpression(proxy), pos, pos);
 
         args.Add(spread_args);
         Expression* super_call_ref = NewSuperCallReference(pos);
@@ -295,16 +296,19 @@ Expression* Parser::NewSuperPropertyReference(int pos) {
 Expression* Parser::NewSuperCallReference(int pos) {
   VariableProxy* new_target_proxy =
       NewUnresolved(ast_value_factory()->new_target_string(), pos);
+  VariableProxyExpression* new_target_proxy_expr = factory()->NewVariableProxyExpression(new_target_proxy);
   VariableProxy* this_function_proxy =
       NewUnresolved(ast_value_factory()->this_function_string(), pos);
-  return factory()->NewSuperCallReference(new_target_proxy, this_function_proxy,
+  VariableProxyExpression* this_function_proxy_expr = factory()->NewVariableProxyExpression(this_function_proxy);
+  return factory()->NewSuperCallReference(new_target_proxy_expr, this_function_proxy_expr,
                                           pos);
 }
 
 Expression* Parser::NewTargetExpression(int pos) {
   auto proxy = NewUnresolved(ast_value_factory()->new_target_string(), pos);
-  proxy->set_is_new_target();
-  return proxy;
+  auto proxy_expr = factory()->NewVariableProxyExpression(proxy);
+  proxy_expr->set_is_new_target();
+  return proxy_expr;
 }
 
 Expression* Parser::ImportMetaExpression(int pos) {
@@ -764,7 +768,7 @@ void Parser::ParseREPLProgram(ParseInfo* info, ScopedPtrList<Statement>* body,
   // For a REPL script this is the completion value of the
   // script instead of the expression of some "return" statement. The
   // completion value of the script is obtained by manually invoking
-  // the {Rewriter} which will return a VariableProxy referencing the
+  // the {Rewriter} which will return a VariableProxyExpression referencing the
   // result.
   DCHECK(flags().is_repl_mode());
   this->scope()->SetLanguageMode(info->language_mode());
@@ -779,7 +783,7 @@ void Parser::ParseREPLProgram(ParseInfo* info, ScopedPtrList<Statement>* body,
 
   if (has_error()) return;
 
-  base::Optional<VariableProxy*> maybe_result =
+  base::Optional<VariableProxyExpression*> maybe_result =
       Rewriter::RewriteBody(info, scope, block->statements());
   Expression* result_value =
       (maybe_result && *maybe_result)
@@ -1443,9 +1447,10 @@ Statement* Parser::ParseExportDefault() {
       VariableProxy* proxy =
           DeclareBoundVariable(local_name, VariableMode::kConst, pos);
       proxy->var()->set_initializer_position(position());
+      VariableProxyExpression* proxy_expr = factory()->NewVariableProxyExpression(proxy);
 
       Assignment* assignment = factory()->NewAssignment(
-          Token::INIT, proxy, value, kNoSourcePosition);
+          Token::INIT, proxy_expr, value, kNoSourcePosition);
       result = IgnoreCompletion(
           factory()->NewExpressionStatement(assignment, kNoSourcePosition));
 
@@ -1763,10 +1768,11 @@ Statement* Parser::DeclareClass(const AstRawString* variable_name,
   VariableProxy* proxy =
       DeclareBoundVariable(variable_name, VariableMode::kLet, class_token_pos);
   proxy->var()->set_initializer_position(end_pos);
+  VariableProxyExpression* proxy_expr = factory()->NewVariableProxyExpression(proxy);
   if (names) names->Add(variable_name, zone());
 
   Assignment* assignment =
-      factory()->NewAssignment(Token::INIT, proxy, value, class_token_pos);
+      factory()->NewAssignment(Token::INIT, proxy_expr, value, class_token_pos);
   return IgnoreCompletion(
       factory()->NewExpressionStatement(assignment, kNoSourcePosition));
 }
@@ -1782,10 +1788,11 @@ Statement* Parser::DeclareNative(const AstRawString* name, int pos) {
   // introduced dynamically when we meet their declarations, whereas
   // other functions are set up when entering the surrounding scope.
   VariableProxy* proxy = DeclareBoundVariable(name, VariableMode::kVar, pos);
+  VariableProxyExpression* proxy_expr = factory()->NewVariableProxyExpression(proxy);
   NativeFunctionLiteral* lit =
       factory()->NewNativeFunctionLiteral(name, extension_, kNoSourcePosition);
   return factory()->NewExpressionStatement(
-      factory()->NewAssignment(Token::INIT, proxy, lit, kNoSourcePosition),
+      factory()->NewAssignment(Token::INIT, proxy_expr, lit, kNoSourcePosition),
       pos);
 }
 
@@ -1808,8 +1815,9 @@ Expression* Parser::RewriteReturn(Expression* return_value, int pos) {
 
     // temp = expr
     Variable* temp = NewTemporary(ast_value_factory()->empty_string());
+    VariableProxy* proxy = factory()->NewVariableProxy(temp);
     Assignment* assign = factory()->NewAssignment(
-        Token::ASSIGN, factory()->NewVariableProxy(temp), return_value, pos);
+        Token::ASSIGN, factory()->NewVariableProxyExpression(proxy), return_value, pos);
 
     // temp === undefined
     Expression* is_undefined = factory()->NewCompareOperation(
@@ -1822,7 +1830,7 @@ Expression* Parser::RewriteReturn(Expression* return_value, int pos) {
     // ParseFunctionBody.
     return_value =
         factory()->NewConditional(is_undefined, factory()->ThisExpression(),
-                                  factory()->NewVariableProxy(temp), pos);
+                                  factory()->NewVariableProxyExpression(proxy), pos);
   }
   return return_value;
 }
@@ -1848,8 +1856,9 @@ Statement* Parser::RewriteSwitchStatement(SwitchStatement* switch_statement,
   Expression* tag = switch_statement->tag();
   Variable* tag_variable =
       NewTemporary(ast_value_factory()->dot_switch_tag_string());
+  VariableProxy* tag_variable_proxy = factory()->NewVariableProxy(tag_variable);
   Assignment* tag_assign = factory()->NewAssignment(
-      Token::ASSIGN, factory()->NewVariableProxy(tag_variable), tag,
+      Token::ASSIGN, factory()->NewVariableProxyExpression(tag_variable_proxy), tag,
       tag->position());
   // Wrap with IgnoreCompletion so the tag isn't returned as the completion
   // value, in case the switch statements don't have a value.
@@ -1857,7 +1866,7 @@ Statement* Parser::RewriteSwitchStatement(SwitchStatement* switch_statement,
       factory()->NewExpressionStatement(tag_assign, kNoSourcePosition));
   switch_block->statements()->Add(tag_statement, zone());
 
-  switch_statement->set_tag(factory()->NewVariableProxy(tag_variable));
+  switch_statement->set_tag(factory()->NewVariableProxyExpression(tag_variable_proxy));
   Block* cases_block = factory()->NewBlock(1, false);
   cases_block->statements()->Add(switch_statement, zone());
   cases_block->set_scope(scope);
@@ -1884,8 +1893,9 @@ void Parser::InitializeVariables(
 Block* Parser::RewriteCatchPattern(CatchInfo* catch_info) {
   DCHECK_NOT_NULL(catch_info->pattern);
 
+  VariableProxy* catch_info_variable_proxy = factory()->NewVariableProxy(catch_info->variable);
   DeclarationParsingResult::Declaration decl(
-      catch_info->pattern, factory()->NewVariableProxy(catch_info->variable));
+      catch_info->pattern, factory()->NewVariableProxyExpression(catch_info_variable_proxy));
 
   ScopedPtrList<Statement> init_statements(pointer_buffer());
   InitializeVariables(&init_statements, NORMAL_VARIABLE, &decl);
@@ -2001,9 +2011,9 @@ void Parser::ParseAndRewriteAsyncGeneratorFunctionBody(
   Block* catch_block;
   {
     ScopedPtrList<Expression> reject_args(pointer_buffer());
-    reject_args.Add(factory()->NewVariableProxy(
-        function_state_->scope()->generator_object_var()));
-    reject_args.Add(factory()->NewVariableProxy(catch_scope->catch_variable()));
+    reject_args.Add(factory()->NewVariableProxyExpression(factory()->NewVariableProxy(
+        function_state_->scope()->generator_object_var())));
+    reject_args.Add(factory()->NewVariableProxyExpression(factory()->NewVariableProxy(catch_scope->catch_variable())));
 
     Expression* reject_call = factory()->NewCallRuntime(
         Runtime::kInlineAsyncGeneratorReject, reject_args, kNoSourcePosition);
@@ -2024,7 +2034,7 @@ void Parser::ParseAndRewriteAsyncGeneratorFunctionBody(
     ScopedPtrList<Expression> close_args(pointer_buffer());
     VariableProxy* call_proxy = factory()->NewVariableProxy(
         function_state_->scope()->generator_object_var());
-    close_args.Add(call_proxy);
+    close_args.Add(factory()->NewVariableProxyExpression(call_proxy));
     close_call = factory()->NewCallRuntime(Runtime::kInlineGeneratorClose,
                                            close_args, kNoSourcePosition);
   }
@@ -2071,14 +2081,14 @@ Block* Parser::RewriteForVarInLegacy(const ForInfo& for_info) {
   const DeclarationParsingResult::Declaration& decl =
       for_info.parsing_result.declarations[0];
   if (!IsLexicalVariableMode(for_info.parsing_result.descriptor.mode) &&
-      decl.initializer != nullptr && decl.pattern->IsVariableProxy()) {
+      decl.initializer != nullptr && decl.pattern->IsVariableProxyExpression()) {
     ++use_counts_[v8::Isolate::kForInInitializer];
-    const AstRawString* name = decl.pattern->AsVariableProxy()->raw_name();
+    const AstRawString* name = decl.pattern->AsVariableProxyExpression()->raw_name();
     VariableProxy* single_var = NewUnresolved(name);
     Block* init_block = factory()->NewBlock(2, true);
     init_block->statements()->Add(
         factory()->NewExpressionStatement(
-            factory()->NewAssignment(Token::ASSIGN, single_var,
+            factory()->NewAssignment(Token::ASSIGN, factory()->NewVariableProxyExpression(single_var),
                                      decl.initializer, decl.value_beg_pos),
             kNoSourcePosition),
         zone());
@@ -2110,14 +2120,14 @@ void Parser::DesugarBindingInForEachStatement(ForInfo* for_info,
   Variable* temp = NewTemporary(ast_value_factory()->dot_for_string());
   ScopedPtrList<Statement> each_initialization_statements(pointer_buffer());
   DCHECK_IMPLIES(!has_error(), decl.pattern != nullptr);
-  decl.initializer = factory()->NewVariableProxy(temp, for_info->position);
+  decl.initializer = factory()->NewVariableProxyExpression(factory()->NewVariableProxy(temp, for_info->position));
   InitializeVariables(&each_initialization_statements, NORMAL_VARIABLE, &decl);
 
   *body_block = factory()->NewBlock(3, false);
   (*body_block)
       ->statements()
       ->Add(factory()->NewBlock(true, each_initialization_statements), zone());
-  *each_variable = factory()->NewVariableProxy(temp, for_info->position);
+  *each_variable = factory()->NewVariableProxyExpression(factory()->NewVariableProxy(temp, for_info->position));
 }
 
 // Create a TDZ for any lexically-bound names in for in/of statements.
@@ -2195,10 +2205,12 @@ Statement* Parser::DesugarLexicalBindingsInForStatement(
   //   make statement: temp_x = x.
   for (const AstRawString* bound_name : for_info.bound_names) {
     VariableProxy* proxy = NewUnresolved(bound_name);
+    VariableProxyExpression* proxy_expr = factory()->NewVariableProxyExpression(proxy);
     Variable* temp = NewTemporary(temp_name);
     VariableProxy* temp_proxy = factory()->NewVariableProxy(temp);
-    Assignment* assignment = factory()->NewAssignment(Token::ASSIGN, temp_proxy,
-                                                      proxy, kNoSourcePosition);
+    VariableProxyExpression* temp_proxy_expr = factory()->NewVariableProxyExpression(temp_proxy);
+    Assignment* assignment = factory()->NewAssignment(Token::ASSIGN, temp_proxy_expr,
+                                                      proxy_expr, kNoSourcePosition);
     Statement* assignment_statement =
         factory()->NewExpressionStatement(assignment, kNoSourcePosition);
     outer_block->statements()->Add(assignment_statement, zone());
@@ -2210,9 +2222,10 @@ Statement* Parser::DesugarLexicalBindingsInForStatement(
   if (next) {
     first = NewTemporary(temp_name);
     VariableProxy* first_proxy = factory()->NewVariableProxy(first);
+    VariableProxyExpression* first_proxy_expr = factory()->NewVariableProxyExpression(first_proxy);
     Expression* const1 = factory()->NewSmiLiteral(1, kNoSourcePosition);
     Assignment* assignment = factory()->NewAssignment(
-        Token::ASSIGN, first_proxy, const1, kNoSourcePosition);
+        Token::ASSIGN, first_proxy_expr, const1, kNoSourcePosition);
     Statement* assignment_statement =
         factory()->NewExpressionStatement(assignment, kNoSourcePosition);
     outer_block->statements()->Add(assignment_statement, zone());
@@ -2246,10 +2259,12 @@ Statement* Parser::DesugarLexicalBindingsInForStatement(
       VariableProxy* proxy = DeclareBoundVariable(
           for_info.bound_names[i], for_info.parsing_result.descriptor.mode,
           kNoSourcePosition);
+      VariableProxyExpression* proxy_expr = factory()->NewVariableProxyExpression(proxy);
       inner_vars.Add(proxy->var());
       VariableProxy* temp_proxy = factory()->NewVariableProxy(temps.at(i));
+      VariableProxyExpression* temp_proxy_expr = factory()->NewVariableProxyExpression(temp_proxy);
       Assignment* assignment = factory()->NewAssignment(
-          Token::INIT, proxy, temp_proxy, kNoSourcePosition);
+          Token::INIT, proxy_expr, temp_proxy_expr, kNoSourcePosition);
       Statement* assignment_statement =
           factory()->NewExpressionStatement(assignment, kNoSourcePosition);
       int declaration_pos = for_info.parsing_result.descriptor.declaration_pos;
@@ -2266,16 +2281,18 @@ Statement* Parser::DesugarLexicalBindingsInForStatement(
       {
         Expression* const1 = factory()->NewSmiLiteral(1, kNoSourcePosition);
         VariableProxy* first_proxy = factory()->NewVariableProxy(first);
-        compare = factory()->NewCompareOperation(Token::EQ, first_proxy, const1,
+        VariableProxyExpression* first_proxy_expr = factory()->NewVariableProxyExpression(first_proxy);
+        compare = factory()->NewCompareOperation(Token::EQ, first_proxy_expr, const1,
                                                  kNoSourcePosition);
       }
       Statement* clear_first = nullptr;
       // Make statement: first = 0.
       {
         VariableProxy* first_proxy = factory()->NewVariableProxy(first);
+        VariableProxyExpression* first_proxy_expr = factory()->NewVariableProxyExpression(first_proxy);
         Expression* const0 = factory()->NewSmiLiteral(0, kNoSourcePosition);
         Assignment* assignment = factory()->NewAssignment(
-            Token::ASSIGN, first_proxy, const0, kNoSourcePosition);
+            Token::ASSIGN, first_proxy_expr, const0, kNoSourcePosition);
         clear_first =
             factory()->NewExpressionStatement(assignment, kNoSourcePosition);
       }
@@ -2288,9 +2305,10 @@ Statement* Parser::DesugarLexicalBindingsInForStatement(
     // Make statement: flag = 1.
     {
       VariableProxy* flag_proxy = factory()->NewVariableProxy(flag);
+      VariableProxyExpression* flag_proxy_expr = factory()->NewVariableProxyExpression(flag_proxy);
       Expression* const1 = factory()->NewSmiLiteral(1, kNoSourcePosition);
       Assignment* assignment = factory()->NewAssignment(
-          Token::ASSIGN, flag_proxy, const1, kNoSourcePosition);
+          Token::ASSIGN, flag_proxy_expr, const1, kNoSourcePosition);
       Statement* assignment_statement =
           factory()->NewExpressionStatement(assignment, kNoSourcePosition);
       ignore_completion_block->statements()->Add(assignment_statement, zone());
@@ -2312,7 +2330,8 @@ Statement* Parser::DesugarLexicalBindingsInForStatement(
     {
       Expression* const1 = factory()->NewSmiLiteral(1, kNoSourcePosition);
       VariableProxy* flag_proxy = factory()->NewVariableProxy(flag);
-      flag_cond = factory()->NewCompareOperation(Token::EQ, flag_proxy, const1,
+      VariableProxyExpression* flag_proxy_expr = factory()->NewVariableProxyExpression(flag_proxy);
+      flag_cond = factory()->NewCompareOperation(Token::EQ, flag_proxy_expr, const1,
                                                  kNoSourcePosition);
     }
 
@@ -2323,8 +2342,9 @@ Statement* Parser::DesugarLexicalBindingsInForStatement(
       // Make expression: flag = 0.
       {
         VariableProxy* flag_proxy = factory()->NewVariableProxy(flag);
+        VariableProxyExpression* flag_proxy_expr = factory()->NewVariableProxyExpression(flag_proxy);
         Expression* const0 = factory()->NewSmiLiteral(0, kNoSourcePosition);
-        compound_next = factory()->NewAssignment(Token::ASSIGN, flag_proxy,
+        compound_next = factory()->NewAssignment(Token::ASSIGN, flag_proxy_expr,
                                                  const0, kNoSourcePosition);
       }
 
@@ -2332,10 +2352,12 @@ Statement* Parser::DesugarLexicalBindingsInForStatement(
       int inner_var_proxy_pos = scanner()->location().beg_pos;
       for (int i = 0; i < for_info.bound_names.length(); i++) {
         VariableProxy* temp_proxy = factory()->NewVariableProxy(temps.at(i));
+        VariableProxyExpression* temp_proxy_expr = factory()->NewVariableProxyExpression(temp_proxy);
         VariableProxy* proxy =
             factory()->NewVariableProxy(inner_vars.at(i), inner_var_proxy_pos);
+        VariableProxyExpression* proxy_expr = factory()->NewVariableProxyExpression(proxy);
         Assignment* assignment = factory()->NewAssignment(
-            Token::ASSIGN, temp_proxy, proxy, kNoSourcePosition);
+            Token::ASSIGN, temp_proxy_expr, proxy_expr, kNoSourcePosition);
         compound_next = factory()->NewBinaryOperation(
             Token::COMMA, compound_next, assignment, kNoSourcePosition);
       }
@@ -2358,7 +2380,8 @@ Statement* Parser::DesugarLexicalBindingsInForStatement(
       {
         Expression* const1 = factory()->NewSmiLiteral(1, kNoSourcePosition);
         VariableProxy* flag_proxy = factory()->NewVariableProxy(flag);
-        compare = factory()->NewCompareOperation(Token::EQ, flag_proxy, const1,
+        VariableProxyExpression* flag_proxy_expr = factory()->NewVariableProxyExpression(flag_proxy);
+        compare = factory()->NewCompareOperation(Token::EQ, flag_proxy_expr, const1,
                                                  kNoSourcePosition);
       }
       Statement* stop =
@@ -2447,7 +2470,7 @@ void Parser::AddArrowFunctionFormalParameters(
     parameters->has_rest = true;
   }
   DCHECK_IMPLIES(parameters->is_simple, !is_rest);
-  DCHECK_IMPLIES(parameters->is_simple, expr->IsVariableProxy());
+  DCHECK_IMPLIES(parameters->is_simple, expr->IsVariableProxyExpression());
 
   Expression* initializer = nullptr;
   if (expr->IsAssignment()) {
@@ -2816,13 +2839,13 @@ Block* Parser::BuildParameterInitializationBlock(
   int index = 0;
   for (auto parameter : parameters.params) {
     Expression* initial_value =
-        factory()->NewVariableProxy(parameters.scope->parameter(index));
+        factory()->NewVariableProxyExpression(factory()->NewVariableProxy(parameters.scope->parameter(index)));
     if (parameter->initializer() != nullptr) {
       // IS_UNDEFINED($param) ? initializer : $param
 
       auto condition = factory()->NewCompareOperation(
           Token::EQ_STRICT,
-          factory()->NewVariableProxy(parameters.scope->parameter(index)),
+          factory()->NewVariableProxyExpression(factory()->NewVariableProxy(parameters.scope->parameter(index))),
           factory()->NewUndefinedLiteral(kNoSourcePosition), kNoSourcePosition);
       initial_value =
           factory()->NewConditional(condition, parameter->initializer(),
@@ -2866,9 +2889,9 @@ Block* Parser::BuildRejectPromiseOnException(Block* inner_block,
   Expression* reject_promise;
   {
     ScopedPtrList<Expression> args(pointer_buffer());
-    args.Add(factory()->NewVariableProxy(
-        function_state_->scope()->generator_object_var()));
-    args.Add(factory()->NewVariableProxy(catch_scope->catch_variable()));
+    args.Add(factory()->NewVariableProxyExpression(factory()->NewVariableProxy(
+        function_state_->scope()->generator_object_var())));
+    args.Add(factory()->NewVariableProxyExpression(factory()->NewVariableProxy(catch_scope->catch_variable())));
     args.Add(factory()->NewBooleanLiteral(function_state_->CanSuspend(),
                                           kNoSourcePosition));
     reject_promise = factory()->NewCallRuntime(
@@ -2892,8 +2915,8 @@ Block* Parser::BuildRejectPromiseOnException(Block* inner_block,
 }
 
 Expression* Parser::BuildInitialYield(int pos, FunctionKind kind) {
-  Expression* yield_result = factory()->NewVariableProxy(
-      function_state_->scope()->generator_object_var());
+  Expression* yield_result = factory()->NewVariableProxyExpression(factory()->NewVariableProxy(
+      function_state_->scope()->generator_object_var()));
   // The position of the yield is important for reporting the exception
   // caused by calling the .throw method on a generator suspended at the
   // initial yield (i.e. right after generator instantiation).
@@ -3207,9 +3230,11 @@ void Parser::InsertShadowingVarBindingInitializers(Block* inner_block) {
     Variable* parameter = function_scope->LookupLocal(name);
     if (parameter == nullptr) continue;
     VariableProxy* to = NewUnresolved(name);
+    VariableProxyExpression* to_expr = factory()->NewVariableProxyExpression(to);
     VariableProxy* from = factory()->NewVariableProxy(parameter);
+    VariableProxyExpression* from_expr = factory()->NewVariableProxyExpression(from);
     Expression* assignment =
-        factory()->NewAssignment(Token::ASSIGN, to, from, kNoSourcePosition);
+        factory()->NewAssignment(Token::ASSIGN, to_expr, from_expr, kNoSourcePosition);
     Statement* statement =
         factory()->NewExpressionStatement(assignment, kNoSourcePosition);
     inner_block->statements()->InsertAt(0, statement, zone());
@@ -3464,8 +3489,8 @@ void Parser::SetFunctionNameFromPropertyName(ObjectLiteralProperty* property,
 
 void Parser::SetFunctionNameFromIdentifierRef(Expression* value,
                                               Expression* identifier) {
-  if (!identifier->IsVariableProxy()) return;
-  SetFunctionName(value, identifier->AsVariableProxy()->raw_name());
+  if (!identifier->IsVariableProxyExpression()) return;
+  SetFunctionName(value, identifier->AsVariableProxyExpression()->raw_name());
 }
 
 void Parser::SetFunctionName(Expression* value, const AstRawString* name,
@@ -3499,7 +3524,7 @@ Statement* Parser::CheckCallable(Variable* var, Expression* error, int pos) {
   Statement* validate_var;
   {
     Expression* type_of = factory()->NewUnaryOperation(
-        Token::TYPEOF, factory()->NewVariableProxy(var), nopos);
+        Token::TYPEOF, factory()->NewVariableProxyExpression(factory()->NewVariableProxy(var)), nopos);
     Expression* function_literal = factory()->NewStringLiteral(
         ast_value_factory()->function_string(), nopos);
     Expression* condition = factory()->NewCompareOperation(

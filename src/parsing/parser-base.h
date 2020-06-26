@@ -234,6 +234,8 @@ class ParserBase {
   using FuncNameInferrerState = typename Types::FuncNameInferrer::State;
   using SourceRange = typename Types::SourceRange;
   using SourceRangeScope = typename Types::SourceRangeScope;
+  using AstValueFactory = typename Types::AstValueFactory;
+  using AstRawString = typename Types::AstRawString;
 
   // All implementation-specific methods must be called through this.
   Impl* impl() { return static_cast<Impl*>(this); }
@@ -766,7 +768,7 @@ class ParserBase {
   }
 
   DeclarationScope* NewScriptScope(REPLMode repl_mode) const {
-    return zone()->template New<DeclarationScope>(zone(), ast_value_factory(),
+    return zone()->template New<DeclarationScope>(zone(), ast_value_factory()->this_string(),
                                                   repl_mode);
   }
 
@@ -824,7 +826,10 @@ class ParserBase {
 
     // TODO(verwaest): Move into the DeclarationScope constructor.
     if (!IsArrowFunction(kind)) {
-      result->DeclareDefaultFunctionVariables(ast_value_factory());
+      result->DeclareDefaultFunctionVariables(
+        ast_value_factory()->this_string(),
+        ast_value_factory()->new_target_string(),
+        ast_value_factory()->this_function_string());
     }
     return result;
   }
@@ -2748,7 +2753,7 @@ typename ParserBase<Impl>::ExpressionT ParserBase<Impl>::ParseObjectLiteral() {
 
   Variable* home_object = nullptr;
   if (block_scope->needs_home_object()) {
-    home_object = block_scope->DeclareHomeObjectVariable(ast_value_factory());
+    home_object = block_scope->DeclareHomeObjectVariable(ast_value_factory()->dot_home_object_string());
     block_scope->set_end_position(end_position());
   } else {
     block_scope = block_scope->FinalizeBlockScope();
@@ -4369,7 +4374,7 @@ void ParserBase<Impl>::ParseFunctionBody(
     // Declare arguments after parsing the function since lexical 'arguments'
     // masks the arguments object. Declare arguments before declaring the
     // function var since the arguments object masks 'function arguments'.
-    function_scope->DeclareArguments(ast_value_factory());
+    function_scope->DeclareArguments(ast_value_factory()->arguments_string());
   }
 
   impl()->DeclareFunctionNameVar(function_name, function_syntax_kind,
@@ -4719,14 +4724,14 @@ typename ParserBase<Impl>::ExpressionT ParserBase<Impl>::ParseClassLiteral(
 
   if (class_info.requires_brand) {
     class_scope->DeclareBrandVariable(
-        ast_value_factory(), IsStaticFlag::kNotStatic, kNoSourcePosition);
+        ast_value_factory()->dot_brand_string(), IsStaticFlag::kNotStatic, kNoSourcePosition);
   }
 
   if (class_scope->needs_home_object()) {
     class_info.home_object_variable =
-        class_scope->DeclareHomeObjectVariable(ast_value_factory());
+        class_scope->DeclareHomeObjectVariable(ast_value_factory()->dot_home_object_string());
     class_info.static_home_object_variable =
-        class_scope->DeclareStaticHomeObjectVariable(ast_value_factory());
+        class_scope->DeclareStaticHomeObjectVariable(ast_value_factory()->dot_home_object_string());
   }
 
   bool should_save_class_variable_index =

@@ -1009,29 +1009,29 @@ Maybe<int> Scanner::ScanRegExpFlags() {
   return Just<int>(flags);
 }
 
-const AstRawString* Scanner::CurrentSymbol(
-    AstValueFactory* ast_value_factory) const {
-  if (is_literal_one_byte()) {
-    return ast_value_factory->GetOneByteString(literal_one_byte_string());
-  }
-  return ast_value_factory->GetTwoByteString(literal_two_byte_string());
-}
+// const AstRawString* Scanner::CurrentSymbol(
+//     AstValueFactory* ast_value_factory) const {
+//   if (is_literal_one_byte()) {
+//     return ast_value_factory->GetOneByteString(literal_one_byte_string());
+//   }
+//   return ast_value_factory->GetTwoByteString(literal_two_byte_string());
+// }
 
-const AstRawString* Scanner::NextSymbol(
-    AstValueFactory* ast_value_factory) const {
-  if (is_next_literal_one_byte()) {
-    return ast_value_factory->GetOneByteString(next_literal_one_byte_string());
-  }
-  return ast_value_factory->GetTwoByteString(next_literal_two_byte_string());
-}
+// const AstRawString* Scanner::NextSymbol(
+//     AstValueFactory* ast_value_factory) const {
+//   if (is_next_literal_one_byte()) {
+//     return ast_value_factory->GetOneByteString(next_literal_one_byte_string());
+//   }
+//   return ast_value_factory->GetTwoByteString(next_literal_two_byte_string());
+// }
 
-const AstRawString* Scanner::CurrentRawSymbol(
-    AstValueFactory* ast_value_factory) const {
-  if (is_raw_literal_one_byte()) {
-    return ast_value_factory->GetOneByteString(raw_literal_one_byte_string());
-  }
-  return ast_value_factory->GetTwoByteString(raw_literal_two_byte_string());
-}
+// const AstRawString* Scanner::CurrentRawSymbol(
+//     AstValueFactory* ast_value_factory) const {
+//   if (is_raw_literal_one_byte()) {
+//     return ast_value_factory->GetOneByteString(raw_literal_one_byte_string());
+//   }
+//   return ast_value_factory->GetTwoByteString(raw_literal_two_byte_string());
+// }
 
 
 double Scanner::DoubleValue() {

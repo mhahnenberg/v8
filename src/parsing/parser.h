@@ -62,13 +62,13 @@ struct ParserFormalParameters : FormalParametersBase {
 
     Parameter* next_parameter = nullptr;
     bool is_simple() const {
-      return pattern->IsVariableProxy() && initializer() == nullptr &&
+      return pattern->IsVariableProxyExpression() && initializer() == nullptr &&
              !is_rest();
     }
 
     const AstRawString* name() const {
       DCHECK(is_simple());
-      return pattern->AsVariableProxy()->raw_name();
+      return pattern->AsVariableProxyExpression()->raw_name();
     }
 
     Parameter** next() { return &next_parameter; }
@@ -123,9 +123,11 @@ struct ParserTypes<Parser> {
   using Factory = AstNodeFactory;
 
   // Other implementation-specific functions.
-  using FuncNameInferrer = v8::internal::FuncNameInferrer;
+  using FuncNameInferrer = v8::internal::FuncNameInferrer<ParserTypes<Parser>>;
   using SourceRange = v8::internal::SourceRange;
   using SourceRangeScope = v8::internal::SourceRangeScope;
+  using AstValueFactory = v8::internal::AstValueFactory;
+  using AstRawString = AstRawString;
 };
 
 class V8_EXPORT_PRIVATE Parser : public NON_EXPORTED_BASE(ParserBase<Parser>) {
@@ -560,17 +562,17 @@ class V8_EXPORT_PRIVATE Parser : public NON_EXPORTED_BASE(ParserBase<Parser>) {
   // inside a variable proxy).  We exclude the case of 'this', which
   // has been converted to a variable proxy.
   V8_INLINE static bool IsIdentifier(Expression* expression) {
-    VariableProxy* operand = expression->AsVariableProxy();
+    VariableProxyExpression* operand = expression->AsVariableProxyExpression();
     return operand != nullptr && !operand->is_new_target();
   }
 
   V8_INLINE static const AstRawString* AsIdentifier(Expression* expression) {
     DCHECK(IsIdentifier(expression));
-    return expression->AsVariableProxy()->raw_name();
+    return expression->AsVariableProxyExpression()->raw_name();
   }
 
-  V8_INLINE VariableProxy* AsIdentifierExpression(Expression* expression) {
-    return expression->AsVariableProxy();
+  V8_INLINE VariableProxyExpression* AsIdentifierExpression(Expression* expression) {
+    return expression->AsVariableProxyExpression();
   }
 
   V8_INLINE bool IsConstructor(const AstRawString* identifier) const {
@@ -588,8 +590,8 @@ class V8_EXPORT_PRIVATE Parser : public NON_EXPORTED_BASE(ParserBase<Parser>) {
 
   V8_INLINE bool IsNative(Expression* expr) const {
     DCHECK_NOT_NULL(expr);
-    return expr->IsVariableProxy() &&
-           expr->AsVariableProxy()->raw_name() ==
+    return expr->IsVariableProxyExpression() &&
+           expr->AsVariableProxyExpression()->raw_name() ==
                ast_value_factory()->native_string();
   }
 
@@ -802,22 +804,24 @@ class V8_EXPORT_PRIVATE Parser : public NON_EXPORTED_BASE(ParserBase<Parser>) {
 
   Expression* ExpressionFromLiteral(Token::Value token, int pos);
 
-  V8_INLINE VariableProxy* ExpressionFromPrivateName(
+  V8_INLINE VariableProxyExpression* ExpressionFromPrivateName(
       PrivateNameScopeIterator* private_name_scope, const AstRawString* name,
       int start_position) {
     VariableProxy* proxy = factory()->ast_node_factory()->NewVariableProxy(
         name, NORMAL_VARIABLE, start_position);
     private_name_scope->AddUnresolvedPrivateName(proxy);
-    return proxy;
+    VariableProxyExpression* proxy_expr = factory()->NewVariableProxyExpression(proxy);
+    return proxy_expr;
   }
 
-  V8_INLINE VariableProxy* ExpressionFromIdentifier(
+  V8_INLINE VariableProxyExpression* ExpressionFromIdentifier(
       const AstRawString* name, int start_position,
       InferName infer = InferName::kYes) {
     if (infer == InferName::kYes) {
       fni_.PushVariableName(name);
     }
-    return expression_scope()->NewVariable(name, start_position);
+    VariableProxy* proxy = expression_scope()->NewVariable(name, start_position);
+    return factory()->NewVariableProxyExpression(proxy);
   }
 
   V8_INLINE void DeclareIdentifier(const AstRawString* name,
@@ -888,7 +892,7 @@ class V8_EXPORT_PRIVATE Parser : public NON_EXPORTED_BASE(ParserBase<Parser>) {
       scope->DeclareParameter(
           is_simple ? parameter->name() : ast_value_factory()->empty_string(),
           is_simple ? VariableMode::kVar : VariableMode::kTemporary,
-          is_optional, parameter->is_rest(), ast_value_factory(),
+          is_optional, parameter->is_rest(), ast_value_factory()->arguments_string(),
           parameter->position);
     }
   }

@@ -43,6 +43,9 @@ class AstTraversalVisitor : public AstVisitor<Subclass> {
 
   // Iteration left-to-right.
   void VisitDeclarations(Declaration::List* declarations);
+  void VisitDeclaration(Declaration* declaration);
+  void VisitVariableDeclaration(VariableDeclaration* declaration);
+  void VisitFunctionDeclaration(FunctionDeclaration* declaration);
   void VisitStatements(const ZonePtrList<Statement>* statements);
 
 // Individual nodes
@@ -66,6 +69,10 @@ class AstTraversalVisitor : public AstVisitor<Subclass> {
 #define PROCESS_NODE(node) do {                         \
     if (!(this->impl()->VisitNode(node))) return;       \
   } while (false)
+
+#define PROCESS_DECL(decl) do {                         \
+  this->impl()->VisitDeclaration(decl);                 \
+} while (false)
 
 #define PROCESS_EXPRESSION(node) do {                           \
     PROCESS_NODE(node);                                         \
@@ -106,7 +113,7 @@ template <class Subclass>
 void AstTraversalVisitor<Subclass>::VisitDeclarations(
     Declaration::List* decls) {
   for (Declaration* decl : *decls) {
-    RECURSE(Visit(decl));
+    VisitDeclaration(decl);
   }
 }
 
@@ -120,16 +127,34 @@ void AstTraversalVisitor<Subclass>::VisitStatements(
 }
 
 template <class Subclass>
+void AstTraversalVisitor<Subclass>::VisitDeclaration(
+    Declaration* decl) {
+  switch (decl->type()) {
+    case Declaration::VariableDecl: {
+      RECURSE(VisitVariableDeclaration(static_cast<VariableDeclaration*>(decl)));
+      break;
+    }
+    case Declaration::FunctionDecl: {
+      RECURSE(VisitFunctionDeclaration(static_cast<FunctionDeclaration*>(decl)));
+      break;
+    }
+    default: {
+      UNREACHABLE();
+    }
+  }
+}
+
+template <class Subclass>
 void AstTraversalVisitor<Subclass>::VisitVariableDeclaration(
     VariableDeclaration* decl) {
-  PROCESS_NODE(decl);
+  PROCESS_DECL(decl);
 }
 
 template <class Subclass>
 void AstTraversalVisitor<Subclass>::VisitFunctionDeclaration(
     FunctionDeclaration* decl) {
-  PROCESS_NODE(decl);
-  RECURSE(Visit(decl->fun()));
+  PROCESS_DECL(decl);
+  RECURSE(Visit(decl->fun<FunctionLiteral>()));
 }
 
 template <class Subclass>
@@ -303,7 +328,7 @@ void AstTraversalVisitor<Subclass>::VisitConditional(Conditional* expr) {
 }
 
 template <class Subclass>
-void AstTraversalVisitor<Subclass>::VisitVariableProxy(VariableProxy* expr) {
+void AstTraversalVisitor<Subclass>::VisitVariableProxyExpression(VariableProxyExpression* expr) {
   PROCESS_EXPRESSION(expr);
 }
 
@@ -575,8 +600,8 @@ template <class Subclass>
 void AstTraversalVisitor<Subclass>::VisitSuperCallReference(
     SuperCallReference* expr) {
   PROCESS_EXPRESSION(expr);
-  RECURSE_EXPRESSION(VisitVariableProxy(expr->new_target_var()));
-  RECURSE_EXPRESSION(VisitVariableProxy(expr->this_function_var()));
+  RECURSE_EXPRESSION(VisitVariableProxyExpression(expr->new_target_var()));
+  RECURSE_EXPRESSION(VisitVariableProxyExpression(expr->this_function_var()));
 }
 
 #undef PROCESS_NODE

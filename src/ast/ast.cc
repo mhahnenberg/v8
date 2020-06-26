@@ -117,7 +117,7 @@ bool Expression::IsCompileTimeValue() {
 bool Expression::IsUndefinedLiteral() const {
   if (IsLiteral() && AsLiteral()->type() == Literal::kUndefined) return true;
 
-  const VariableProxy* var_proxy = AsVariableProxy();
+  const VariableProxyExpression* var_proxy = AsVariableProxyExpression();
   if (var_proxy == nullptr) return false;
   Variable* var = var_proxy->var();
   // The global identifier "undefined" is immutable. Everything
@@ -139,12 +139,12 @@ bool Expression::ToBooleanIsFalse() const {
 }
 
 bool Expression::IsPrivateName() const {
-  return IsVariableProxy() && AsVariableProxy()->IsPrivateName();
+  return IsVariableProxyExpression() && AsVariableProxyExpression()->IsPrivateName();
 }
 
 bool Expression::IsValidReferenceExpression() const {
   return IsProperty() ||
-         (IsVariableProxy() && AsVariableProxy()->IsValidReferenceExpression());
+         (IsVariableProxyExpression() && AsVariableProxyExpression()->IsValidReferenceExpression());
 }
 
 bool Expression::IsAnonymousFunctionDefinition() const {
@@ -163,7 +163,8 @@ bool Expression::IsAccessorFunctionDefinition() const {
 }
 
 VariableProxy::VariableProxy(Variable* var, int start_position)
-    : Expression(start_position, kVariableProxy),
+    : start_position_(start_position),
+      bit_field_(0),
       raw_name_(var->raw_name()),
       next_unresolved_(nullptr) {
   DCHECK(!var->is_this());
@@ -174,7 +175,8 @@ VariableProxy::VariableProxy(Variable* var, int start_position)
 }
 
 VariableProxy::VariableProxy(const VariableProxy* copy_from)
-    : Expression(copy_from->position(), kVariableProxy),
+    : start_position_(copy_from->position()),
+      bit_field_(0),
       next_unresolved_(nullptr) {
   bit_field_ = copy_from->bit_field_;
   DCHECK(!copy_from->is_resolved());
@@ -906,7 +908,7 @@ void CallBase::ComputeSpreadPosition() {
 }
 
 Call::CallType Call::GetCallType() const {
-  VariableProxy* proxy = expression()->AsVariableProxy();
+  VariableProxyExpression* proxy = expression()->AsVariableProxyExpression();
   if (proxy != nullptr) {
     if (proxy->var()->IsUnallocated()) {
       return GLOBAL_CALL;
