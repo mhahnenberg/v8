@@ -37,6 +37,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   virtual void VisitProperty(BinAstProperty* property) override;
   virtual void VisitReturnStatement(BinAstReturnStatement* return_statement) override;
   virtual void VisitBinaryOperation(BinAstBinaryOperation* binary_op) override;
+  virtual void VisitObjectLiteral(BinAstObjectLiteral* binary_op) override;
 
  private:
   void SerializeUint32(uint32_t value);
@@ -172,6 +173,10 @@ void BinAstSerializeVisitor::VisitReturnStatement(BinAstReturnStatement* return_
 
 void BinAstSerializeVisitor::VisitBinaryOperation(BinAstBinaryOperation* binary_op) {
 
+}
+
+void BinAstSerializeVisitor::VisitObjectLiteral(BinAstObjectLiteral* object_literal) {
+  
 }
 
 
