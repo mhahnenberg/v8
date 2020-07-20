@@ -78,6 +78,14 @@ BinAstIterationStatement* BinAstNode::AsIterationStatement() {
   }
 }
 
+MaterializedLiteral* BinAstNode::AsMaterializedLiteral() {
+  switch (node_type()) {
+    // TODO(binast): materialized literals might not be needed for binast and have not been implemented
+    default:
+      return nullptr;
+  }
+}
+
 bool BinAstExpression::IsPropertyName() const {
   return IsLiteral() && AsLiteral()->IsPropertyName();
 }
@@ -104,6 +112,10 @@ bool BinAstExpression::IsAccessorFunctionDefinition() const {
 
 bool BinAstExpression::IsNumberLiteral() const {
   return IsLiteral() && AsLiteral()->IsNumber();
+}
+
+bool BinAstExpression::IsNullLiteral() const {
+  return IsLiteral() && AsLiteral()->type() == BinAstLiteral::kNull;
 }
 
 bool BinAstExpression::IsTheHoleLiteral() const {
@@ -137,6 +149,84 @@ void BinAstFunctionLiteral::set_raw_inferred_name(AstConsString* raw_inferred_na
   raw_inferred_name_ = raw_inferred_name;
   scope()->set_has_inferred_function_name(true);
 }
+
+void BinAstObjectLiteral::CalculateEmitStore(Zone* zone) {
+  const auto GETTER = ObjectLiteral::Property::GETTER;
+  const auto SETTER = ObjectLiteral::Property::SETTER;
+
+  CustomMatcherZoneHashMap table(BinAstLiteral::Match,
+                                 ZoneHashMap::kDefaultHashMapCapacity,
+                                 ZoneAllocationPolicy(zone));
+  for (int i = properties()->length() - 1; i >= 0; i--) {
+    BinAstObjectLiteral::Property* property = properties()->at(i);
+    if (property->is_computed_name()) continue;
+    if (property->IsPrototype()) continue;
+    BinAstLiteral* literal = property->key()->AsLiteral();
+    DCHECK(!literal->IsNullLiteral());
+
+    uint32_t hash = literal->Hash();
+    ZoneHashMap::Entry* entry = table.LookupOrInsert(literal, hash);
+    if (entry->value == nullptr) {
+      entry->value = property;
+    } else {
+      // We already have a later definition of this property, so we don't need
+      // to emit a store for the current one.
+      //
+      // There are two subtleties here.
+      //
+      // (1) Emitting a store might actually be incorrect. For example, in {get
+      // foo() {}, foo: 42}, the getter store would override the data property
+      // (which, being a non-computed compile-time valued property, is already
+      // part of the initial literal object.
+      //
+      // (2) If the later definition is an accessor (say, a getter), and the
+      // current definition is a complementary accessor (here, a setter), then
+      // we still must emit a store for the current definition.
+
+      auto later_kind =
+          static_cast<BinAstObjectLiteral::Property*>(entry->value)->kind();
+      bool complementary_accessors =
+          (property->kind() == GETTER && later_kind == SETTER) ||
+          (property->kind() == SETTER && later_kind == GETTER);
+      if (!complementary_accessors) {
+        property->set_emit_store(false);
+        if (later_kind == GETTER || later_kind == SETTER) {
+          entry->value = property;
+        }
+      }
+    }
+  }
+}
+
+BinAstObjectLiteralProperty::BinAstObjectLiteralProperty(BinAstExpression* key, BinAstExpression* value,
+                                             ObjectLiteralProperty::Kind kind, bool is_computed_name)
+    : BinAstLiteralProperty(key, value, is_computed_name),
+      kind_(kind),
+      emit_store_(true) {}
+
+BinAstObjectLiteralProperty::BinAstObjectLiteralProperty(BinAstValueFactory* ast_value_factory,
+                                             BinAstExpression* key, BinAstExpression* value,
+                                             bool is_computed_name)
+    : BinAstLiteralProperty(key, value, is_computed_name), emit_store_(true) {
+  if (!is_computed_name && key->AsLiteral()->IsString() &&
+      key->AsLiteral()->AsRawString() == ast_value_factory->proto_string()) {
+    kind_ = ObjectLiteralProperty::PROTOTYPE;
+  } else if (value_->AsMaterializedLiteral() != nullptr) {
+    // TODO(binast): materialized literals might not be needed for binast and have not been implemented
+    DCHECK(false);
+    // kind_ = ObjectLiteralProperty::MATERIALIZED_LITERAL;
+  } else if (value_->IsLiteral()) {
+    kind_ = ObjectLiteralProperty::CONSTANT;
+  } else {
+    kind_ = ObjectLiteralProperty::COMPUTED;
+  }
+}
+
+void BinAstObjectLiteralProperty::set_emit_store(bool emit_store) {
+  emit_store_ = emit_store;
+}
+
+bool BinAstObjectLiteralProperty::emit_store() const { return emit_store_; }
 
 }  // namespace internal
 }  // namespace v8

@@ -139,7 +139,7 @@ class BinAstNode : public ZoneObject {
   int position() const { return position_; }
 
   BinAstIterationStatement* AsIterationStatement();
-  // MaterializedLiteral* AsMaterializedLiteral();
+  MaterializedLiteral* AsMaterializedLiteral();
 
  private:
   int position_;
@@ -237,11 +237,7 @@ class BinAstExpression : public BinAstNode {
   }
 
   // True iff the expression is the null literal.
-  bool IsNullLiteral() const {
-    // TODO(binast)
-    DCHECK(false);
-    return false;
-  }
+  bool IsNullLiteral() const;
 
   // True iff the expression is the hole literal.
   bool IsTheHoleLiteral() const;
@@ -1167,11 +1163,22 @@ class BinAstLiteral final : public BinAstExpression {
   // template <typename LocalIsolate>
   // Handle<Object> BuildValue(LocalIsolate* isolate) const;
 
-  // TODO(binast)
   // Support for using Literal as a HashMap key. NOTE: Currently, this works
   // only for string and number literals!
-  // uint32_t Hash();
-  // static bool Match(void* literal1, void* literal2);
+  uint32_t Hash() {
+    return IsString() ? AsRawString()->Hash()
+                      : ComputeLongHash(double_to_uint64(AsNumber()));
+  }
+
+  // static
+  static bool Match(void* a, void* b) {
+    BinAstLiteral* x = static_cast<BinAstLiteral*>(a);
+    BinAstLiteral* y = static_cast<BinAstLiteral*>(b);
+    return (x->IsString() && y->IsString() &&
+            x->AsRawString() == y->AsRawString()) ||
+          (x->IsNumber() && y->IsNumber() && x->AsNumber() == y->AsNumber());
+  }
+
 
 
  private:
@@ -1368,12 +1375,61 @@ class BinAstThisExpression final : public BinAstExpression {
   BinAstThisExpression() : BinAstExpression(kNoSourcePosition, kThisExpression) {}
 };
 
+// Common supertype for ObjectLiteralProperty and ClassLiteralProperty
+class BinAstLiteralProperty : public ZoneObject {
+ public:
+  BinAstExpression* key() const { return key_and_is_computed_name_.GetPointer(); }
+  BinAstExpression* value() const { return value_; }
+
+  bool is_computed_name() const {
+    return key_and_is_computed_name_.GetPayload();
+  }
+  bool NeedsSetFunctionName() const {
+    return is_computed_name() && (value_->IsAnonymousFunctionDefinition() ||
+                                  value_->IsConciseMethodDefinition() ||
+                                  value_->IsAccessorFunctionDefinition());
+  }
+
+ protected:
+  BinAstLiteralProperty(BinAstExpression* key, BinAstExpression* value, bool is_computed_name)
+      : key_and_is_computed_name_(key, is_computed_name), value_(value) {}
+
+  PointerWithPayload<BinAstExpression, bool, 1> key_and_is_computed_name_;
+  BinAstExpression* value_;
+};
+
+class BinAstObjectLiteralProperty final : public BinAstLiteralProperty {
+ public:
+  ObjectLiteralProperty::Kind kind() const { return kind_; }
+
+  bool IsCompileTimeValue() const;
+
+  void set_emit_store(bool emit_store);
+  bool emit_store() const;
+
+  bool IsNullPrototype() const {
+    return IsPrototype() && value()->IsNullLiteral();
+  }
+  bool IsPrototype() const { return kind() == ObjectLiteralProperty::PROTOTYPE; }
+
+ private:
+  friend class BinAstNodeFactory;
+  friend Zone;
+
+  BinAstObjectLiteralProperty(BinAstExpression* key, BinAstExpression* value, ObjectLiteralProperty::Kind kind,
+                        bool is_computed_name);
+  BinAstObjectLiteralProperty(BinAstValueFactory* ast_value_factory, BinAstExpression* key,
+                        BinAstExpression* value, bool is_computed_name);
+
+  ObjectLiteralProperty::Kind kind_;
+  bool emit_store_;
+};
 
 // An object literal has a boilerplate object that is used
 // for minimizing the work when constructing it at runtime.
 class BinAstObjectLiteral final : public BinAstAggregateLiteral {
  public:
-  using Property = ObjectLiteralProperty;
+  using Property = BinAstObjectLiteralProperty;
 
   // Handle<ObjectBoilerplateDescription> boilerplate_description() const {
   //   DCHECK(!boilerplate_description_.is_null());
@@ -1450,13 +1506,15 @@ class BinAstObjectLiteral final : public BinAstAggregateLiteral {
 
  private:
   friend class BinAstNodeFactory;
+  friend Zone;
 
   BinAstObjectLiteral(Zone* zone, const ScopedPtrList<Property>& properties,
                 uint32_t boilerplate_properties, int pos,
-                bool has_rest_property)
+                bool has_rest_property, Variable* home_object)
       : BinAstAggregateLiteral(pos, kObjectLiteral),
         boilerplate_properties_(boilerplate_properties),
-        properties_(0, nullptr) {
+        properties_(0, nullptr),
+        home_object_(home_object) {
     bit_field_ |= HasElementsField::encode(false) |
                   HasRestPropertyField::encode(has_rest_property) |
                   FastElementsField::encode(false) |
@@ -1477,6 +1535,7 @@ class BinAstObjectLiteral final : public BinAstAggregateLiteral {
   uint32_t boilerplate_properties_;
   // Handle<ObjectBoilerplateDescription> boilerplate_description_;
   ZoneList<Property*> properties_;
+  Variable* home_object_;
 
   using HasElementsField = BinAstAggregateLiteral::NextBitField<bool, 1>;
   using HasRestPropertyField = HasElementsField::Next<bool, 1>;
@@ -2358,34 +2417,23 @@ class BinAstNodeFactory final {
   }
 
   BinAstObjectLiteral* NewObjectLiteral(
-      const ScopedPtrList<ObjectLiteral::Property>& properties,
+      const ScopedPtrList<BinAstObjectLiteral::Property>& properties,
       uint32_t boilerplate_properties, int pos, bool has_rest_property,
       Variable* home_object = nullptr) {
-    // return new (zone_) ObjectLiteral(zone_, properties, boilerplate_properties,
-    //                                  pos, has_rest_property);
-    // TODO(binast)
-    DCHECK(false);
-    return nullptr;
+    return zone_->New<BinAstObjectLiteral>(zone_, properties, boilerplate_properties, pos, has_rest_property, home_object);
   }
 
-  ObjectLiteral::Property* NewObjectLiteralProperty(
+  BinAstObjectLiteral::Property* NewObjectLiteralProperty(
       BinAstExpression* key, BinAstExpression* value, ObjectLiteralProperty::Kind kind,
       bool is_computed_name) {
-    // return new (zone_)
-    //     ObjectLiteral::Property(key, value, kind, is_computed_name);
-    // TODO(binast)
-    DCHECK(false);
-    return nullptr;
+    return zone_->New<BinAstObjectLiteral::Property>(key, value, kind, is_computed_name);
   }
 
-  ObjectLiteral::Property* NewObjectLiteralProperty(BinAstExpression* key,
+  BinAstObjectLiteral::Property* NewObjectLiteralProperty(BinAstExpression* key,
                                                     BinAstExpression* value,
                                                     bool is_computed_name) {
-    // return new (zone_) ObjectLiteral::Property(ast_value_factory_, key, value,
-    //                                            is_computed_name);
-    // TODO(binast)
-    DCHECK(false);
-    return nullptr;
+    return zone_->New<BinAstObjectLiteral::Property>(ast_value_factory_, key, value,
+                                               is_computed_name);
   }
 
   BinAstRegExpLiteral* NewRegExpLiteral(const AstRawString* pattern, int flags,

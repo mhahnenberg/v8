@@ -27,6 +27,7 @@ public:
   virtual void VisitProperty(BinAstProperty* property) = 0;
   virtual void VisitReturnStatement(BinAstReturnStatement* return_statement) = 0;
   virtual void VisitBinaryOperation(BinAstBinaryOperation* binary_op) = 0;
+  virtual void VisitObjectLiteral(BinAstObjectLiteral* object_literal) = 0;
 
   void VisitNode(BinAstNode* node) {
     switch (node->node_type()) {
@@ -102,6 +103,11 @@ public:
 
       case BinAstNode::kBinaryOperation: {
         VisitBinaryOperation(static_cast<BinAstBinaryOperation*>(node));
+        break;
+      }
+
+      case BinAstNode::kObjectLiteral: {
+        VisitObjectLiteral(static_cast<BinAstObjectLiteral*>(node));
         break;
       }
 
