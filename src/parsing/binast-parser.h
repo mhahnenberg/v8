@@ -114,8 +114,8 @@ struct ParserTypes<BinAstParser> {
   using FunctionLiteral = v8::internal::BinAstFunctionLiteral*;
   using Identifier = const AstRawString*;
   using IterationStatement = v8::internal::BinAstIterationStatement*;
-  using ObjectLiteralProperty = ObjectLiteral::Property*;
-  using ObjectPropertyList = ScopedPtrList<v8::internal::ObjectLiteralProperty>;
+  using ObjectLiteralProperty = BinAstObjectLiteral::Property*;
+  using ObjectPropertyList = ScopedPtrList<v8::internal::BinAstObjectLiteralProperty>;
   using Statement = v8::internal::BinAstStatement*;
   using StatementList = ScopedPtrList<BinAstStatement>;
 
@@ -152,6 +152,13 @@ class BinAstParser : public ParserBase<BinAstParser> {
   {
     // TODO(binast)
     DCHECK(false);
+  }
+
+  ClassLiteralProperty* ParseClassPropertyDefinition(
+      ClassInfo* class_info, ParsePropertyInfo* prop_info, bool has_extends) {
+    // TODO(binast)
+    DCHECK(false);
+    return nullptr;
   }
 
   void ParseProgram(BinAstParseInfo* info);
@@ -760,11 +767,8 @@ class BinAstParser : public ParserBase<BinAstParser> {
     ZonePtrList<const AstRawString>* arguments_for_wrapped_function);
 
   BinAstObjectLiteral* InitializeObjectLiteral(BinAstObjectLiteral* object_literal) {
-    // object_literal->CalculateEmitStore(main_zone());
-    // return object_literal;
-    // TODO(binast)
-    DCHECK(false);
-    return nullptr;
+    object_literal->CalculateEmitStore(main_zone());
+    return object_literal;
   }
 
   // Producing data during the recursive descent.
@@ -876,7 +880,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   V8_INLINE ZonePtrList<BinAstExpression>* NewExpressionList(int size) const {
     return zone()->New<ZonePtrList<BinAstExpression>>(size, zone());
   }
-  V8_INLINE ZonePtrList<ObjectLiteral::Property>* NewObjectPropertyList(
+  V8_INLINE ZonePtrList<BinAstObjectLiteral::Property>* NewObjectPropertyList(
       int size) const {
     // return zone()->New<ZonePtrList<ObjectLiteral::Property>>(size, zone());
     // TODO(binast)
@@ -1090,20 +1094,50 @@ class BinAstParser : public ParserBase<BinAstParser> {
     return nullptr;
   }
 
-  void SetFunctionNameFromPropertyName(LiteralProperty* property,
+  void SetFunctionNameFromPropertyName(ClassLiteralProperty* property,
                                        const AstRawString* name,
-                                       const AstRawString* prefix = nullptr)
-  {
+                                       const AstRawString* prefix = nullptr) {
     // TODO(binast)
     DCHECK(false);
   }
 
-  void SetFunctionNameFromPropertyName(ObjectLiteralProperty* property,
+  void SetFunctionNameFromPropertyName(BinAstLiteralProperty* property,
+                                       const AstRawString* name,
+                                       const AstRawString* prefix = nullptr) {
+    if (has_error()) return;
+    // Ensure that the function we are going to create has shared name iff
+    // we are not going to set it later.
+    if (property->NeedsSetFunctionName()) {
+      name = nullptr;
+      prefix = nullptr;
+    } else {
+      // If the property value is an anonymous function or an anonymous class or
+      // a concise method or an accessor function which doesn't require the name
+      // to be set then the shared name must be provided.
+      DCHECK_IMPLIES(property->value()->IsAnonymousFunctionDefinition() ||
+                         property->value()->IsConciseMethodDefinition() ||
+                         property->value()->IsAccessorFunctionDefinition(),
+                     name != nullptr);
+    }
+
+    BinAstExpression* value = property->value();
+    SetFunctionName(value, name, prefix);
+  }
+
+  void SetFunctionNameFromPropertyName(BinAstObjectLiteralProperty* property,
                                        const AstRawString* name,
                                        const AstRawString* prefix = nullptr)
   {
-    // TODO(binast)
-    DCHECK(false);
+    // Ignore "__proto__" as a name when it's being used to set the [[Prototype]]
+    // of an object literal.
+    // See ES #sec-__proto__-property-names-in-object-initializers.
+    if (property->IsPrototype() || has_error()) return;
+
+    DCHECK(!property->value()->IsAnonymousFunctionDefinition() ||
+          property->kind() == ObjectLiteralProperty::COMPUTED);
+
+    SetFunctionNameFromPropertyName(static_cast<BinAstLiteralProperty*>(property), name,
+                                    prefix);
   }
 
   void SetFunctionNameFromIdentifierRef(BinAstExpression* value,
@@ -1475,11 +1509,8 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   V8_INLINE static bool IsBoilerplateProperty(
-      ObjectLiteral::Property* property) {
-    // return !property->IsPrototype();
-    // TODO(binast)
-    DCHECK(false);
-    return false;
+      BinAstObjectLiteral::Property* property) {
+    return !property->IsPrototype();
   }
 
   V8_INLINE bool IsNative(BinAstExpression* expr) const {
