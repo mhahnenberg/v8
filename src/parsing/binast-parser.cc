@@ -6,6 +6,7 @@
 #include "src/parsing/parse-info.h"
 #include "src/parsing/binast.h"
 #include "src/zone/zone-list-inl.h"
+#include "src/parsing/binast-parse-data.h"
 
 #include <stdio.h>
 
@@ -23,6 +24,29 @@ BinAstParser::BinAstParser(BinAstParseInfo* info)
 {
 }
 
+void BinAstParser::InitializeEmptyScopeChain(BinAstParseInfo* info) {
+  DCHECK_NULL(original_scope_);
+  DCHECK_NULL(info->script_scope());
+  DeclarationScope* script_scope =
+      NewScriptScope(flags().is_repl_mode() ? REPLMode::kYes : REPLMode::kNo);
+  info->set_script_scope(script_scope);
+  original_scope_ = script_scope;
+}
+
+namespace {
+
+void MaybeResetCharacterStream(BinAstParseInfo* info, BinAstFunctionLiteral* literal) {
+  // Don't reset the character stream if there is an asm.js module since it will
+  // be used again by the asm-parser.
+  if (info->contains_asm_module()) {
+    if (FLAG_stress_validate_asm) return;
+    if (literal != nullptr && literal->scope()->ContainsAsmModule()) return;
+  }
+  info->ResetCharacterStream();
+}
+
+} // namespace
+
 void BinAstParser::ParseProgram(BinAstParseInfo* info)
 {
   BinAstFunctionLiteral* result = nullptr;
@@ -31,8 +55,8 @@ void BinAstParser::ParseProgram(BinAstParseInfo* info)
 
   result = DoParseProgram(info);
 
-  // TODO: Not sure if we need these...
-  // MaybeResetCharacterStream(info, result);
+  // TODO(binast): Not sure if we need these...
+  MaybeResetCharacterStream(info, result);
   // MaybeProcessSourceRanges(info, result, stack_limit_);
   PostProcessParseResult(info, result);
 }
@@ -44,8 +68,11 @@ BinAstFunctionLiteral* BinAstParser::DoParseProgram(BinAstParseInfo* info)
   DCHECK_NULL(scope_);
   DeclarationScope* scope = NewScriptScope(REPLMode::kNo);
 
-  // TODO(binast)
-  // if (flags().is_module()) scope = NewModuleScope(scope);
+  if (flags().is_module()) {
+    // TODO(binast)
+    DCHECK(false);
+    // scope = NewModuleScope(scope);
+  }
 
   FunctionState top_scope(&function_state_, &scope_, scope);
   original_scope_ = scope_;
@@ -134,6 +161,78 @@ BinAstFunctionLiteral* BinAstParser::DoParseProgram(BinAstParseInfo* info)
     return nullptr;
   }
 
+  return result;
+}
+
+BinAstFunctionLiteral* BinAstParser::DoParseFunction(BinAstParseInfo* info,
+                                         int start_position, int end_position,
+                                         int function_literal_id,
+                                         const AstRawString* raw_name) {
+  DCHECK_NOT_NULL(raw_name);
+  DCHECK_NULL(scope_);
+
+  DCHECK(ast_value_factory());
+  fni_.PushEnclosingName(raw_name);
+
+  ResetFunctionLiteralId();
+  DCHECK_LT(0, function_literal_id);
+  SkipFunctionLiterals(function_literal_id - 1);
+
+  ParsingModeScope parsing_mode(this, PARSE_EAGERLY);
+
+  // Place holder for the result.
+  BinAstFunctionLiteral* result = nullptr;
+
+  {
+    // Parse the function literal.
+    Scope* outer = original_scope_;
+    DeclarationScope* outer_function = outer->GetClosureScope();
+    DCHECK(outer);
+    FunctionState function_state(&function_state_, &scope_, outer_function);
+    BlockState block_state(&scope_, outer);
+    DCHECK(is_sloppy(outer->language_mode()) ||
+           is_strict(info->language_mode()));
+    FunctionKind kind = flags().function_kind();
+    DCHECK_IMPLIES(IsConciseMethod(kind) || IsAccessorFunction(kind),
+                   flags().function_syntax_kind() ==
+                       FunctionSyntaxKind::kAccessorOrMethod);
+
+    if (IsArrowFunction(kind)) {
+      // TODO(binast): add support for arrow functions
+      DCHECK(false);
+    } else if (IsDefaultConstructor(kind)) {
+      // TODO(binast)
+      DCHECK(false);
+      // DCHECK_EQ(scope(), outer);
+      // result = DefaultConstructor(raw_name, IsDerivedConstructor(kind),
+      //                             start_position, end_position);
+    } else {
+      // TODO(binast)
+      DCHECK(!info->is_wrapped_as_function());
+      ZonePtrList<const AstRawString>* arguments_for_wrapped_function = nullptr;
+      // ZonePtrList<const AstRawString>* arguments_for_wrapped_function =
+      //     info->is_wrapped_as_function()
+      //         ? PrepareWrappedArguments(isolate, info, zone())
+      //         : nullptr;
+      result = ParseFunctionLiteral(
+          raw_name, Scanner::Location::invalid(), kSkipFunctionNameCheck, kind,
+          kNoSourcePosition, flags().function_syntax_kind(),
+          info->language_mode(), arguments_for_wrapped_function);
+    }
+
+    if (has_error()) return nullptr;
+    result->set_requires_instance_members_initializer(
+        flags().requires_instance_members_initializer());
+    result->set_class_scope_has_private_brand(
+        flags().class_scope_has_private_brand());
+    result->set_has_static_private_methods_or_accessors(
+        flags().has_static_private_methods_or_accessors());
+    if (flags().is_oneshot_iife()) {
+      result->mark_as_oneshot_iife();
+    }
+  }
+
+  DCHECK_IMPLIES(result, function_literal_id == result->function_literal_id());
   return result;
 }
 
@@ -546,7 +645,45 @@ BinAstFunctionLiteral* BinAstParser::ParseFunctionLiteral(
   if (should_infer_name) {
     fni_.AddFunction(function_literal);
   }
+
+  ZoneBinAstParseData* zone_binast_parse_data = ZoneBinAstParseDataBuilder::Serialize(zone(), ast_value_factory(), function_literal);
+  ProducedBinAstParseData* produced_binast_parse_data = ProducedBinAstParseData::For(zone_binast_parse_data, zone());
+  function_literal->set_produced_binast_parse_data(produced_binast_parse_data);
   return function_literal;
+}
+
+void BinAstParser::ParseOnBackground(BinAstParseInfo* info, int start_position,
+                                     int end_position, int function_literal_id) {
+  RuntimeCallTimerScope runtimeTimer(
+      runtime_call_stats_, RuntimeCallCounterId::kParseBackgroundProgram);
+  parsing_on_main_thread_ = false;
+
+  DCHECK_NULL(info->literal());
+  BinAstFunctionLiteral* result = nullptr;
+
+  scanner_.Initialize();
+
+  DCHECK(original_scope_);
+
+  // When streaming, we don't know the length of the source until we have parsed
+  // it. The raw data can be UTF-8, so we wouldn't know the source length until
+  // we have decoded it anyway even if we knew the raw data length (which we
+  // don't). We work around this by storing all the scopes which need their end
+  // position set at the end of the script (the top scope and possible eval
+  // scopes) and set their end position after we know the script length.
+  if (flags().is_toplevel()) {
+    DCHECK_EQ(start_position, 0);
+    DCHECK_EQ(end_position, 0);
+    DCHECK_EQ(function_literal_id, kFunctionLiteralIdTopLevel);
+    result = DoParseProgram(info);
+  } else {
+    result = DoParseFunction(info, start_position,
+                             end_position, function_literal_id,
+                             info->function_name());
+  }
+  MaybeResetCharacterStream(info, result);
+  // MaybeProcessSourceRanges(info, result, stack_limit_);
+  PostProcessParseResult(info, result);
 }
 
 void BinAstParser::ReportUnexpectedTokenAt(Scanner::Location location,
@@ -555,6 +692,7 @@ void BinAstParser::ReportUnexpectedTokenAt(Scanner::Location location,
   const char* arg = nullptr;
   switch (token) {
     case Token::EOS:
+      base::OS::DebugBreak();
       message = MessageTemplate::kUnexpectedEOS;
       break;
     case Token::SMI:

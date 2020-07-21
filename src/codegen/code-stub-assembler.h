@@ -177,6 +177,7 @@ enum class PrimitiveType { kBoolean, kNumber, kString, kSymbol };
   V(OneClosureCellMap, one_closure_cell_map, OneClosureCellMap)                \
   V(OnePointerFillerMap, one_pointer_filler_map, OnePointerFillerMap)          \
   V(PreparseDataMap, preparse_data_map, PreparseDataMap)                       \
+  V(BinAstParseDataMap, bin_ast_parse_data_map, BinAstParseDataMap)            \
   V(PromiseCapabilityMap, promise_capability_map, PromiseCapabilityMap)        \
   V(promise_forwarding_handler_symbol, promise_forwarding_handler_symbol,      \
     PromiseForwardingHandlerSymbol)                                            \
@@ -226,6 +227,8 @@ enum class PrimitiveType { kBoolean, kNumber, kString, kSymbol };
     UncompiledDataWithoutPreparseDataMap)                                      \
   V(UncompiledDataWithPreparseDataMap, uncompiled_data_with_preparse_data_map, \
     UncompiledDataWithPreparseDataMap)                                         \
+  V(UncompiledDataWithBinAstParseDataMap, uncompiled_data_with_bin_ast_parse_data_map, \
+    UncompiledDataWithBinAstParseDataMap)                                      \
   V(undefined_to_string, undefined_to_string, UndefinedToString)               \
   V(UndefinedValue, undefined_value, Undefined)                                \
   V(uninitialized_symbol, uninitialized_symbol, UninitializedSymbol)           \

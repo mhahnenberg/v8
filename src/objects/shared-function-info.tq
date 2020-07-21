@@ -9,6 +9,10 @@ extern class PreparseData extends HeapObject {
   children_length: int32;
 }
 
+extern class BinAstParseData extends HeapObject {
+  serialized_ast: ByteArray;
+}
+
 extern class InterpreterData extends Struct {
   bytecode_array: BytecodeArray;
   interpreter_trampoline: Code;
@@ -76,6 +80,11 @@ extern class UncompiledDataWithoutPreparseData extends UncompiledData {
 @generateCppClass
 extern class UncompiledDataWithPreparseData extends UncompiledData {
   preparse_data: PreparseData;
+}
+
+@generateCppClass
+extern class UncompiledDataWithBinAstParseData extends UncompiledData {
+  binast_parse_data: BinAstParseData;
 }
 
 @export

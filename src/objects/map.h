@@ -30,8 +30,10 @@ enum InstanceType : uint16_t;
   V(FeedbackMetadata)                \
   V(FixedDoubleArray)
 
+// TODO(binast): Does the BinAstParseData actually include pointers that need to be scanned during GC?
 #define POINTER_VISITOR_ID_LIST(V)     \
   V(AllocationSite)                    \
+  V(BinAstParseData)                   \
   V(BytecodeArray)                     \
   V(Cell)                              \
   V(Code)                              \
@@ -72,6 +74,7 @@ enum InstanceType : uint16_t;
   V(TransitionArray)                   \
   V(UncompiledDataWithoutPreparseData) \
   V(UncompiledDataWithPreparseData)    \
+  V(UncompiledDataWithBinAstParseData) \
   V(WasmCapiFunctionData)              \
   V(WasmIndirectFunctionTable)         \
   V(WasmInstanceObject)                \

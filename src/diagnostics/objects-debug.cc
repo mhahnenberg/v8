@@ -1546,6 +1546,8 @@ void PreparseData::PreparseDataVerify(Isolate* isolate) {
   }
 }
 
+USE_TORQUE_VERIFIER(BinAstParseData)
+
 USE_TORQUE_VERIFIER(InterpreterData)
 
 #endif  // VERIFY_HEAP

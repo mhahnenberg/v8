@@ -11,7 +11,7 @@
 namespace v8 {
 namespace internal {
 
-BinAstParseInfo::BinAstParseInfo(Zone* zone, const UnoptimizedCompileFlags flags, const BinAstStringConstants* ast_string_constants)
+BinAstParseInfo::BinAstParseInfo(Zone* zone, const UnoptimizedCompileFlags flags, const AstStringConstants* ast_string_constants)
   : flags_(flags),
     zone_(zone),
     script_scope_(nullptr),
@@ -31,11 +31,33 @@ BinAstParseInfo::BinAstParseInfo(Zone* zone, const UnoptimizedCompileFlags flags
 {
 }
 
+BinAstParseInfo::BinAstParseInfo(ParseInfo* other_parse_info, const UnoptimizedCompileFlags flags)
+  : flags_(flags),
+    zone_(std::make_unique<Zone>(other_parse_info->state()->allocator(), ZONE_NAME)),
+    script_scope_(other_parse_info->script_scope()),
+    stack_limit_(other_parse_info->stack_limit()),
+    parameters_end_pos_(other_parse_info->parameters_end_pos()),
+    max_function_literal_id_(other_parse_info->max_function_literal_id()),
+    character_stream_(nullptr),
+    ast_value_factory_(nullptr),
+    function_name_(other_parse_info->function_name()),
+    runtime_call_stats_(nullptr),
+    source_range_map_(nullptr),
+    ast_string_constants_(other_parse_info->ast_string_constants()),
+    literal_(nullptr),
+    allow_eval_cache_(other_parse_info->allow_eval_cache()),
+    contains_asm_module_(other_parse_info->contains_asm_module()),
+    language_mode_(flags.outer_language_mode())
+{
+}
+
 void BinAstParseInfo::set_character_stream(
     std::unique_ptr<Utf16CharacterStream> character_stream) {
   DCHECK_NULL(character_stream_);
   character_stream_.swap(character_stream);
 }
+
+void BinAstParseInfo::ResetCharacterStream() { character_stream_.reset(); }
 
 BinAstValueFactory* BinAstParseInfo::GetOrCreateAstValueFactory() {
   if (!ast_value_factory_.get()) {
@@ -44,64 +66,6 @@ BinAstValueFactory* BinAstParseInfo::GetOrCreateAstValueFactory() {
   return ast_value_factory();
 }
 
-// bool AstRawString::Compare(void* a, void* b) {
-//   const AstRawString* lhs = static_cast<AstRawString*>(a);
-//   const AstRawString* rhs = static_cast<AstRawString*>(b);
-//   DCHECK_EQ(lhs->Hash(), rhs->Hash());
-
-//   if (lhs->length() != rhs->length()) return false;
-//   if (lhs->length() == 0) return true;
-//   const unsigned char* l = lhs->raw_data();
-//   const unsigned char* r = rhs->raw_data();
-//   size_t length = rhs->length();
-//   if (lhs->is_one_byte()) {
-//     if (rhs->is_one_byte()) {
-//       return CompareCharsUnsigned(reinterpret_cast<const uint8_t*>(l),
-//                                   reinterpret_cast<const uint8_t*>(r),
-//                                   length) == 0;
-//     } else {
-//       return CompareCharsUnsigned(reinterpret_cast<const uint8_t*>(l),
-//                                   reinterpret_cast<const uint16_t*>(r),
-//                                   length) == 0;
-//     }
-//   } else {
-//     if (rhs->is_one_byte()) {
-//       return CompareCharsUnsigned(reinterpret_cast<const uint16_t*>(l),
-//                                   reinterpret_cast<const uint8_t*>(r),
-//                                   length) == 0;
-//     } else {
-//       return CompareCharsUnsigned(reinterpret_cast<const uint16_t*>(l),
-//                                   reinterpret_cast<const uint16_t*>(r),
-//                                   length) == 0;
-//     }
-//   }
-// }
-
-BinAstStringConstants::BinAstStringConstants(AccountingAllocator* allocator/* , uint64_t hash_seed */)
-  : zone_(allocator, ZONE_NAME),
-    string_table_(AstRawString::Compare),
-    hash_seed_(0)  // TODO(binast): figure out how to thread this through
-{
-  #define F(name, str)                                                       \
-  {                                                                        \
-    const char* data = str;                                                \
-    Vector<const uint8_t> literal(reinterpret_cast<const uint8_t*>(data),  \
-                                  static_cast<int>(strlen(data)));         \
-    uint32_t hash_field = StringHasher::HashSequentialString<uint8_t>(     \
-        literal.begin(), literal.length(), hash_seed_);                    \
-    name##_string_ = new (&zone_) AstRawString(true, literal, hash_field); \
-    /* TODO(binast): I don't think we care about this since the binAST will be independent of any isolate */ \
-    /* The Handle returned by the factory is located on the roots */       \
-    /* array, not on the temporary HandleScope, so this is safe.  */       \
-    /* name##_string_->set_string(isolate->factory()->name##_string());  */     \
-    base::HashMap::Entry* entry =                                          \
-        string_table_.InsertNew(name##_string_, name##_string_->Hash());   \
-    DCHECK_NULL(entry->value);                                             \
-    entry->value = reinterpret_cast<void*>(1);                             \
-  }
-  BINAST_AST_STRING_CONSTANTS(F)
-#undef F
-}
 
 #define RETURN_NODE(Node) \
   case k##Node:           \
@@ -114,6 +78,11 @@ BinAstIterationStatement* BinAstNode::AsIterationStatement() {
       return nullptr;
   }
 }
+
+bool BinAstExpression::IsPropertyName() const {
+  return IsLiteral() && AsLiteral()->IsPropertyName();
+}
+
 
 bool BinAstExpression::IsConciseMethodDefinition() const {
   return IsFunctionLiteral() && IsConciseMethod(AsFunctionLiteral()->kind());
@@ -140,6 +109,14 @@ bool BinAstExpression::IsNumberLiteral() const {
 
 bool BinAstExpression::IsTheHoleLiteral() const {
   return IsLiteral() && AsLiteral()->type() == BinAstLiteral::kTheHole;
+}
+
+int BinAstFunctionLiteral::start_position() const {
+  return scope()->start_position();
+}
+
+int BinAstFunctionLiteral::end_position() const {
+  return scope()->end_position();
 }
 
 LanguageMode BinAstFunctionLiteral::language_mode() const {
