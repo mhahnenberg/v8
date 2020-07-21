@@ -2052,6 +2052,13 @@ void HeapObject::HeapObjectShortPrint(std::ostream& os) {  // NOLINT
       break;
     }
 
+    case BIN_AST_PARSE_DATA_TYPE: {
+      BinAstParseData data = BinAstParseData::cast(*this);
+      os << "<BinAstParseData[serialized_ast=" << Brief(data.serialized_ast())
+         << "]>";
+      break;
+    }
+
     case UNCOMPILED_DATA_WITHOUT_PREPARSE_DATA_TYPE: {
       UncompiledDataWithoutPreparseData data =
           UncompiledDataWithoutPreparseData::cast(*this);
@@ -2323,6 +2330,7 @@ int HeapObject::SizeFromMap(Map map) const {
     PreparseData data = PreparseData::unchecked_cast(*this);
     return PreparseData::SizeFor(data.data_length(), data.children_length());
   }
+  // TODO(binast): Anything to do here for BinAstParseData type?
 #define MAKE_TORQUE_SIZE_FOR(TYPE, TypeName)                \
   if (instance_type == TYPE) {                              \
     return TypeName::unchecked_cast(*this).AllocatedSize(); \

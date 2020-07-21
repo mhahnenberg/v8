@@ -186,6 +186,7 @@
 //     - UncompiledData
 //       - UncompiledDataWithoutPreparseData
 //       - UncompiledDataWithPreparseData
+//       - UncompiledDataWithBinAstParseData
 //     - SwissNameDictionary
 //
 // Formats of Object::ptr_:

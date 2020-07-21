@@ -97,6 +97,7 @@ class Symbol;
   V(Map, ordered_hash_set_map, OrderedHashSetMap)                              \
   V(Map, ordered_name_dictionary_map, OrderedNameDictionaryMap)                \
   V(Map, preparse_data_map, PreparseDataMap)                                   \
+  V(Map, bin_ast_parse_data_map, BinAstParseDataMap)                           \
   V(Map, property_array_map, PropertyArrayMap)                                 \
   V(Map, side_effect_call_handler_info_map, SideEffectCallHandlerInfoMap)      \
   V(Map, side_effect_free_call_handler_info_map,                               \

@@ -34,6 +34,8 @@ class OptimizedCompilationInfo;
 class OptimizedCompilationJob;
 class ParseInfo;
 class Parser;
+class BinAstParseInfo;
+class BinAstParser;
 class RuntimeCallStats;
 class ScriptData;
 struct ScriptStreamingData;
@@ -466,7 +468,72 @@ class V8_NODISCARD CompilationHandleScope final {
 using DeferredFinalizationJobDataList =
     std::vector<DeferredFinalizationJobData>;
 
-class V8_EXPORT_PRIVATE BackgroundCompileTask {
+class BackgroundCompileTask;
+class BackgroundBinAstParseTask;
+
+class BackgroundTask {
+ public:
+  virtual void Run() = 0;
+  virtual ~BackgroundTask();
+  virtual bool is_compile_task() const { return false; }
+  virtual bool is_binast_parse_task() const { return false; }
+  BackgroundCompileTask* AsCompileTask();
+  BackgroundBinAstParseTask* AsBinAstParseTask();
+};
+
+class ProducedBinAstParseData;
+
+class BackgroundBinAstParseTask : public BackgroundTask {
+ public:
+  BackgroundBinAstParseTask(
+      const ParseInfo* outer_parse_info, const AstRawString* function_name,
+      const FunctionLiteral* function_literal,
+      WorkerThreadRuntimeCallStats* worker_thread_runtime_stats,
+      TimedHistogram* timer, int max_stack_size);
+  virtual ~BackgroundBinAstParseTask() override;
+
+  virtual bool is_binast_parse_task() const override { return true; }
+
+  virtual void Run() override;
+  bool Finalize(Isolate* isolate, Handle<SharedFunctionInfo> function);
+
+  ParseInfo* info() {
+    DCHECK_NOT_NULL(info_);
+    return info_.get();
+  }
+  BinAstParseInfo* binast_info() {
+    DCHECK_NOT_NULL(binast_info_);
+    return binast_info_.get();
+  }
+  BinAstParser* parser() { return parser_.get(); }
+  UnoptimizedCompileFlags flags() const { return flags_; }
+  const UnoptimizedCompileState* compile_state() const {
+    return &compile_state_;
+  }
+  LanguageMode language_mode() { return language_mode_; }
+
+ private:
+   // Single function data for top-level function compilation.
+  int start_position_;
+  int end_position_;
+  int function_literal_id_;
+
+  int stack_size_;
+  WorkerThreadRuntimeCallStats* worker_thread_runtime_call_stats_;
+  TimedHistogram* timer_;
+
+  // Data needed for parsing, and data needed to to be passed between thread
+  // between parsing and compilation. These need to be initialized before the
+  // compilation starts.
+  UnoptimizedCompileFlags flags_;
+  UnoptimizedCompileState compile_state_;
+  std::unique_ptr<ParseInfo> info_;
+  std::unique_ptr<BinAstParseInfo> binast_info_;
+  std::unique_ptr<BinAstParser> parser_;
+  LanguageMode language_mode_;
+};
+
+class V8_EXPORT_PRIVATE BackgroundCompileTask : public BackgroundTask {
  public:
   // Creates a new task that when run will parse and compile the streamed
   // script associated with |data| and can be finalized with
@@ -476,7 +543,9 @@ class V8_EXPORT_PRIVATE BackgroundCompileTask {
                         v8::ScriptType type);
   BackgroundCompileTask(const BackgroundCompileTask&) = delete;
   BackgroundCompileTask& operator=(const BackgroundCompileTask&) = delete;
-  ~BackgroundCompileTask();
+  virtual ~BackgroundCompileTask() override;
+  
+  virtual bool is_compile_task() const override { return true; }
 
   // Creates a new task that when run will parse and compile the
   // |function_literal| and can be finalized with
@@ -487,7 +556,7 @@ class V8_EXPORT_PRIVATE BackgroundCompileTask {
       WorkerThreadRuntimeCallStats* worker_thread_runtime_stats,
       TimedHistogram* timer, int max_stack_size);
 
-  void Run();
+  virtual void Run() override;
 
   ParseInfo* info() {
     DCHECK_NOT_NULL(info_);
@@ -550,6 +619,15 @@ class V8_EXPORT_PRIVATE BackgroundCompileTask {
   TimedHistogram* timer_;
   LanguageMode language_mode_;
 };
+
+inline BackgroundCompileTask* BackgroundTask::AsCompileTask() {
+  return is_compile_task() ? static_cast<BackgroundCompileTask*>(this) : nullptr;
+}
+
+inline BackgroundBinAstParseTask* BackgroundTask::AsBinAstParseTask() {
+  return is_binast_parse_task() ? static_cast<BackgroundBinAstParseTask*>(this) : nullptr;
+}
+
 
 // Contains all data which needs to be transmitted between threads for
 // background parsing and compiling and finalizing it on the main thread.

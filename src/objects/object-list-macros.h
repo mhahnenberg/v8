@@ -82,6 +82,7 @@ class ZoneForwardList;
   V(BigInt)                                    \
   V(BigIntBase)                                \
   V(BigIntWrapper)                             \
+  V(BinAstParseData)                           \
   V(ObjectBoilerplateDescription)              \
   V(Boolean)                                   \
   V(BooleanWrapper)                            \

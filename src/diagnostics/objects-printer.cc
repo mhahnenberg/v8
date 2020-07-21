@@ -2387,6 +2387,12 @@ void PreparseData::PreparseDataPrint(std::ostream& os) {  // NOLINT
   os << "\n";
 }
 
+void BinAstParseData::BinAstParseDataPrint(std::ostream& os) {  // NOLINT
+  PrintHeader(os, "BinAstParseData");
+  os << "\n - serialized_ast: " << serialized_ast();
+  os << "\n";
+}
+
 void InterpreterData::InterpreterDataPrint(std::ostream& os) {  // NOLINT
   PrintHeader(os, "InterpreterData");
   os << "\n - bytecode_array: " << Brief(bytecode_array());

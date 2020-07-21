@@ -50,6 +50,8 @@
 #include "src/objects/object-list-macros.h"
 #include "src/objects/shared-function-info.h"
 #include "src/objects/string.h"
+#include "src/parsing/binast-parser.h"
+#include "src/parsing/binast-parse-data.h"
 #include "src/parsing/parse-info.h"
 #include "src/parsing/parser.h"
 #include "src/parsing/parsing.h"
@@ -1575,6 +1577,42 @@ DeferredFinalizationJobData::DeferredFinalizationJobData(
     : function_handle_(isolate->heap()->NewPersistentHandle(function_handle)),
       job_(std::move(job)) {}
 
+BackgroundTask::~BackgroundTask() = default;
+
+BackgroundBinAstParseTask::BackgroundBinAstParseTask(
+      const ParseInfo* outer_parse_info, const AstRawString* function_name,
+      const FunctionLiteral* function_literal,
+      WorkerThreadRuntimeCallStats* worker_thread_runtime_stats,
+      TimedHistogram* timer, int max_stack_size)
+    : start_position_(function_literal->start_position()),
+      end_position_(function_literal->end_position()),
+      function_literal_id_(function_literal->function_literal_id()),
+      stack_size_(max_stack_size),
+      worker_thread_runtime_call_stats_(worker_thread_runtime_stats),
+      timer_(timer),
+      flags_(UnoptimizedCompileFlags::ForToplevelFunction(
+        outer_parse_info->flags(),
+        function_literal)),
+      compile_state_(*outer_parse_info->state()),
+      info_(ParseInfo::ForFunction(flags_, &compile_state_,
+                                           function_literal, function_name)),
+      binast_info_(std::make_unique<BinAstParseInfo>(info_.get(), flags_)),
+      language_mode_(info_->language_mode())
+{
+  DCHECK_EQ(outer_parse_info->parameters_end_pos(), kNoSourcePosition);
+  DCHECK_NULL(outer_parse_info->extension());
+
+  DCHECK(!function_literal->is_toplevel());
+
+  // Clone the character stream so both can be accessed independently.
+  std::unique_ptr<Utf16CharacterStream> character_stream =
+      outer_parse_info->character_stream()->Clone();
+  character_stream->Seek(start_position_);
+  binast_info_->set_character_stream(std::move(character_stream));
+}
+
+BackgroundBinAstParseTask::~BackgroundBinAstParseTask() = default;
+
 BackgroundCompileTask::BackgroundCompileTask(ScriptStreamingData* streamed_data,
                                              Isolate* isolate, ScriptType type)
     : flags_(UnoptimizedCompileFlags::ForToplevelCompile(
@@ -1649,10 +1687,11 @@ namespace {
 // A scope object that ensures a parse info's runtime call stats and stack limit
 // are set correctly during worker-thread compile, and restores it after going
 // out of scope.
+template <typename ParseInfoT>
 class V8_NODISCARD OffThreadParseInfoScope {
  public:
   OffThreadParseInfoScope(
-      ParseInfo* parse_info,
+      ParseInfoT* parse_info,
       WorkerThreadRuntimeCallStats* worker_thread_runtime_stats, int stack_size)
       : parse_info_(parse_info),
         original_stack_limit_(parse_info_->stack_limit()),
@@ -1672,7 +1711,7 @@ class V8_NODISCARD OffThreadParseInfoScope {
   }
 
  private:
-  ParseInfo* parse_info_;
+  ParseInfoT* parse_info_;
   uintptr_t original_stack_limit_;
   RuntimeCallStats* original_runtime_call_stats_;
   WorkerThreadRuntimeCallStatsScope worker_thread_scope_;
@@ -1680,9 +1719,59 @@ class V8_NODISCARD OffThreadParseInfoScope {
 
 }  // namespace
 
+void BackgroundBinAstParseTask::Run() {
+  DisallowHeapAllocation no_allocation;
+  DisallowHandleAllocation no_handles;
+  DisallowHeapAccess no_heap_access;
+
+  TimedHistogramScope timer(timer_);
+  base::Optional<OffThreadParseInfoScope<BinAstParseInfo>> off_thread_scope(
+      base::in_place, binast_info_.get(), worker_thread_runtime_call_stats_,
+      stack_size_);
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
+               "BackgroundBinAstParseTask::Run");
+  RuntimeCallTimerScope runtimeTimer(
+      binast_info_->runtime_call_stats(),
+      RuntimeCallCounterId::kCompileBackgroundCompileTask);
+
+  // Update the character stream's runtime call stats.
+  binast_info_->character_stream()->set_runtime_call_stats(
+      binast_info_->runtime_call_stats());
+
+  // Parser needs to stay alive for finalizing the parsing on the main
+  // thread.
+  parser_.reset(new BinAstParser(binast_info_.get()));
+  parser_->InitializeEmptyScopeChain(binast_info_.get());
+  parser_->ParseOnBackground(binast_info_.get(), start_position_, end_position_, function_literal_id_);
+
+  // Save the language mode and record whether we collected source positions.
+  language_mode_ = binast_info_->language_mode();
+
+  // TODO(binast): Should we do some kind of finalization on the background thread instead of waiting for the main thread?
+  // TODO(binast): Might be able to more eagerly clean up some of the resources in this task.
+}
+
+bool BackgroundBinAstParseTask::Finalize(Isolate* isolate, Handle<SharedFunctionInfo> function) {
+  // TODO(binast): Remove this logging.
+  // const AstRawString* inferred_name = binast_info()->function_name();
+  // printf("Finalizing '%.*s'!\n", inferred_name->byte_length(), inferred_name->raw_data());
+  HandleScope scope(isolate);
+  // TODO(binast): Write implementation of ProducedBinAstParseData that actually performs some kind of serialization,
+  // and create an instance of that class during the BinAstParser's run.
+  Handle<BinAstParseData> binast_parse_data = binast_info()->literal()->produced_binast_parse_data()->Serialize(isolate);
+  Handle<UncompiledData> data = isolate->factory()->NewUncompiledDataWithBinAstParseData(
+        binast_info()->literal()->GetInferredName(isolate),
+        binast_info()->literal()->start_position(),
+        binast_info()->literal()->end_position(),
+        binast_parse_data);
+  function->set_uncompiled_data(*data);
+  // printf("Done!\n");
+  return true;
+}
+
 void BackgroundCompileTask::Run() {
   TimedHistogramScope timer(timer_);
-  base::Optional<OffThreadParseInfoScope> off_thread_scope(
+  base::Optional<OffThreadParseInfoScope<ParseInfo>> off_thread_scope(
       base::in_place, info_.get(), worker_thread_runtime_call_stats_,
       stack_size_);
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
@@ -1903,13 +1992,21 @@ bool Compiler::Compile(Isolate* isolate, Handle<SharedFunctionInfo> shared_info,
 
   // Check if the compiler dispatcher has shared_info enqueued for compile.
   CompilerDispatcher* dispatcher = isolate->compiler_dispatcher();
-  if (dispatcher->IsEnqueued(shared_info)) {
+  if (dispatcher->IsEnqueuedForCompilation(shared_info)) {
     if (!dispatcher->FinishNow(shared_info)) {
       return FailWithPendingException(isolate, script, &parse_info, flag);
     }
     *is_compiled_scope = shared_info->is_compiled_scope(isolate);
     DCHECK(is_compiled_scope->is_compiled());
     return true;
+  }
+
+  if (dispatcher->IsEnqueuedForParsing(shared_info)) {
+    if (!dispatcher->FinishNow(shared_info)) {
+      // TODO(binast)
+      DCHECK(false);
+      // return FailWithPendingException(isolate, script, &parse_info, flag);
+    }
   }
 
   if (shared_info->HasUncompiledDataWithPreparseData()) {

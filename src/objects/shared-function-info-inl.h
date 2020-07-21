@@ -91,6 +91,12 @@ void PreparseData::set_child(int index, PreparseData value,
 TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithoutPreparseData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithPreparseData)
+TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithBinAstParseData)
+
+OBJECT_CONSTRUCTORS_IMPL(BinAstParseData, HeapObject)
+
+CAST_ACCESSOR(BinAstParseData)
+ACCESSORS(BinAstParseData, serialized_ast, ByteArray, kSerializedAstOffset)
 
 TQ_OBJECT_CONSTRUCTORS_IMPL(BaselineData)
 
@@ -720,6 +726,23 @@ void SharedFunctionInfo::set_uncompiled_data_with_preparse_data(
   set_function_data(uncompiled_data_with_preparse_data, kReleaseStore);
 }
 
+bool SharedFunctionInfo::HasUncompiledDataWithBinAstParseData() const {
+  return function_data(kAcquireLoad).IsUncompiledDataWithBinAstParseData();
+}
+
+UncompiledDataWithBinAstParseData
+SharedFunctionInfo::uncompiled_data_with_binast_parse_data() const {
+  DCHECK(HasUncompiledDataWithBinAstParseData());
+  return UncompiledDataWithBinAstParseData::cast(function_data(kAcquireLoad));
+}
+
+void SharedFunctionInfo::set_uncompiled_data_with_binast_parse_data(
+    UncompiledDataWithBinAstParseData uncompiled_data_with_binast_parse_data) {
+  DCHECK(function_data(kAcquireLoad) == Smi::FromEnum(Builtins::kCompileLazy));
+  DCHECK(uncompiled_data_with_binast_parse_data.IsUncompiledDataWithBinAstParseData());
+  set_function_data(uncompiled_data_with_binast_parse_data, kReleaseStore);
+}
+
 bool SharedFunctionInfo::HasUncompiledDataWithoutPreparseData() const {
   return function_data(kAcquireLoad).IsUncompiledDataWithoutPreparseData();
 }
@@ -752,6 +775,36 @@ void SharedFunctionInfo::ClearPreparseData() {
   // Ensure that the clear was successful.
   DCHECK(HasUncompiledDataWithoutPreparseData());
 }
+
+void SharedFunctionInfo::ClearBinAstParseData() {
+  DCHECK(HasUncompiledDataWithBinAstParseData());
+  UncompiledDataWithBinAstParseData data = uncompiled_data_with_binast_parse_data();
+
+  // Trim off the pre-parsed scope data from the uncompiled data by swapping the
+  // map, leaving only an uncompiled data without pre-parsed scope.
+  DisallowGarbageCollection no_gc;
+  Heap* heap = GetHeapFromWritableObject(data);
+
+  // Swap the map.
+  heap->NotifyObjectLayoutChange(data, no_gc);
+  STATIC_ASSERT(UncompiledDataWithoutPreparseData::kSize <
+                UncompiledDataWithBinAstParseData::kSize);
+  STATIC_ASSERT(UncompiledDataWithoutPreparseData::kSize ==
+                UncompiledData::kHeaderSize);
+  data.synchronized_set_map(
+      GetReadOnlyRoots().uncompiled_data_without_preparse_data_map());
+
+  // Fill the remaining space with filler.
+  heap->CreateFillerObjectAt(
+      data.address() + UncompiledDataWithoutPreparseData::kSize,
+      UncompiledDataWithBinAstParseData::kSize -
+          UncompiledDataWithoutPreparseData::kSize,
+      ClearRecordedSlots::kYes);
+
+  // Ensure that the clear was successful.
+  DCHECK(HasUncompiledDataWithoutPreparseData());
+}
+
 
 void UncompiledData::InitAfterBytecodeFlush(
     String inferred_name, int start_position, int end_position,
