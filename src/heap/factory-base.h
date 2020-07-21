@@ -29,8 +29,10 @@ class SourceTextModuleInfo;
 class PreparseData;
 template <class T>
 class PodArray;
+class BinAstParseData;
 class UncompiledDataWithoutPreparseData;
 class UncompiledDataWithPreparseData;
+class UncompiledDataWithBinAstParseData;
 class BytecodeArray;
 class CoverageInfo;
 class ClassPositions;
@@ -154,6 +156,8 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) FactoryBase
 
   Handle<PreparseData> NewPreparseData(int data_length, int children_length);
 
+  Handle<BinAstParseData> NewBinAstParseData(Handle<ByteArray> serialized_ast);
+
   Handle<UncompiledDataWithoutPreparseData>
   NewUncompiledDataWithoutPreparseData(Handle<String> inferred_name,
                                        int32_t start_position,
@@ -162,6 +166,10 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) FactoryBase
   Handle<UncompiledDataWithPreparseData> NewUncompiledDataWithPreparseData(
       Handle<String> inferred_name, int32_t start_position,
       int32_t end_position, Handle<PreparseData>);
+
+  Handle<UncompiledDataWithBinAstParseData> NewUncompiledDataWithBinAstParseData(
+      Handle<String> inferred_name, int32_t start_position,
+      int32_t end_position, Handle<BinAstParseData>);
 
   // Allocates a FeedbackMedata object and zeroes the data section.
   Handle<FeedbackMetadata> NewFeedbackMetadata(

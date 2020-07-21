@@ -93,6 +93,7 @@ void Parser::ReportUnexpectedTokenAt(Scanner::Location location,
   const char* arg = nullptr;
   switch (token) {
     case Token::EOS:
+          base::OS::DebugBreak();
       message = MessageTemplate::kUnexpectedEOS;
       break;
     case Token::SMI:
@@ -2585,7 +2586,7 @@ FunctionLiteral* Parser::ParseFunctionLiteral(
   const bool is_lazy =
       eager_compile_hint == FunctionLiteral::kShouldLazyCompile;
   const bool is_top_level = AllowsLazyParsingWithoutUnresolvedVariables();
-  const bool is_eager_top_level_function = !is_lazy && is_top_level;
+  // const bool is_eager_top_level_function = !is_lazy && is_top_level;
   const bool is_lazy_top_level_function = is_lazy && is_top_level;
   const bool is_lazy_inner_function = is_lazy && !is_top_level;
 
@@ -2616,14 +2617,26 @@ FunctionLiteral* Parser::ParseFunctionLiteral(
   // If parallel compile tasks are enabled, and the function is an eager
   // top level function, then we can pre-parse the function and parse / compile
   // in a parallel task on a worker thread.
-  bool should_post_parallel_task =
-      parse_lazily() && is_eager_top_level_function &&
-      FLAG_parallel_compile_tasks && info()->parallel_tasks() &&
+  bool should_post_parallel_task = false;
+      // parse_lazily() && is_eager_top_level_function &&
+      // FLAG_parallel_compile_tasks && info()->parallel_tasks() &&
+      // scanner()->stream()->can_be_cloned_for_parallel_access();
+  bool should_post_parallel_binast_task = 
+      parse_lazily() &&
+      is_top_level &&
+      info()->parallel_tasks() && 
       scanner()->stream()->can_be_cloned_for_parallel_access();
-
   // This may be modified later to reflect preparsing decision taken
   bool should_preparse = (parse_lazily() && is_lazy_top_level_function) ||
-                         should_preparse_inner || should_post_parallel_task;
+                         should_preparse_inner || should_post_parallel_task || should_post_parallel_binast_task;
+
+  // printf("\nfunction name: '%.*s'\n", function_name->byte_length(), function_name->raw_data());
+  // printf("parse_lazily: %d\n", parse_lazily());
+  // printf("is_eager_top_level_function: %d\n", is_eager_top_level_function);
+  // printf("Parallel tasks: %p\n", info()->parallel_tasks());
+  // printf("Stream can be cloned: %d\n", scanner()->stream()->can_be_cloned());
+  // printf("Stream can be cloned for parallel access: %d\n", scanner()->stream()->can_be_cloned_for_parallel_access());
+  // printf("Should post parallel binast task: %d\n", should_post_parallel_binast_task);
 
   ScopedPtrList<Statement> body(pointer_buffer());
   int expected_property_count = 0;
@@ -2663,6 +2676,7 @@ FunctionLiteral* Parser::ParseFunctionLiteral(
     // Consume it in that case.
     if (should_preparse) Consume(Token::LPAREN);
     should_post_parallel_task = false;
+    should_post_parallel_binast_task = false;
     ParseFunction(&body, function_name, pos, kind, function_syntax_kind, scope,
                   &num_parameters, &function_length, &has_duplicate_parameters,
                   &expected_property_count, &suspend_count,
@@ -2717,7 +2731,12 @@ FunctionLiteral* Parser::ParseFunctionLiteral(
 
   if (should_post_parallel_task) {
     // Start a parallel parse / compile task on the compiler dispatcher.
-    info()->parallel_tasks()->Enqueue(info(), function_name, function_literal);
+    info()->parallel_tasks()->EnqueueCompileTask(info(), function_name, function_literal);
+  }
+
+  if (should_post_parallel_binast_task) {
+    // Start a parallel binAST parse task on the compiler dispatcher.
+    info()->parallel_tasks()->EnqueueBinAstParseTask(info(), function_name, function_literal);
   }
 
   if (should_infer_name) {

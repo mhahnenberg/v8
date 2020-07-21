@@ -140,6 +140,14 @@ class BinAstParser : public ParserBase<BinAstParser> {
 
   static bool IsPreParser() { return false; }
 
+  // Sets the literal on |info| if parsing succeeded.
+  void ParseOnBackground(BinAstParseInfo* info, int start_position, int end_position,
+                         int function_literal_id);
+
+  // Initializes an empty scope chain for top-level scripts, or scopes which
+  // consist of only the native context.
+  void InitializeEmptyScopeChain(BinAstParseInfo* info);
+
   void PrepareGeneratorVariables()
   {
     // TODO(binast)
@@ -147,6 +155,12 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   void ParseProgram(BinAstParseInfo* info);
+
+
+  BinAstFunctionLiteral* DoParseFunction(BinAstParseInfo* info,
+                                   int start_position, int end_position,
+                                   int function_literal_id,
+                                   const AstRawString* raw_name);
 
  private:
   friend class ParserBase<BinAstParser>;
@@ -193,12 +207,10 @@ class BinAstParser : public ParserBase<BinAstParser> {
   // literal so it can be added as a constant function property.
   V8_INLINE static void CheckAssigningFunctionLiteralToProperty(
       BinAstExpression* left, BinAstExpression* right) {
-    // DCHECK_NOT_NULL(left);
-    // if (left->IsProperty() && right->IsFunctionLiteral()) {
-    //   right->AsFunctionLiteral()->set_pretenure();
-    // }
-    // TODO(binast)
-    DCHECK(false);
+    DCHECK_NOT_NULL(left);
+    if (left->IsProperty() && right->IsFunctionLiteral()) {
+      right->AsFunctionLiteral()->set_pretenure();
+    }
   }
 
   void ParseModuleItemList(ScopedPtrList<BinAstStatement>* body)
@@ -1146,13 +1158,11 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   V8_INLINE void PushPropertyName(BinAstExpression* expression) {
-    // if (expression->IsPropertyName()) {
-    //   fni_.PushLiteralName(expression->AsLiteral()->AsRawPropertyName());
-    // } else {
-    //   fni_.PushLiteralName(ast_value_factory()->computed_string());
-    // }
-    // TODO(binast)
-    DCHECK(false);
+    if (expression->IsPropertyName()) {
+      fni_.PushLiteralName(expression->AsLiteral()->AsRawPropertyName());
+    } else {
+      fni_.PushLiteralName(ast_value_factory()->computed_string());
+    }
   }
 
 
@@ -1229,7 +1239,6 @@ class BinAstParser : public ParserBase<BinAstParser> {
     //                           new (zone())
     //                               BinaryOperationSourceRanges(right_range));
     // TODO(binast)
-    DCHECK(false);
   }
 
   V8_INLINE void RecordJumpStatementSourceRange(BinAstStatement* node,
@@ -1410,12 +1419,12 @@ class BinAstParser : public ParserBase<BinAstParser> {
 
   // Returns true if the expression is of type "this.foo".
   V8_INLINE static bool IsThisProperty(BinAstExpression* expression) {
-    // DCHECK_NOT_NULL(expression);
-    // Property* property = expression->AsProperty();
-    // return property != nullptr && property->obj()->IsThisExpression();
+    DCHECK_NOT_NULL(expression);
+    BinAstProperty* property = expression->AsProperty();
+    return property != nullptr && property->obj()->IsThisExpression();
     // TODO(binast)
-    DCHECK(false);
-    return false;
+    // DCHECK(false);
+    // return false;
   }
 
   // Returns true if the expression is of type "obj.#foo".

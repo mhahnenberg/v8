@@ -19,7 +19,7 @@
 namespace v8 {
 namespace internal {
 
-CompilerDispatcher::Job::Job(BackgroundCompileTask* task_arg)
+CompilerDispatcher::Job::Job(BackgroundTask* task_arg)
     : task(task_arg), has_run(false), aborted(false) {}
 
 CompilerDispatcher::Job::~Job() = default;
@@ -54,7 +54,7 @@ CompilerDispatcher::~CompilerDispatcher() {
   CHECK(task_manager_->canceled());
 }
 
-base::Optional<CompilerDispatcher::JobId> CompilerDispatcher::Enqueue(
+base::Optional<CompilerDispatcher::JobId> CompilerDispatcher::EnqueueCompileTask(
     const ParseInfo* outer_parse_info, const AstRawString* function_name,
     const FunctionLiteral* function_literal) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
@@ -70,7 +70,38 @@ base::Optional<CompilerDispatcher::JobId> CompilerDispatcher::Enqueue(
   JobMap::const_iterator it = InsertJob(std::move(job));
   JobId id = it->first;
   if (trace_compiler_dispatcher_) {
-    PrintF("CompilerDispatcher: enqueued job %zu for function literal id %d\n",
+    PrintF("CompilerDispatcher: enqueued compilejob %zu for function literal id %d\n",
+           id, function_literal->function_literal_id());
+  }
+
+  // Post a a background worker task to perform the compilation on the worker
+  // thread.
+  {
+    base::MutexGuard lock(&mutex_);
+    pending_background_jobs_.insert(it->second.get());
+  }
+  ScheduleMoreWorkerTasksIfNeeded();
+  return base::make_optional(id);
+}
+
+base::Optional<CompilerDispatcher::JobId> CompilerDispatcher::EnqueueBinAstParseTask(
+    const ParseInfo* outer_parse_info, const AstRawString* function_name,
+    const FunctionLiteral* function_literal) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
+               "V8.CompilerDispatcherEnqueue");
+  RuntimeCallTimerScope runtimeTimer(
+      isolate_, RuntimeCallCounterId::kCompileEnqueueOnDispatcher);
+
+  if (!IsEnabled()) return base::nullopt;
+
+  std::unique_ptr<Job> job = std::make_unique<Job>(new BackgroundBinAstParseTask(
+      outer_parse_info, function_name, function_literal,
+      worker_thread_runtime_call_stats_, background_compile_timer_,
+      static_cast<int>(max_stack_size_)));
+  JobMap::const_iterator it = InsertJob(std::move(job));
+  JobId id = it->first;
+  if (trace_compiler_dispatcher_) {
+    PrintF("CompilerDispatcher: enqueued binast job %zu for function literal id %d\n",
            id, function_literal->function_literal_id());
   }
 
@@ -86,12 +117,19 @@ base::Optional<CompilerDispatcher::JobId> CompilerDispatcher::Enqueue(
 
 bool CompilerDispatcher::IsEnabled() const { return FLAG_compiler_dispatcher; }
 
-bool CompilerDispatcher::IsEnqueued(Handle<SharedFunctionInfo> function) const {
+bool CompilerDispatcher::IsEnqueuedForCompilation(Handle<SharedFunctionInfo> function) const {
   if (jobs_.empty()) return false;
-  return GetJobFor(function) != jobs_.end();
+  auto job_it = GetJobFor(function);
+  return job_it != jobs_.end() && job_it->second->task->is_compile_task();
 }
 
-bool CompilerDispatcher::IsEnqueued(JobId job_id) const {
+bool CompilerDispatcher::IsEnqueuedForParsing(Handle<SharedFunctionInfo> function) const {
+  if (jobs_.empty()) return false;
+  auto job_it = GetJobFor(function);
+  return job_it != jobs_.end() && job_it->second->task->is_binast_parse_task();
+}
+
+bool CompilerDispatcher::IsEnqueuedForCompilation(JobId job_id) const {
   return jobs_.find(job_id) != jobs_.end();
 }
 
@@ -166,8 +204,13 @@ bool CompilerDispatcher::FinishNow(Handle<SharedFunctionInfo> function) {
 
   DCHECK(job->IsReadyToFinalize(&mutex_));
   DCHECK(!job->aborted);
-  bool success = Compiler::FinalizeBackgroundCompileTask(
-      job->task.get(), function, isolate_, Compiler::KEEP_EXCEPTION);
+  bool success = true;
+  if (job->task->is_compile_task()) {
+    success = Compiler::FinalizeBackgroundCompileTask(
+        job->task->AsCompileTask(), function, isolate_, Compiler::KEEP_EXCEPTION);
+  } else {
+    success = job->task->AsBinAstParseTask()->Finalize(isolate_, function);
+  }
 
   DCHECK_NE(success, isolate_->has_pending_exception());
   RemoveJob(it);
@@ -335,9 +378,15 @@ void CompilerDispatcher::DoIdleWork(double deadline_in_seconds) {
 
     Job* job = it->second.get();
     if (!job->aborted) {
-      Compiler::FinalizeBackgroundCompileTask(
-          job->task.get(), job->function.ToHandleChecked(), isolate_,
+      if (job->task->is_compile_task()) {
+        Compiler::FinalizeBackgroundCompileTask(
+          job->task->AsCompileTask(), job->function.ToHandleChecked(), isolate_,
           Compiler::CLEAR_EXCEPTION);
+      } else if (job->task->is_binast_parse_task()) {
+        job->task->AsBinAstParseTask()->Finalize(isolate_, job->function.ToHandleChecked());
+      } else {
+        UNREACHABLE();
+      }
     }
     RemoveJob(it);
   }

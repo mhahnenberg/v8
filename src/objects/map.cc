@@ -232,6 +232,9 @@ VisitorId Map::GetVisitorId(Map map) {
     case PREPARSE_DATA_TYPE:
       return kVisitPreparseData;
 
+    case BIN_AST_PARSE_DATA_TYPE:
+      return kVisitBinAstParseData;
+
     case COVERAGE_INFO_TYPE:
       return kVisitCoverageInfo;
 

@@ -290,6 +290,16 @@ Handle<PreparseData> FactoryBase<Impl>::NewPreparseData(int data_length,
 }
 
 template <typename Impl>
+Handle<BinAstParseData> FactoryBase<Impl>::NewBinAstParseData(Handle<ByteArray> serialized_ast) {
+  Handle<BinAstParseData> result = handle(
+      BinAstParseData::cast(NewWithImmortalMap(
+          read_only_roots().bin_ast_parse_data_map(), AllocationType::kOld)),
+      isolate());
+  result->set_serialized_ast(*serialized_ast);
+  return result;
+}
+
+template <typename Impl>
 Handle<UncompiledDataWithoutPreparseData>
 FactoryBase<Impl>::NewUncompiledDataWithoutPreparseData(
     Handle<String> inferred_name, int32_t start_position,
@@ -305,6 +315,16 @@ FactoryBase<Impl>::NewUncompiledDataWithPreparseData(
     Handle<PreparseData> preparse_data) {
   return TorqueGeneratedFactory<Impl>::NewUncompiledDataWithPreparseData(
       inferred_name, start_position, end_position, preparse_data,
+      AllocationType::kOld);
+}
+
+template <typename Impl>
+Handle<UncompiledDataWithBinAstParseData> 
+FactoryBase<Impl>::NewUncompiledDataWithBinAstParseData(
+      Handle<String> inferred_name, int32_t start_position,
+      int32_t end_position, Handle<BinAstParseData> binast_parse_data) {
+  return TorqueGeneratedFactory<Impl>::NewUncompiledDataWithBinAstParseData(
+      inferred_name, start_position, end_position, binast_parse_data,
       AllocationType::kOld);
 }
 

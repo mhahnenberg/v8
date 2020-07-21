@@ -230,6 +230,24 @@ std::unique_ptr<ParseInfo> ParseInfo::ForToplevelFunction(
   return result;
 }
 
+std::unique_ptr<ParseInfo> ParseInfo::ForFunction(
+    const UnoptimizedCompileFlags flags, UnoptimizedCompileState* compile_state,
+    const FunctionLiteral* literal, const AstRawString* function_name) {
+  std::unique_ptr<ParseInfo> result(new ParseInfo(flags, compile_state));
+
+  // Clone the function_name AstRawString into the ParseInfo's own
+  // AstValueFactory.
+  const AstRawString* cloned_function_name =
+      result->GetOrCreateAstValueFactory()->CloneFromOtherFactory(
+          function_name);
+
+  // Setup function specific details.
+  DCHECK(!literal->is_toplevel());
+  result->set_function_name(cloned_function_name);
+
+  return result;
+}
+
 ParseInfo::~ParseInfo() = default;
 
 DeclarationScope* ParseInfo::scope() const { return literal()->scope(); }
@@ -327,15 +345,24 @@ void ParseInfo::CheckFlagsForFunctionFromScript(Script script) {
                  source_range_map() != nullptr);
 }
 
-void UnoptimizedCompileState::ParallelTasks::Enqueue(
+void UnoptimizedCompileState::ParallelTasks::EnqueueCompileTask(
     ParseInfo* outer_parse_info, const AstRawString* function_name,
     FunctionLiteral* literal) {
   base::Optional<CompilerDispatcher::JobId> job_id =
-      dispatcher_->Enqueue(outer_parse_info, function_name, literal);
+      dispatcher_->EnqueueCompileTask(outer_parse_info, function_name, literal);
   if (job_id) {
     enqueued_jobs_.emplace_front(std::make_pair(literal, *job_id));
   }
 }
+
+void UnoptimizedCompileState::ParallelTasks::EnqueueBinAstParseTask(ParseInfo* outer_parse_info, const AstRawString* function_name, FunctionLiteral* literal) {
+  base::Optional<CompilerDispatcher::JobId> job_id =
+      dispatcher_->EnqueueBinAstParseTask(outer_parse_info, function_name, literal);
+  if (job_id) {
+    enqueued_jobs_.emplace_front(std::make_pair(literal, *job_id));
+  }
+}
+
 
 }  // namespace internal
 }  // namespace v8

@@ -55,6 +55,7 @@ enum InstanceType : uint16_t;
   V(Map)                                \
   V(NativeContext)                      \
   V(PreparseData)                       \
+  V(BinAstParseData)                    \
   V(PropertyArray)                      \
   V(PropertyCell)                       \
   V(PrototypeInfo)                      \

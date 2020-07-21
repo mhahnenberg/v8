@@ -308,6 +308,7 @@ class ParserBase {
   friend class v8::internal::ExpressionScope<ParserTypes<Impl>>;
   friend class v8::internal::ExpressionParsingScope<ParserTypes<Impl>>;
   friend class v8::internal::ArrowHeadParsingScope<ParserTypes<Impl>>;
+  friend class BinAstDeserializer;
 
   enum VariableDeclarationContext {
     kStatementListItem,

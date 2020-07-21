@@ -164,6 +164,8 @@ class AstNode: public ZoneObject {
   MaterializedLiteral* AsMaterializedLiteral();
 
  private:
+  friend class BinAstDeserializer;
+
   int position_;
   using NodeTypeField = base::BitField<NodeType, 0, 6>;
 

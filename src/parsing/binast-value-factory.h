@@ -13,89 +13,9 @@
 namespace v8 {
 namespace internal {
 
-
-// For generating constants.
-#define BINAST_AST_STRING_CONSTANTS(F)                 \
-  F(anonymous, "anonymous")                     \
-  F(anonymous_function, "(anonymous function)") \
-  F(arguments, "arguments")                     \
-  F(as, "as")                                   \
-  F(async, "async")                             \
-  F(await, "await")                             \
-  F(bigint, "bigint")                           \
-  F(boolean, "boolean")                         \
-  F(computed, "<computed>")                     \
-  F(dot_brand, ".brand")                        \
-  F(constructor, "constructor")                 \
-  F(default, "default")                         \
-  F(done, "done")                               \
-  F(dot, ".")                                   \
-  F(dot_default, ".default")                    \
-  F(dot_for, ".for")                            \
-  F(dot_generator_object, ".generator_object")  \
-  F(dot_home_object, ".home_object")            \
-  F(dot_result, ".result")                      \
-  F(dot_repl_result, ".repl_result")            \
-  F(dot_static_home_object, ".static_home_object") \
-  F(dot_switch_tag, ".switch_tag")              \
-  F(dot_catch, ".catch")                        \
-  F(empty, "")                                  \
-  F(eval, "eval")                               \
-  F(from, "from")                               \
-  F(function, "function")                       \
-  F(get, "get")                                 \
-  F(get_space, "get ")                          \
-  F(length, "length")                           \
-  F(let, "let")                                 \
-  F(meta, "meta")                               \
-  F(name, "name")                               \
-  F(native, "native")                           \
-  F(new_target, ".new.target")                  \
-  F(next, "next")                               \
-  F(number, "number")                           \
-  F(object, "object")                           \
-  F(of, "of")                                   \
-  F(private_constructor, "#constructor")        \
-  F(proto, "__proto__")                         \
-  F(prototype, "prototype")                     \
-  F(return, "return")                           \
-  F(set, "set")                                 \
-  F(set_space, "set ")                          \
-  F(string, "string")                           \
-  F(symbol, "symbol")                           \
-  F(target, "target")                           \
-  F(this, "this")                               \
-  F(this_function, ".this_function")            \
-  F(throw, "throw")                             \
-  F(undefined, "undefined")                     \
-  F(value, "value")
-
-class BinAstStringConstants final {
- public:
-  BinAstStringConstants(AccountingAllocator* allocator/*, uint64_t hash_seed */);
-
-#define F(name, str) \
-  const AstRawString* name##_string() const { return name##_string_; }
-  BINAST_AST_STRING_CONSTANTS(F)
-#undef F
-
-  uint64_t hash_seed() const { return hash_seed_; }
-  const AstRawStringMap* string_table() const { return &string_table_; }
-
- private:
-  Zone zone_;
-  AstRawStringMap string_table_;
-  uint64_t hash_seed_;
-
-#define F(name, str) AstRawString* name##_string_;
-  BINAST_AST_STRING_CONSTANTS(F)
-#undef F
-};
-
-
 class BinAstValueFactory {
  public:
-  BinAstValueFactory(Zone* zone, const BinAstStringConstants* string_constants)
+  BinAstValueFactory(Zone* zone, const AstStringConstants* string_constants)
     : string_constants_(string_constants),
       string_table_(string_constants->string_table()),
       strings_(nullptr),
@@ -189,11 +109,13 @@ class BinAstValueFactory {
   const AstRawString* name##_string() const {  \
     return string_constants_->name##_string(); \
   }
-  BINAST_AST_STRING_CONSTANTS(F)
+  AST_STRING_CONSTANTS(F)
 #undef F
   AstConsString* empty_cons_string() const { return empty_cons_string_; }
 
  private:
+  friend class BinAstSerializeVisitor;
+  
   AstRawString* AddString(AstRawString* string) {
     *strings_end_ = string;
     strings_end_ = string->next_location();
@@ -204,7 +126,7 @@ class BinAstValueFactory {
     strings_end_ = &strings_;
   }
 
-  const BinAstStringConstants* string_constants_;
+  const AstStringConstants* string_constants_;
     // All strings are copied here, one after another (no zeroes inbetween).
   AstRawStringMap string_table_;
 

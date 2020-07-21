@@ -31,7 +31,7 @@ namespace internal {
 
 class AstRawString;
 class AstValueFactory;
-class BackgroundCompileTask;
+class BackgroundTask;
 class CancelableTaskManager;
 class UnoptimizedCompileJob;
 class CompilerDispatcherTracer;
@@ -85,18 +85,25 @@ class V8_EXPORT_PRIVATE CompilerDispatcher {
   // Returns true if the compiler dispatcher is enabled.
   bool IsEnabled() const;
 
-  base::Optional<JobId> Enqueue(const ParseInfo* outer_parse_info,
+  base::Optional<JobId> EnqueueCompileTask(const ParseInfo* outer_parse_info,
                                 const AstRawString* function_name,
                                 const FunctionLiteral* function_literal);
+                            
+  base::Optional<JobId> EnqueueBinAstParseTask(const ParseInfo* outer_parse_info,
+                                               const AstRawString* function_name,
+                                               const FunctionLiteral* function_literal);
 
   // Registers the given |function| with the compilation job |job_id|.
   void RegisterSharedFunctionInfo(JobId job_id, SharedFunctionInfo function);
 
-  // Returns true if there is a pending job with the given id.
-  bool IsEnqueued(JobId job_id) const;
+  // Returns true if there is a pending compilation job with the given id.
+  bool IsEnqueuedForCompilation(JobId job_id) const;
 
-  // Returns true if there is a pending job registered for the given function.
-  bool IsEnqueued(Handle<SharedFunctionInfo> function) const;
+  // Returns true if there is a pending compilation job registered for the given function.
+  bool IsEnqueuedForCompilation(Handle<SharedFunctionInfo> function) const;
+
+  // Returns true if there is a pending parsing job registered for the given function.
+  bool IsEnqueuedForParsing(Handle<SharedFunctionInfo> function) const;
 
   // Blocks until the given function is compiled (and does so as fast as
   // possible). Returns true if the compile job was successful.
@@ -119,7 +126,7 @@ class V8_EXPORT_PRIVATE CompilerDispatcher {
   FRIEND_TEST(CompilerDispatcherTest, CompileMultipleOnBackgroundThread);
 
   struct Job {
-    explicit Job(BackgroundCompileTask* task_arg);
+    explicit Job(BackgroundTask* task_arg);
     ~Job();
 
     bool IsReadyToFinalize(const base::MutexGuard&) {
@@ -131,7 +138,7 @@ class V8_EXPORT_PRIVATE CompilerDispatcher {
       return IsReadyToFinalize(lock);
     }
 
-    std::unique_ptr<BackgroundCompileTask> task;
+    std::unique_ptr<BackgroundTask> task;
     MaybeHandle<SharedFunctionInfo> function;
     bool has_run;
     bool aborted;

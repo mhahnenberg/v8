@@ -94,6 +94,7 @@ class AstRawString final : public ZoneObject {
   friend class AstStringConstants;
   friend class AstValueFactory;
   friend class BinAstValueFactory;
+  friend class BinAstSerializeVisitor;
   friend class BinAstStringConstants;
   friend Zone;
 
@@ -105,6 +106,10 @@ class AstRawString final : public ZoneObject {
         raw_hash_field_(raw_hash_field),
         is_one_byte_(is_one_byte) {}
   AstRawString* next() {
+    DCHECK(!has_string_);
+    return next_;
+  }
+  const AstRawString* next() const {
     DCHECK(!has_string_);
     return next_;
   }
@@ -369,6 +374,8 @@ class AstValueFactory {
   AstConsString* empty_cons_string() const { return empty_cons_string_; }
 
  private:
+  friend class BinAstDeserializer;
+
   AstRawString* AddString(AstRawString* string) {
     *strings_end_ = string;
     strings_end_ = string->next_location();

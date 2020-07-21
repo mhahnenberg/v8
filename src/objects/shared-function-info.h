@@ -140,6 +140,35 @@ class UncompiledDataWithPreparseData
   TQ_OBJECT_CONSTRUCTORS(UncompiledDataWithPreparseData)
 };
 
+class BinAstParseData : public HeapObject {
+ public:
+  // TODO(binast): Use a more efficient data structure for storing the serialized bytes.
+  // ByteArray uses 4-byte ints to store each byte. This was just reused initially for
+  // convenience, but to get an accurate idea of true memory use we should use something
+  // more compact.
+  DECL_ACCESSORS(serialized_ast, ByteArray)
+
+  DEFINE_FIELD_OFFSET_CONSTANTS(HeapObject::kHeaderSize,
+                                TORQUE_GENERATED_BIN_AST_PARSE_DATA_FIELDS)
+
+  using BodyDescriptor = FixedBodyDescriptor<HeapObject::kHeaderSize, kSerializedAstOffset, kSize>;
+
+  DECL_CAST(BinAstParseData)
+  DECL_PRINTER(BinAstParseData)
+  DECL_VERIFIER(BinAstParseData)
+  OBJECT_CONSTRUCTORS(BinAstParseData, HeapObject);
+};
+
+// Class representing data for an uncompiled function that has a binary AST data for faster re-parsing during eager compilation.
+class UncompiledDataWithBinAstParseData
+    : public TorqueGeneratedUncompiledDataWithBinAstParseData<
+          UncompiledDataWithBinAstParseData, UncompiledData> {
+ public:
+  class BodyDescriptor;
+
+  TQ_OBJECT_CONSTRUCTORS(UncompiledDataWithBinAstParseData)
+};
+
 class InterpreterData : public Struct {
  public:
   DECL_ACCESSORS(bytecode_array, BytecodeArray)
@@ -293,6 +322,8 @@ class SharedFunctionInfo
   //    [HasUncompiledDataWithoutPreparseData()]
   //  - a UncompiledDataWithPreparseData for lazy compilation
   //    [HasUncompiledDataWithPreparseData()]
+  //  - a UncompiledDataWithBinAstParseData for lazy compilation
+  //    [HasUncompiledDataWithBinAstParseData()]
   //  - a WasmExportedFunctionData for Wasm [HasWasmExportedFunctionData()]
   DECL_RELEASE_ACQUIRE_ACCESSORS(function_data, Object)
 
@@ -345,11 +376,20 @@ class SharedFunctionInfo
       const;
   inline void set_uncompiled_data_with_preparse_data(
       UncompiledDataWithPreparseData data);
+
+  inline bool HasUncompiledDataWithBinAstParseData() const;
+  inline UncompiledDataWithBinAstParseData uncompiled_data_with_binast_parse_data() const;
+  inline void set_uncompiled_data_with_binast_parse_data(UncompiledDataWithBinAstParseData data);
+
   inline bool HasUncompiledDataWithoutPreparseData() const;
 
   // Clear out pre-parsed scope data from UncompiledDataWithPreparseData,
   // turning it into UncompiledDataWithoutPreparseData.
   inline void ClearPreparseData();
+
+  // Clear out binary AST data from UncompiledDataWithBinAstParseData,
+  // turning it into UncompiledDataWithoutPreparseData.
+  inline void ClearBinAstParseData();
 
   // The inferred_name is inferred from variable or property assignment of this
   // function. It is used to facilitate debugging and profiling of JavaScript

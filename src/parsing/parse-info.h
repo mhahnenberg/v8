@@ -158,8 +158,9 @@ class V8_EXPORT_PRIVATE UnoptimizedCompileState {
       DCHECK_NOT_NULL(dispatcher_);
     }
 
-    void Enqueue(ParseInfo* outer_parse_info, const AstRawString* function_name,
+    void EnqueueCompileTask(ParseInfo* outer_parse_info, const AstRawString* function_name,
                  FunctionLiteral* literal);
+    void EnqueueBinAstParseTask(ParseInfo* outer_parse_info, const AstRawString* function_name, FunctionLiteral* literal);
 
     using EnqueuedJobsIterator =
         std::forward_list<std::pair<FunctionLiteral*, uintptr_t>>::iterator;
@@ -206,6 +207,11 @@ class V8_EXPORT_PRIVATE ParseInfo {
   // Creates a new parse info based on parent top-level |outer_parse_info| for
   // function |literal|.
   static std::unique_ptr<ParseInfo> ForToplevelFunction(
+      const UnoptimizedCompileFlags flags,
+      UnoptimizedCompileState* compile_state, const FunctionLiteral* literal,
+      const AstRawString* function_name);
+
+  static std::unique_ptr<ParseInfo> ForFunction(
       const UnoptimizedCompileFlags flags,
       UnoptimizedCompileState* compile_state, const FunctionLiteral* literal,
       const AstRawString* function_name);

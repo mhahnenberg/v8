@@ -102,6 +102,7 @@ class BinAstBreakableStatement;
 class BinAstExpression;
 class BinAstIterationStatement;
 class BinAstStatement;
+class ProducedBinAstParseData;
 
 // class BinAstRawString;
 #define DEF_FORWARD_DECLARATION(type) class BinAst##type;
@@ -145,6 +146,8 @@ class BinAstNode : public ZoneObject {
   using NodeTypeField = base::BitField<NodeType, 0, 6>;
 
 protected:
+  friend class BinAstSerializeVisitor;
+
   uint32_t bit_field_;
 
   template <class T, int size>
@@ -204,11 +207,7 @@ class BinAstExpression : public BinAstNode {
   // Symbols that cannot be parsed as array indices are considered property
   // names.  We do not treat symbols that can be array indexes as property
   // names because [] for string objects is handled only by keyed ICs.
-  bool IsPropertyName() const {
-    // TODO(binast)
-    DCHECK(false);
-    return false;
-  }
+  bool IsPropertyName() const;
 
   // True iff the expression is a class or function expression without
   // a syntactic name.
@@ -374,6 +373,21 @@ class BinAstFunctionLiteral final : public BinAstExpression {
   std::unique_ptr<char[]> GetDebugName() const;
 
   const AstConsString* raw_inferred_name() { return raw_inferred_name_; }
+  Handle<String> GetInferredName(Isolate* isolate) {
+    if (!inferred_name_.is_null()) {
+      DCHECK_NULL(raw_inferred_name_);
+      return inferred_name_;
+    }
+    if (raw_inferred_name_ != nullptr) {
+      return raw_inferred_name_->GetString(isolate);
+    }
+    UNREACHABLE();
+  }
+  Handle<String> GetInferredName(LocalIsolate* isolate) const {
+    DCHECK(inferred_name_.is_null());
+    DCHECK_NOT_NULL(raw_inferred_name_);
+    return raw_inferred_name_->GetString(isolate);
+  }
 
   // Only one of {set_inferred_name, set_raw_inferred_name} should be called.
   // TODO(binast): I don't think we need the Handle version of this.
@@ -458,6 +472,14 @@ class BinAstFunctionLiteral final : public BinAstExpression {
     return produced_preparse_data_;
   }
 
+  ProducedBinAstParseData* produced_binast_parse_data() const {
+    return produced_binast_parse_data_;
+  }
+
+  void set_produced_binast_parse_data(ProducedBinAstParseData* produced_binast_parse_data) {
+    produced_binast_parse_data_ = produced_binast_parse_data;
+  }
+
  private:
   friend class BinAstNodeFactory;
   friend class BinAstPrintVisitor;
@@ -471,7 +493,8 @@ class BinAstFunctionLiteral final : public BinAstExpression {
                   ParameterFlag has_duplicate_parameters,
                   EagerCompileHint eager_compile_hint, int position,
                   bool has_braces, int function_literal_id,
-                  ProducedPreparseData* produced_preparse_data = nullptr)
+                  ProducedPreparseData* produced_preparse_data = nullptr,
+                  ProducedBinAstParseData* produced_binast_parse_data = nullptr)
       : BinAstExpression(position, kFunctionLiteral),
         expected_property_count_(expected_property_count),
         parameter_count_(parameter_count),
@@ -483,7 +506,8 @@ class BinAstFunctionLiteral final : public BinAstExpression {
         scope_(scope),
         body_(0, nullptr),
         raw_inferred_name_(ast_value_factory->empty_cons_string()),
-        produced_preparse_data_(produced_preparse_data) {
+        produced_preparse_data_(produced_preparse_data),
+        produced_binast_parse_data_(produced_binast_parse_data) {
     bit_field_ |= FunctionSyntaxKindBits::encode(function_syntax_kind) |
                   Pretenure::encode(false) |
                   HasDuplicateParameters::encode(has_duplicate_parameters ==
@@ -523,7 +547,10 @@ class BinAstFunctionLiteral final : public BinAstExpression {
   DeclarationScope* scope_;
   ZonePtrList<BinAstStatement> body_;
   AstConsString* raw_inferred_name_;
+  Handle<String> inferred_name_;  // Used during internalization for a particular Isolate
+  // TODO(binast): Remove this since we won't be doing any lazy parsing in the binAST parser.
   ProducedPreparseData* produced_preparse_data_;
+  ProducedBinAstParseData* produced_binast_parse_data_;
 };
 
 // There are several types of Suspend node:
@@ -1961,13 +1988,20 @@ class BinAstForOfStatement final : public BinAstForEachStatement {
 
 class BinAstParseInfo {
  public:
-  BinAstParseInfo(Zone* zone, const UnoptimizedCompileFlags flags, const BinAstStringConstants* ast_string_constants);
+  BinAstParseInfo(ParseInfo* parse_info, const UnoptimizedCompileFlags flags);
+  BinAstParseInfo(Zone* zone, const UnoptimizedCompileFlags flags, const AstStringConstants* ast_string_constants);
 
   BinAstValueFactory* GetOrCreateAstValueFactory();
   Zone* zone() const { return zone_.get(); }
   const UnoptimizedCompileFlags& flags() const { return flags_; }
-  RuntimeCallStats* runtime_call_stats() const { return runtime_call_stats_; }
+    // Accessors for per-thread state.
   uintptr_t stack_limit() const { return stack_limit_; }
+  RuntimeCallStats* runtime_call_stats() const { return runtime_call_stats_; }
+  void SetPerThreadState(uintptr_t stack_limit,
+                         RuntimeCallStats* runtime_call_stats) {
+    stack_limit_ = stack_limit;
+    runtime_call_stats_ = runtime_call_stats;
+  }
 
   LanguageMode language_mode() const { return language_mode_; }
   void set_language_mode(LanguageMode value) { language_mode_ = value; }
@@ -1990,7 +2024,7 @@ class BinAstParseInfo {
     return ast_value_factory_.get();
   }
   
-  const BinAstStringConstants* ast_string_constants() const {
+  const AstStringConstants* ast_string_constants() const {
     return ast_string_constants_;
   }
 
@@ -2007,6 +2041,10 @@ class BinAstParseInfo {
   int parameters_end_pos() const { return parameters_end_pos_; }
   void set_parameters_end_pos(int parameters_end_pos) {
     parameters_end_pos_ = parameters_end_pos;
+  }
+
+  bool is_wrapped_as_function() const {
+    return flags().function_syntax_kind() == FunctionSyntaxKind::kWrapped;
   }
 
   Logger* logger() const { return logger_; }
@@ -2035,7 +2073,7 @@ class BinAstParseInfo {
   SourceRangeMap* source_range_map_;  // Used when block coverage is enabled.
   PendingCompilationErrorHandler pending_error_handler_;
   Logger* logger_;
-  const BinAstStringConstants* ast_string_constants_;
+  const AstStringConstants* ast_string_constants_;
 
   //----------- Output of parsing and scope analysis ------------------------
   BinAstFunctionLiteral* literal_;
@@ -2598,7 +2636,8 @@ class BinAstNodeFactory final {
       FunctionSyntaxKind function_syntax_kind,
       FunctionLiteral::EagerCompileHint eager_compile_hint, int position,
       bool has_braces, int function_literal_id,
-      ProducedPreparseData* produced_preparse_data = nullptr) {
+      ProducedPreparseData* produced_preparse_data = nullptr,
+      ProducedBinAstParseData* produced_binast_parse_data = nullptr) {
     // TODO(binast): Undo this hack around parser-base hard-coding the various enum params from FunctionLiteral
     BinAstFunctionLiteral::ParameterFlag converted_has_duplicate_parameters;
     switch(has_duplicate_parameters) {
@@ -2631,7 +2670,7 @@ class BinAstNodeFactory final {
         ast_value_factory_, scope, body, expected_property_count,
         parameter_count, function_length, function_syntax_kind,
         converted_has_duplicate_parameters, converted_eager_compile_hint, position, has_braces,
-        function_literal_id, produced_preparse_data);
+        function_literal_id, produced_preparse_data, produced_binast_parse_data);
   }
 
   // Creates a FunctionLiteral representing a top-level script, the

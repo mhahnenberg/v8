@@ -3862,8 +3862,10 @@ v8_source_set("v8_base_without_compiler") {
     "src/parsing/parse-info.cc",
     "src/parsing/parser.cc",
     "src/parsing/parsing.cc",
+    "src/parsing/binast-deserializer.cc",
     "src/parsing/binast-parser.cc",
     "src/parsing/binast.cc",
+    "src/parsing/binast-parse-data.cc",
     "src/parsing/pending-compilation-error-handler.cc",
     "src/parsing/preparse-data.cc",
     "src/parsing/preparser.cc",
@@ -5188,8 +5190,8 @@ v8_executable("test_binast") {
 
     sources = [
       "src/snapshot/embedded/embedded-empty.cc",
-      "src/snapshot/embedded/embedded-file-writer.cc",
-      "src/snapshot/embedded/embedded-file-writer.h",
+      # "src/snapshot/embedded/embedded-file-writer.cc",
+      # "src/snapshot/embedded/embedded-file-writer.h",
       # "src/snapshot/embedded/platform-embedded-file-writer-aix.cc",
       # "src/snapshot/embedded/platform-embedded-file-writer-aix.h",
       # "src/snapshot/embedded/platform-embedded-file-writer-base.cc",

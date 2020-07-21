@@ -1727,6 +1727,8 @@ void PreparseData::PreparseDataVerify(Isolate* isolate) {
   }
 }
 
+USE_TORQUE_VERIFIER(BinAstParseData)
+
 USE_TORQUE_VERIFIER(InterpreterData)
 
 void StackFrameInfo::StackFrameInfoVerify(Isolate* isolate) {
