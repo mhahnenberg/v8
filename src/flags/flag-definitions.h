@@ -1195,7 +1195,7 @@ DEFINE_BOOL(cache_prototype_transitions, true, "cache prototype transitions")
 
 // compiler-dispatcher.cc
 DEFINE_BOOL(parallel_compile_tasks, false, "enable parallel compile tasks")
-DEFINE_BOOL(compiler_dispatcher, false, "enable compiler dispatcher")
+DEFINE_BOOL(compiler_dispatcher, true, "enable compiler dispatcher")
 DEFINE_IMPLICATION(parallel_compile_tasks, compiler_dispatcher)
 DEFINE_BOOL(trace_compiler_dispatcher, false,
             "trace compiler dispatcher activity")
@@ -1451,7 +1451,7 @@ DEFINE_BOOL(help, false, "Print usage message, including flags, on console")
 DEFINE_BOOL(dump_counters, false, "Dump counters on exit")
 DEFINE_BOOL(dump_counters_nvp, false,
             "Dump counters as name-value pairs on exit")
-DEFINE_BOOL(use_external_strings, false, "Use external strings for source code")
+DEFINE_BOOL(use_external_strings, true, "Use external strings for source code")
 
 DEFINE_STRING(map_counters, "", "Map counters to a file")
 DEFINE_BOOL(mock_arraybuffer_allocator, false,

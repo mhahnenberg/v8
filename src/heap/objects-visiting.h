@@ -17,6 +17,7 @@ namespace internal {
 #define TYPED_VISITOR_ID_LIST(V)       \
   V(AllocationSite)                    \
   V(BigInt)                            \
+  V(BinAstParseData)                   \
   V(ByteArray)                         \
   V(BytecodeArray)                     \
   V(Cell)                              \
@@ -57,6 +58,7 @@ namespace internal {
   V(TransitionArray)                   \
   V(UncompiledDataWithoutPreparseData) \
   V(UncompiledDataWithPreparseData)    \
+  V(UncompiledDataWithBinAstParseData) \
   V(WasmArray)                         \
   V(WasmCapiFunctionData)              \
   V(WasmIndirectFunctionTable)         \

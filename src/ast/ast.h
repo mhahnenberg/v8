@@ -165,6 +165,7 @@ class AstNode: public ZoneObject {
   MaterializedLiteral* AsMaterializedLiteral();
 
  private:
+  friend class BinAstDeserializer;
   // Hidden to prevent accidental usage. It would have to load the
   // current zone from the TLS.
   void* operator new(size_t size);

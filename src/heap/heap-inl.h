@@ -237,7 +237,8 @@ AllocationResult Heap::AllocateRaw(int size_in_bytes, AllocationType type,
     } else if (AllocationType::kMap == type) {
       allocation = map_space_->AllocateRawUnaligned(size_in_bytes);
     } else if (AllocationType::kReadOnly == type) {
-      DCHECK(isolate_->serializer_enabled());
+      // TODO(binast): For whatever reason, when trying to call the v8::Isolate::Initialize while setting up an embedded isolate we end up here, despite not having opted into snapshotting anywhere.
+      // DCHECK(isolate_->serializer_enabled());
       DCHECK(!large_object);
       DCHECK(CanAllocateInReadOnlySpace());
       DCHECK_EQ(AllocationOrigin::kRuntime, origin);

@@ -2276,6 +2276,12 @@ void PreparseData::PreparseDataPrint(std::ostream& os) {  // NOLINT
   os << "\n";
 }
 
+void BinAstParseData::BinAstParseDataPrint(std::ostream& os) {  // NOLINT
+  PrintHeader(os, "BinAstParseData");
+  os << "\n - serialized_ast: " << serialized_ast();
+  os << "\n";
+}
+
 void UncompiledDataWithoutPreparseData::UncompiledDataWithoutPreparseDataPrint(
     std::ostream& os) {  // NOLINT
   PrintHeader(os, "UncompiledDataWithoutPreparseData");
@@ -2290,6 +2296,15 @@ void UncompiledDataWithPreparseData::UncompiledDataWithPreparseDataPrint(
   os << "\n - start position: " << start_position();
   os << "\n - end position: " << end_position();
   os << "\n - preparse_data: " << Brief(preparse_data());
+  os << "\n";
+}
+
+void UncompiledDataWithBinAstParseData::UncompiledDataWithBinAstParseDataPrint(
+    std::ostream& os) {  // NOLINT
+  PrintHeader(os, "UncompiledDataWithBinAstParseData");
+  os << "\n - start position: " << start_position();
+  os << "\n - end position: " << end_position();
+  os << "\n - preparse_data: " << Brief(binast_parse_data());
   os << "\n";
 }
 

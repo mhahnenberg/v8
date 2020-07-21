@@ -12809,6 +12809,7 @@ TNode<Code> CodeStubAssembler::GetSharedFunctionInfoCode(
                            ASM_WASM_DATA_TYPE,
                            UNCOMPILED_DATA_WITHOUT_PREPARSE_DATA_TYPE,
                            UNCOMPILED_DATA_WITH_PREPARSE_DATA_TYPE,
+                           UNCOMPILED_DATA_WITH_BIN_AST_PARSE_DATA_TYPE,
                            FUNCTION_TEMPLATE_INFO_TYPE,
                            WASM_JS_FUNCTION_DATA_TYPE,
                            WASM_CAPI_FUNCTION_DATA_TYPE};
@@ -12817,6 +12818,7 @@ TNode<Code> CodeStubAssembler::GetSharedFunctionInfoCode(
   Label check_is_asm_wasm_data(this);
   Label check_is_uncompiled_data_without_preparse_data(this);
   Label check_is_uncompiled_data_with_preparse_data(this);
+  Label check_is_uncompiled_data_with_binast_parse_data(this);
   Label check_is_function_template_info(this);
   Label check_is_interpreter_data(this);
   Label check_is_wasm_js_function_data(this);
@@ -12826,6 +12828,7 @@ TNode<Code> CodeStubAssembler::GetSharedFunctionInfoCode(
                           &check_is_asm_wasm_data,
                           &check_is_uncompiled_data_without_preparse_data,
                           &check_is_uncompiled_data_with_preparse_data,
+                          &check_is_uncompiled_data_with_binast_parse_data,
                           &check_is_function_template_info,
                           &check_is_wasm_js_function_data,
                           &check_is_wasm_capi_function_data};
@@ -12849,9 +12852,12 @@ TNode<Code> CodeStubAssembler::GetSharedFunctionInfoCode(
   sfi_code = HeapConstant(BUILTIN_CODE(isolate(), InstantiateAsmJs));
   Goto(&done);
 
-  // IsUncompiledDataWithPreparseData | IsUncompiledDataWithoutPreparseData:
+  // IsUncompiledDataWithPreparseData | IsUncompiledDataWithBinAstParseData | IsUncompiledDataWithoutPreparseData:
   // Compile lazy
+  // TODO(binast): Do we need to do something here?
   BIND(&check_is_uncompiled_data_with_preparse_data);
+  Goto(&check_is_uncompiled_data_without_preparse_data);
+  BIND(&check_is_uncompiled_data_with_binast_parse_data);
   Goto(&check_is_uncompiled_data_without_preparse_data);
   BIND(&check_is_uncompiled_data_without_preparse_data);
   sfi_code = HeapConstant(BUILTIN_CODE(isolate(), CompileLazy));

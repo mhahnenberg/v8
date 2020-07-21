@@ -188,6 +188,7 @@
 //     - UncompiledData
 //       - UncompiledDataWithoutPreparseData
 //       - UncompiledDataWithPreparseData
+//       - UncompiledDataWithBinAstParseData
 //
 // Formats of Object::ptr_:
 //  Smi:        [31 bit signed int] 0

@@ -268,6 +268,16 @@ Handle<PreparseData> FactoryBase<Impl>::NewPreparseData(int data_length,
 }
 
 template <typename Impl>
+Handle<BinAstParseData> FactoryBase<Impl>::NewBinAstParseData(Handle<ByteArray> serialized_ast) {
+  Handle<BinAstParseData> result = handle(
+      BinAstParseData::cast(NewWithImmortalMap(
+          read_only_roots().bin_ast_parse_data_map(), AllocationType::kOld)),
+      isolate());
+  result->set_serialized_ast(*serialized_ast);
+  return result;
+}
+
+template <typename Impl>
 Handle<UncompiledDataWithoutPreparseData>
 FactoryBase<Impl>::NewUncompiledDataWithoutPreparseData(
     Handle<String> inferred_name, int32_t start_position,
@@ -295,6 +305,23 @@ FactoryBase<Impl>::NewUncompiledDataWithPreparseData(
 
   result->Init(impl(), *inferred_name, start_position, end_position,
                *preparse_data);
+
+  return result;
+}
+
+template <typename Impl>
+Handle<UncompiledDataWithBinAstParseData> 
+FactoryBase<Impl>::NewUncompiledDataWithBinAstParseData(
+      Handle<String> inferred_name, int32_t start_position,
+      int32_t end_position, Handle<BinAstParseData> binast_parse_data) {
+  Handle<UncompiledDataWithBinAstParseData> result = handle(
+      UncompiledDataWithBinAstParseData::cast(NewWithImmortalMap(
+          impl()->read_only_roots().uncompiled_data_with_bin_ast_parse_data_map(),
+          AllocationType::kOld)),
+      isolate());
+
+  result->Init(impl(), *inferred_name, start_position, end_position,
+               *binast_parse_data);
 
   return result;
 }

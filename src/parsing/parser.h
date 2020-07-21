@@ -33,6 +33,7 @@ class ParserTarget;
 class ParserTargetScope;
 class PendingCompilationErrorHandler;
 class PreparseData;
+class BinAstParser;
 
 // ----------------------------------------------------------------------------
 // JAVASCRIPT PARSING
@@ -257,6 +258,8 @@ class V8_EXPORT_PRIVATE Parser : public NON_EXPORTED_BASE(ParserBase<Parser>) {
     }
     return reusable_preparser_;
   }
+
+  BinAstParser* reusable_binast_parser();
 
   void ParseModuleItemList(ScopedPtrList<Statement>* body);
   Statement* ParseModuleItem();
@@ -1049,6 +1052,7 @@ class V8_EXPORT_PRIVATE Parser : public NON_EXPORTED_BASE(ParserBase<Parser>) {
   Scanner scanner_;
   Zone preparser_zone_;
   PreParser* reusable_preparser_;
+  BinAstParser* reusable_binast_parser_;
   Mode mode_;
 
   MaybeHandle<FixedArray> maybe_wrapped_arguments_;

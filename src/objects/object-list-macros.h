@@ -84,6 +84,7 @@ class ZoneForwardList;
   V(BigInt)                                    \
   V(BigIntBase)                                \
   V(BigIntWrapper)                             \
+  V(BinAstParseData)                           \
   V(ObjectBoilerplateDescription)              \
   V(Boolean)                                   \
   V(BooleanWrapper)                            \
@@ -221,6 +222,7 @@ class ZoneForwardList;
   V(TransitionArray)                           \
   V(UncompiledData)                            \
   V(UncompiledDataWithPreparseData)            \
+  V(UncompiledDataWithBinAstParseData)         \
   V(UncompiledDataWithoutPreparseData)         \
   V(Undetectable)                              \
   V(UniqueName)                                \

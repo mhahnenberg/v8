@@ -2006,6 +2006,13 @@ void HeapObject::HeapObjectShortPrint(std::ostream& os) {  // NOLINT
       break;
     }
 
+    case BIN_AST_PARSE_DATA_TYPE: {
+      BinAstParseData data = BinAstParseData::cast(*this);
+      os << "<BinAstParseData[serialized_ast=" << Brief(data.serialized_ast())
+         << "]>";
+      break;
+    }
+
     case UNCOMPILED_DATA_WITHOUT_PREPARSE_DATA_TYPE: {
       UncompiledDataWithoutPreparseData data =
           UncompiledDataWithoutPreparseData::cast(*this);
@@ -2277,6 +2284,7 @@ int HeapObject::SizeFromMap(Map map) const {
     PreparseData data = PreparseData::unchecked_cast(*this);
     return PreparseData::SizeFor(data.data_length(), data.children_length());
   }
+  // TODO(binast): Anything to do here for BinAstParseData type?
 #define MAKE_TORQUE_SIZE_FOR(TYPE, TypeName)                \
   if (instance_type == TYPE) {                              \
     return TypeName::unchecked_cast(*this).AllocatedSize(); \
@@ -5106,6 +5114,10 @@ void SharedFunctionInfo::SetScript(ReadOnlyRoots roots,
     ClearPreparseData();
   }
 
+  if (reset_preparsed_scope_data && HasUncompiledDataWithBinAstParseData()) {
+    ClearBinAstParseData();
+  }
+
   // Add shared function info to new script's list. If a collection occurs,
   // the shared function info may be temporarily in two lists.
   // This is okay because the gc-time processing of these lists can tolerate
@@ -5237,6 +5249,10 @@ void SharedFunctionInfo::DiscardCompiled(
     // If this is uncompiled data with a pre-parsed scope data, we can just
     // clear out the scope data and keep the uncompiled data.
     shared_info->ClearPreparseData();
+  } else if (shared_info->HasUncompiledDataWithBinAstParseData()) {
+    // If this is uncompiled data with a binary AST data, we can just
+    // clear out the scope data and keep the uncompiled data.
+    shared_info->ClearBinAstParseData();
   } else {
     // Create a new UncompiledData, without pre-parsed scope, and update the
     // function data to point to it. Use the raw function data setter to avoid
@@ -5582,6 +5598,9 @@ void SharedFunctionInfo::SetPosition(int start_position, int end_position) {
       // Clear out preparsed scope data, since the position setter invalidates
       // any scope data.
       ClearPreparseData();
+    } else if (HasUncompiledDataWithBinAstParseData()) {
+      // Clear out binary AST data
+      ClearBinAstParseData();
     }
     uncompiled_data().set_start_position(start_position);
     uncompiled_data().set_end_position(end_position);

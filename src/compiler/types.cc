@@ -321,8 +321,10 @@ Type::bitset BitsetType::Lub(const MapRefLike& map) {
     case SYNTHETIC_MODULE_TYPE:
     case CELL_TYPE:
     case PREPARSE_DATA_TYPE:
+    case BIN_AST_PARSE_DATA_TYPE:
     case UNCOMPILED_DATA_WITHOUT_PREPARSE_DATA_TYPE:
     case UNCOMPILED_DATA_WITH_PREPARSE_DATA_TYPE:
+    case UNCOMPILED_DATA_WITH_BIN_AST_PARSE_DATA_TYPE:
     case COVERAGE_INFO_TYPE:
       return kOtherInternal;
 
