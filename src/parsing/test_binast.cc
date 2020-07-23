@@ -16,6 +16,8 @@ static const char* test_scripts[] = {
   "'use strict';\nvar sum = 0;\nfor (var i = 0; i < 10; ++i) {\n  sum += i;\n}\nconsole.log(sum);",
   "'use strict';\nvar square = function(x) { return x * x; };\nconsole.log('square(3) =', square(3));",
   "'use strict';\nfunction square(x) { return x * x; }\nconsole.log('square(5) =', square(5));",
+  "'use strict';\nvar obj = {};",
+  "'use strict';\nvar obj = {foo: 'bar', bar: 1, baz: function(x) { return x; }};",
 };
 
 static const size_t num_test_scripts = sizeof(test_scripts) / sizeof(char*);

@@ -249,6 +249,34 @@ class BinAstPrintVisitor final : public BinAstVisitor {
     printf(")");
   }
 
+  virtual void VisitObjectLiteral(
+      BinAstObjectLiteral* object_literal) override {
+    PrintIndentLevel();
+    printf("ObjectLiteral(");
+    printf("{");
+    
+    auto properties = object_literal->properties();
+    for (int i = 0; i < properties->length(); i++) {
+      if (i == 0) {
+        printf("\n");
+        indent_level_++;
+      }
+      this->VisitNode(properties->at(i)->key());
+      printf(":\n");
+      indent_level_++;
+      this->VisitNode(properties->at(i)->value());
+      indent_level_--;
+      if (i < properties->length() - 1) {
+        printf(",\n");
+      } else {
+        printf("\n");
+        indent_level_--;
+        PrintIndentLevel();
+      }
+    }
+    printf("}");
+    printf(")");
+  }
 
  private:
   void PrintConsString(const AstConsString* s) {
