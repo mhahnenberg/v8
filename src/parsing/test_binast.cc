@@ -3,9 +3,9 @@
 #include "src/parsing/scanner-character-streams.h"
 #include "src/parsing/binast-parser.h"
 #include "src/parsing/binast-visitor.h"
-#include "src/parsing/binast-print-visitor.h"
 #include "include/v8.h"
 #include "src/d8/d8.h"
+#include "src/ast/prettyprinter.h"
 
 static const char* test_scripts[] = {
   // TODO(binast): (sloppy mode) "42",
@@ -18,6 +18,8 @@ static const char* test_scripts[] = {
   "'use strict';\nfunction square(x) { return x * x; }\nconsole.log('square(5) =', square(5));",
   "'use strict';\nvar obj = {};",
   "'use strict';\nvar obj = {foo: 'bar', bar: 1, baz: function(x) { return x; }};",
+  "'use strict';\nvar obj = {}; obj.foo = 'bar';",
+  "'use strict';\nvar arr = [];",
 };
 
 static const size_t num_test_scripts = sizeof(test_scripts) / sizeof(char*);
@@ -53,9 +55,8 @@ static void ParseScript(v8::Isolate* isolate, const char* script) {
 
   // Examine result.
   printf("Dumping AST...\n");
-  v8::internal::BinAstPrintVisitor visitor;
-  visitor.VisitNode(parseInfo.literal());
-  printf("\n");
+  v8::internal::AstPrinter ast_printer(i_isolate->stack_guard()->real_climit());
+  printf("%s\n", ast_printer.PrintProgram(parseInfo.literal()));
 }
 
 int main(int argc, char* argv[]) {

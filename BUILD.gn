@@ -2913,7 +2913,6 @@ v8_source_set("v8_base_without_compiler") {
     "src/parsing/binast-parser.h",
     "src/parsing/binast-parser.cc",
     "src/parsing/binast-visitor.h",
-    "src/parsing/binast-print-visitor.h",
     "src/parsing/binast-serialize-visitor.h",
     "src/parsing/binast.h",
     "src/parsing/binast.cc",

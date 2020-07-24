@@ -83,7 +83,6 @@ class AstRawString final : public ZoneObject {
   friend class AstRawStringInternalizationKey;
   friend class AstStringConstants;
   friend class AstValueFactory;
-  friend class BinAstValueFactory;
   friend class BinAstSerializeVisitor;
 
   // Members accessed only by the AstValueFactory & related classes:
@@ -169,7 +168,6 @@ class AstConsString final : public ZoneObject {
 
  private:
   friend class AstValueFactory;
-  friend class BinAstValueFactory;
 
   AstConsString() : string_(), segment_({nullptr, nullptr}) {}
 
@@ -347,6 +345,7 @@ class AstValueFactory {
 
  private:
   friend class BinAstDeserializer;
+  friend class BinAstSerializeVisitor;
 
   AstRawString* AddString(AstRawString* string) {
     *strings_end_ = string;
