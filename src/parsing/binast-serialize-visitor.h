@@ -6,6 +6,7 @@
 #define V8_PARSING_BINAST_SERIALIZE_VISITOR_H_
 
 #include "src/parsing/binast-visitor.h"
+#include <mutex>
 
 namespace v8 {
 namespace internal {
@@ -43,8 +44,10 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeUint32(uint32_t value);
   void SerializeInt32(int32_t value);
   void SerializeUint8(uint8_t value);
-  void SerializeString(const AstRawString* s);
-  void SerializeStringTable();
+  void SerializeRawString(const AstRawString* s);
+  void SerializeConsString(const AstConsString* cons_string);
+  void SerializeRawStringReference(const AstRawString* s);
+  void SerializeStringTable(const AstConsString* function_name);
 
   BinAstValueFactory* ast_value_factory_;
   std::unordered_map<const AstRawString*, uint32_t> string_table_indices_;
@@ -79,8 +82,9 @@ inline void BinAstSerializeVisitor::SerializeUint8(uint8_t value) {
   byte_data_.push_back(value);
 }
 
-void BinAstSerializeVisitor::SerializeString(const AstRawString* s) {
+void BinAstSerializeVisitor::SerializeRawString(const AstRawString* s) {
   DCHECK(s != nullptr);
+  DCHECK(string_table_indices_.count(s) == 0);
   uint32_t length = s->byte_length();
   bool is_one_byte = s->is_one_byte();
   uint32_t hash_field = s->raw_hash_field();
@@ -96,27 +100,77 @@ void BinAstSerializeVisitor::SerializeString(const AstRawString* s) {
   }
 }
 
-void BinAstSerializeVisitor::SerializeStringTable() {
+void BinAstSerializeVisitor::SerializeRawStringReference(const AstRawString* s) {
+  auto lookup_result = string_table_indices_.find(s);
+  DCHECK(lookup_result != string_table_indices_.end());
+  uint32_t string_table_index = lookup_result->second;
+  SerializeUint32(string_table_index);
+}
+
+void BinAstSerializeVisitor::SerializeConsString(const AstConsString* cons_string) {
+  if (cons_string == nullptr) {
+    // TODO(binast): This makes it impossible to distinguish between a nullptr and an empty AstConsString. Not sure if it will matter...
+    SerializeUint32(0);
+    return;
+  }
+  std::forward_list<const AstRawString*> strings = cons_string->ToRawStrings();
+  uint32_t length = 0;
+  for (const AstRawString* string : strings) {
+    DCHECK(string != nullptr);
+    DCHECK(string_table_indices_.count(string) == 1);
+    length += 1;
+  }
+
+  SerializeUint32(length);
+  for (const AstRawString* string : strings) {
+    DCHECK(string != nullptr);
+    SerializeRawStringReference(string);
+  }
+}
+
+void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* function_name) {
   uint32_t num_entries = ast_value_factory_->string_table_.occupancy();
+  // We serialize the outer function raw_name too.
+  // TODO(binast): Do we need to?
+  if (function_name != nullptr) {
+    for (const AstRawString* s : function_name->ToRawStrings()) {
+      DCHECK(s != nullptr);
+      (void)s;
+      num_entries += 1;
+    }
+  }
   SerializeUint32(num_entries);
-  uint32_t current_index = 0;
+  uint32_t current_index = 1;
   for (AstRawStringMap::Entry* entry = ast_value_factory_->string_table_.Start(); entry != nullptr; entry = ast_value_factory_->string_table_.Next(entry)) {
     const AstRawString* s = reinterpret_cast<const AstRawString*>(entry->key);
+    SerializeRawString(s);
     string_table_indices_.insert({s, current_index});
-    SerializeString(s);
     current_index += 1;
   }
-  DCHECK(current_index == num_entries);
+
+  if (function_name != nullptr) {
+    for (const AstRawString* s : function_name->ToRawStrings()) {
+      SerializeRawString(s);
+      string_table_indices_.insert({s, current_index});
+      current_index += 1;
+    }
+  }
+
+  DCHECK(current_index == num_entries + 1);
 }
 
 void BinAstSerializeVisitor::SerializeAst(BinAstNode* root) {
-  SerializeStringTable();
+  BinAstFunctionLiteral* literal = root->AsFunctionLiteral();
+  DCHECK(literal != nullptr);
+  SerializeStringTable(literal->raw_name());
   VisitNode(root);
 }
 
 void BinAstSerializeVisitor::VisitFunctionLiteral(BinAstFunctionLiteral* function_literal) {
   SerializeUint32(function_literal->bit_field_);
   SerializeInt32(function_literal->position_);
+  const AstConsString* name = function_literal->raw_name();
+  SerializeConsString(name);
 }
 
 void BinAstSerializeVisitor::VisitBlock(BinAstBlock* block) {
