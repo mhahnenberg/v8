@@ -92,7 +92,7 @@ bool ParseFunction(ParseInfo* info, Handle<SharedFunctionInfo> shared_info,
 
   if (shared_info->HasUncompiledDataWithBinAstParseData()) {
     // TODO(binast): Actually deserialize the AST, store it on the ParseInfo, and skip normal parsing.
-    // printf("Saw a SFI with bin AST parse data!\n");
+    auto start = std::chrono::high_resolution_clock::now();
     Handle<BinAstParseData> binast_parse_data = handle(shared_info->uncompiled_data_with_binast_parse_data().binast_parse_data(), isolate);
     // TODO(binast): Probably hide all this stuff inside the parsing module
     BinAstDeserializer deserializer(&parser);
@@ -100,7 +100,9 @@ bool ParseFunction(ParseInfo* info, Handle<SharedFunctionInfo> shared_info,
     DCHECK(ast_node->node_type() == AstNode::NodeType::kFunctionLiteral);
     FunctionLiteral* literal = ast_node->AsFunctionLiteral();
     DCHECK(literal != nullptr);
-    // printf("Deserialized function literal: %p\n", literal);
+    auto elapsed = std::chrono::high_resolution_clock::now() - start;
+    long long microseconds = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+    printf("Deserialized function literal in %lld us: %p\n", microseconds, literal);
     // TODO(binast): Store the literal on the ParseInfo
   }
 
