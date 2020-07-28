@@ -16,6 +16,7 @@ class ByteArray;
 class FunctionLiteral;
 class ParseInfo;
 class Parser;
+class AstConsString;
 class AstRawString;
 
 class BinAstDeserializer {
@@ -25,15 +26,23 @@ class BinAstDeserializer {
   AstNode* DeserializeAst(ByteArray serialized_ast);
 
  private:
-  uint32_t DeserializeUint32(ByteArray bytes, int offset);
-  int32_t DeserializeInt32(ByteArray bytes, int offset);
-  uint8_t DeserializeUint8(ByteArray bytes, int offset);
+  template <typename T>
+  struct DeserializeResult {
+    T value;
+    int new_offset;
+  };
 
-  int DeserializeString(ByteArray bytes, int offset);
-  int DeserializeStringTable(ByteArray bytes, int offset);
+  DeserializeResult<uint32_t> DeserializeUint32(ByteArray bytes, int offset);
+  DeserializeResult<int32_t> DeserializeInt32(ByteArray bytes, int offset);
+  DeserializeResult<uint8_t> DeserializeUint8(ByteArray bytes, int offset);
 
-  AstNode* DeserializeAstNode(ByteArray serialized_ast, int offset);
-  FunctionLiteral* DeserializeFunctionLiteral(ByteArray serialized_ast, uint32_t bit_field, int offset);
+  DeserializeResult<const AstRawString*> DeserializeRawString(ByteArray bytes, int offset);
+  DeserializeResult<std::nullptr_t> DeserializeStringTable(ByteArray bytes, int offset);
+  DeserializeResult<const AstRawString*> DeserializeRawStringReference(ByteArray bytes, int offset);
+  DeserializeResult<AstConsString*> DeserializeConsString(ByteArray bytes, int offset);
+
+  DeserializeResult<AstNode*> DeserializeAstNode(ByteArray serialized_ast, int offset);
+  DeserializeResult<FunctionLiteral*> DeserializeFunctionLiteral(ByteArray serialized_ast, uint32_t bit_field, int32_t position, int offset);
 
   Parser* parser_;
   std::unordered_map<uint32_t, const AstRawString*> string_table_;
