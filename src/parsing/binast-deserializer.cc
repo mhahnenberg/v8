@@ -113,10 +113,10 @@ BinAstDeserializer::DeserializeResult<AstConsString*> BinAstDeserializer::Deseri
 
 AstNode* BinAstDeserializer::DeserializeAst(ByteArray serialized_ast) {
   int offset = 0;
-  auto result = DeserializeStringTable(serialized_ast, offset);
-  offset = result.new_offset;
-  auto node_result = DeserializeAstNode(serialized_ast, offset);
-  return node_result.value;
+  auto string_table_result = DeserializeStringTable(serialized_ast, offset);
+  offset = string_table_result.new_offset;
+  auto result = DeserializeAstNode(serialized_ast, offset);
+  return result.value;
 }
 
 BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeAstNode(ByteArray serialized_binast, int offset) {
