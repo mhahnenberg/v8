@@ -113,8 +113,8 @@ BinAstDeserializer::DeserializeResult<AstConsString*> BinAstDeserializer::Deseri
 
 AstNode* BinAstDeserializer::DeserializeAst(ByteArray serialized_ast) {
   int offset = 0;
-  auto result = DeserializeStringTable(serialized_ast, offset);
-  offset = result.new_offset;
+  auto string_table_result = DeserializeStringTable(serialized_ast, offset);
+  offset = string_table_result.new_offset;
   auto result = DeserializeAstNode(serialized_ast, offset);
   return result.value;
 }
@@ -170,7 +170,7 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
     raw_name, scope, body, expected_property_count, parameter_count, 
     function_length, has_duplicate_parameters, function_syntax_kind,
     eager_compile_hint, position, has_braces, function_literal_id);
-  return result;
+  return {result, offset};
 }
 
 
