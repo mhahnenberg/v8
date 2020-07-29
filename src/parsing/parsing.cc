@@ -11,7 +11,6 @@
 #include "src/execution/vm-state-inl.h"
 #include "src/handles/maybe-handles.h"
 #include "src/objects/objects-inl.h"
-#include "src/parsing/binast-deserializer.h"
 #include "src/parsing/parse-info.h"
 #include "src/parsing/parser.h"
 #include "src/parsing/rewriter.h"
@@ -88,23 +87,6 @@ bool ParseFunction(ParseInfo* info, Handle<SharedFunctionInfo> shared_info,
 
   // Ok to use Isolate here; this function is only called in the main thread.
   DCHECK(parser.parsing_on_main_thread_);
-
-
-  if (shared_info->HasUncompiledDataWithBinAstParseData()) {
-    // TODO(binast): Actually deserialize the AST, store it on the ParseInfo, and skip normal parsing.
-    auto start = std::chrono::high_resolution_clock::now();
-    Handle<BinAstParseData> binast_parse_data = handle(shared_info->uncompiled_data_with_binast_parse_data().binast_parse_data(), isolate);
-    // TODO(binast): Probably hide all this stuff inside the parsing module
-    BinAstDeserializer deserializer(&parser);
-    AstNode* ast_node = deserializer.DeserializeAst(binast_parse_data->serialized_ast());
-    DCHECK(ast_node->node_type() == AstNode::NodeType::kFunctionLiteral);
-    FunctionLiteral* literal = ast_node->AsFunctionLiteral();
-    DCHECK(literal != nullptr);
-    auto elapsed = std::chrono::high_resolution_clock::now() - start;
-    long long microseconds = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-    printf("Deserialized function literal in %lld us: %p\n", microseconds, literal);
-    // TODO(binast): Store the literal on the ParseInfo
-  }
 
   parser.ParseFunction(isolate, info, shared_info);
   MaybeReportErrorsAndStatistics(info, script, isolate, &parser, mode);
