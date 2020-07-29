@@ -152,9 +152,9 @@ void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* function_
   // TODO(binast): Do we need to?
   if (function_name != nullptr) {
     for (const AstRawString* s : function_name->ToRawStrings()) {
-      DCHECK(s != nullptr);
-      (void)s;
-      num_entries += 1;
+      if (ast_value_factory_->string_table_.Lookup(s, s->Hash()) == nullptr) {
+        num_entries += 1;
+      }
     }
   }
   SerializeUint32(num_entries);
@@ -168,9 +168,11 @@ void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* function_
 
   if (function_name != nullptr) {
     for (const AstRawString* s : function_name->ToRawStrings()) {
-      SerializeRawString(s);
-      string_table_indices_.insert({s, current_index});
-      current_index += 1;
+      if (ast_value_factory_->string_table_.Lookup(s, s->Hash()) == nullptr) {
+        SerializeRawString(s);
+        string_table_indices_.insert({s, current_index});
+        current_index += 1;
+      }
     }
   }
 
@@ -178,38 +180,57 @@ void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* function_
 }
 
 void BinAstSerializeVisitor::SerializeAst(BinAstNode* root) {
+  auto start = std::chrono::high_resolution_clock::now();
   BinAstFunctionLiteral* literal = root->AsFunctionLiteral();
   DCHECK(literal != nullptr);
   SerializeStringTable(literal->raw_name());
   VisitNode(root);
+
+  auto elapsed = std::chrono::high_resolution_clock::now() - start;
+  long long microseconds = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+  printf("Serialized function: '");
+  for (const AstRawString* s : literal->raw_name()->ToRawStrings()) {
+    printf("%.*s", s->byte_length(), s->raw_data());
+  }
+  printf("' in %lld us\n", microseconds);
 }
 
 void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
-  // Variable data:
-  // scope_
-  // name_
   SerializeRawStringReference(variable->raw_name());
 
   // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
-  // next_
 
-  // index_
   SerializeInt32(variable->index());
-
-  // initializer_position_
   SerializeInt32(variable->initializer_position());
-
-  // bit_field_
   SerializeUint16(variable->bit_field_);
 }
 
 void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
-  SerializeUint32(scope->num_var());
+  // Serialize locals first.
+  std::unordered_set<const AstRawString*> locals;
+  for (Variable* variable : scope->locals_) {
+    locals.insert(variable->raw_name());
+  }
 
-  for (VariableMap::Entry* entry = scope->variables_.Start(); entry != nullptr; entry = scope->variables_.Next(entry)) {
-    Variable* variable = reinterpret_cast<Variable*>(entry->value);
+  DCHECK(locals.size() < UINT32_MAX);
+  uint32_t total_local_vars = static_cast<uint32_t>(locals.size());
+  SerializeUint32(total_local_vars);
+  for (Variable* variable : scope->locals_) {
     SerializeVariable(variable);
   }
+
+  // Now serialize any remaining variables we missed
+  uint32_t total_nonlocal_vars = scope->num_var() - total_local_vars;
+  uint32_t serialized_nonlocal_vars = 0;
+  SerializeUint32(total_nonlocal_vars);
+  for (VariableMap::Entry* entry = scope->variables_.Start(); entry != nullptr; entry = scope->variables_.Next(entry)) {
+    Variable* variable = reinterpret_cast<Variable*>(entry->value);
+    if (locals.count(variable->raw_name()) == 0) {
+      SerializeVariable(variable);
+      serialized_nonlocal_vars += 1;
+    }
+  }
+  DCHECK(total_nonlocal_vars == serialized_nonlocal_vars);
 }
 
 void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* scope) {
