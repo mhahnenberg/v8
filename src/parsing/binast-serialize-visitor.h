@@ -7,6 +7,7 @@
 
 #include "src/parsing/binast-visitor.h"
 #include <mutex>
+#include "src/ast/scopes.h"
 
 namespace v8 {
 namespace internal {
@@ -42,12 +43,16 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
 
  private:
   void SerializeUint32(uint32_t value);
+  void SerializeUint16(uint16_t value);
   void SerializeInt32(int32_t value);
   void SerializeUint8(uint8_t value);
   void SerializeRawString(const AstRawString* s);
   void SerializeConsString(const AstConsString* cons_string);
   void SerializeRawStringReference(const AstRawString* s);
   void SerializeStringTable(const AstConsString* function_name);
+  void SerializeVariable(Variable* variable);
+  void SerializeScopeVariableMap(Scope* scope);
+  void SerializeDeclarationScope(DeclarationScope* scope);
 
   BinAstValueFactory* ast_value_factory_;
   std::unordered_map<const AstRawString*, uint32_t> string_table_indices_;
@@ -66,8 +71,8 @@ inline void BinAstSerializeVisitor::SerializeUint32(uint32_t value) {
   }
 }
 
-inline void BinAstSerializeVisitor::SerializeInt32(int32_t value) {
-  for (size_t i = 0; i < sizeof(uint32_t) / sizeof(uint8_t); ++i) {
+inline void BinAstSerializeVisitor::SerializeUint16(uint16_t value) {
+  for (size_t i = 0; i < sizeof(uint16_t) / sizeof(uint8_t); ++i) {
     size_t shift = sizeof(uint8_t) * 8 * i;
     uint32_t mask = 0xff << shift;
     uint32_t masked_value = value & mask;
@@ -78,8 +83,21 @@ inline void BinAstSerializeVisitor::SerializeInt32(int32_t value) {
   }
 }
 
+
 inline void BinAstSerializeVisitor::SerializeUint8(uint8_t value) {
   byte_data_.push_back(value);
+}
+
+inline void BinAstSerializeVisitor::SerializeInt32(int32_t value) {
+  for (size_t i = 0; i < sizeof(uint32_t) / sizeof(uint8_t); ++i) {
+    size_t shift = sizeof(uint8_t) * 8 * i;
+    uint32_t mask = 0xff << shift;
+    uint32_t masked_value = value & mask;
+    uint32_t final_value = masked_value >> shift;
+    DCHECK(final_value <= 0xff);
+    uint8_t truncated_final_value = final_value;
+    byte_data_.push_back(truncated_final_value);
+  }
 }
 
 void BinAstSerializeVisitor::SerializeRawString(const AstRawString* s) {
@@ -166,11 +184,47 @@ void BinAstSerializeVisitor::SerializeAst(BinAstNode* root) {
   VisitNode(root);
 }
 
+void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
+  // Variable data:
+  // scope_
+  // name_
+  SerializeRawStringReference(variable->raw_name());
+
+  // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
+  // next_
+
+  // index_
+  SerializeInt32(variable->index());
+
+  // initializer_position_
+  SerializeInt32(variable->initializer_position());
+
+  // bit_field_
+  SerializeUint16(variable->bit_field_);
+}
+
+void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
+  SerializeUint32(scope->num_var());
+
+  for (VariableMap::Entry* entry = scope->variables_.Start(); entry != nullptr; entry = scope->variables_.Next(entry)) {
+    Variable* variable = reinterpret_cast<Variable*>(entry->value);
+    SerializeVariable(variable);
+  }
+}
+
+void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* scope) {
+  ScopeType scope_type = scope->scope_type();
+  SerializeUint8(scope_type);
+  SerializeUint8(scope->function_kind());
+  SerializeScopeVariableMap(scope);
+}
+
 void BinAstSerializeVisitor::VisitFunctionLiteral(BinAstFunctionLiteral* function_literal) {
   SerializeUint32(function_literal->bit_field_);
   SerializeInt32(function_literal->position_);
   const AstConsString* name = function_literal->raw_name();
   SerializeConsString(name);
+  SerializeDeclarationScope(function_literal->scope());
 }
 
 void BinAstSerializeVisitor::VisitBlock(BinAstBlock* block) {

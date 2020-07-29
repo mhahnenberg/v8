@@ -23,6 +23,7 @@
 #include "src/numbers/conversions-inl.h"
 #include "src/objects/scope-info.h"
 #include "src/parsing/parse-info.h"
+#include "src/parsing/binast-deserializer.h"
 #include "src/parsing/rewriter.h"
 #include "src/runtime/runtime.h"
 #include "src/strings/char-predicates-inl.h"
@@ -859,6 +860,28 @@ void Parser::ParseFunction(Isolate* isolate, ParseInfo* info,
   scanner_.Initialize();
 
   FunctionLiteral* result;
+  if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData())) {
+    auto start = std::chrono::high_resolution_clock::now();
+    Handle<BinAstParseData> binast_parse_data = handle(shared_info->uncompiled_data_with_binast_parse_data().binast_parse_data(), isolate);
+    FunctionLiteral* literal;
+    {
+      // We need to setup the parser/initial outer scope before we can start deserialization.
+      Scope* outer = original_scope_;
+      DeclarationScope* outer_function = outer->GetClosureScope();
+      DCHECK(outer);
+      FunctionState function_state(&function_state_, &scope_, outer_function);
+      BlockState block_state(&scope_, outer);
+      BinAstDeserializer deserializer(this);
+      AstNode* ast_node = deserializer.DeserializeAst(binast_parse_data->serialized_ast());
+      literal = ast_node->AsFunctionLiteral();
+      DCHECK(literal != nullptr);
+    }
+    auto elapsed = std::chrono::high_resolution_clock::now() - start;
+    long long microseconds = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+    printf("Deserialized function literal in %lld us: %p\n", microseconds, literal);
+    // TODO(binast): Store the literal on the ParseInfo
+  }
+  
   if (V8_UNLIKELY(shared_info->private_name_lookup_skips_outer_class() &&
                   original_scope_->is_class_scope())) {
     // If the function skips the outer class and the outer scope is a class, the

@@ -33,13 +33,18 @@ class BinAstDeserializer {
   };
 
   DeserializeResult<uint32_t> DeserializeUint32(ByteArray bytes, int offset);
-  DeserializeResult<int32_t> DeserializeInt32(ByteArray bytes, int offset);
+  DeserializeResult<uint16_t> DeserializeUint16(ByteArray bytes, int offset);
   DeserializeResult<uint8_t> DeserializeUint8(ByteArray bytes, int offset);
+  DeserializeResult<int32_t> DeserializeInt32(ByteArray bytes, int offset);
 
   DeserializeResult<const AstRawString*> DeserializeRawString(ByteArray bytes, int offset);
   DeserializeResult<std::nullptr_t> DeserializeStringTable(ByteArray bytes, int offset);
   DeserializeResult<const AstRawString*> DeserializeRawStringReference(ByteArray bytes, int offset);
   DeserializeResult<AstConsString*> DeserializeConsString(ByteArray bytes, int offset);
+
+  DeserializeResult<Variable*> DeserializeVariable(ByteArray serialized_binast, int offset, Scope* scope);
+  DeserializeResult<std::nullptr_t> DeserializeScopeVariableMap(ByteArray serialized_binast, int offset, Scope* scope);
+  DeserializeResult<DeclarationScope*> DeserializeDeclarationScope(ByteArray serialized_binast, int offset);
 
   DeserializeResult<AstNode*> DeserializeAstNode(ByteArray serialized_ast, int offset);
   DeserializeResult<FunctionLiteral*> DeserializeFunctionLiteral(ByteArray serialized_ast, uint32_t bit_field, int32_t position, int offset);

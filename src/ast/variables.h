@@ -248,6 +248,8 @@ class Variable final : public ZoneObject {
   using List = base::ThreadedList<Variable>;
 
  private:
+  friend class BinAstSerializeVisitor;
+  friend class BinAstDeserializer;
   Scope* scope_;
   const AstRawString* name_;
 
