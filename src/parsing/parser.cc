@@ -878,7 +878,13 @@ void Parser::ParseFunction(Isolate* isolate, ParseInfo* info,
     }
     auto elapsed = std::chrono::high_resolution_clock::now() - start;
     long long microseconds = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-    printf("Deserialized function literal in %lld us: %p\n", microseconds, literal);
+    printf("Deserialized function literal for '");
+    if (literal->has_shared_name()) {
+      for (const AstRawString* s : literal->raw_name()->ToRawStrings()) {
+        printf("%.*s", s->byte_length(), s->raw_data());
+      }
+    }
+    printf("' in %lld us: %p\n", microseconds, literal);
     // TODO(binast): Store the literal on the ParseInfo
   }
   

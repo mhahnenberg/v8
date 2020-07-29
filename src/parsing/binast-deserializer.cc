@@ -150,32 +150,52 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
   }
 }
 
-BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeVariable(ByteArray serialized_binast, int offset, Scope* scope) {
-  // Variable data:
-  // scope_
-  // name_
+BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeLocalVariable(ByteArray serialized_binast, int offset, Scope* scope) {
   auto name = DeserializeRawStringReference(serialized_binast, offset);
   offset = name.new_offset;
 
   // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
   // next_
 
-  // index_
   auto index = DeserializeInt32(serialized_binast, offset);
   offset = index.new_offset;
 
-  // initializer_position_
   auto initializer_position = DeserializeInt32(serialized_binast, offset);
   offset = initializer_position.new_offset;
 
-  // bit_field_
   auto bit_field = DeserializeUint16(serialized_binast, offset);
   offset = bit_field.new_offset;
 
   // We just use bogus values for mode, etc. since they're already encoded in the bit field
   bool was_added = false;
+  // The main difference between local and non-local is whether the Variable appeared in the locals_ list when the Scope was serialized.
+  Variable* variable = scope->Declare(parser_->zone(), name.value, VariableMode::kVar, NORMAL_VARIABLE, kCreatedInitialized, kMaybeAssigned, &was_added);
+  variable->index_ = index.value;
+  variable->initializer_position_ = initializer_position.value;
+  variable->bit_field_ = bit_field.value;
+  return {variable, offset};
+}
+
+BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeNonLocalVariable(ByteArray serialized_binast, int offset, Scope* scope) {
+  auto name = DeserializeRawStringReference(serialized_binast, offset);
+  offset = name.new_offset;
+
+  // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
+  // next_
+
+  auto index = DeserializeInt32(serialized_binast, offset);
+  offset = index.new_offset;
+
+  auto initializer_position = DeserializeInt32(serialized_binast, offset);
+  offset = initializer_position.new_offset;
+
+  auto bit_field = DeserializeUint16(serialized_binast, offset);
+  offset = bit_field.new_offset;
+
+  // We just use bogus values for mode, etc. since they're already encoded in the bit field
+  bool was_added = false;
+  // The main difference between local and non-local is whether the Variable appeared in the locals_ list when the Scope was serialized.
   Variable* variable = scope->variables_.Declare(parser_->zone(), scope, name.value, VariableMode::kVar, NORMAL_VARIABLE, kCreatedInitialized, kMaybeAssigned, IsStaticFlag::kNotStatic, &was_added);
-  printf("Declared variable '%.*s\n", variable->raw_name()->byte_length(), variable->raw_name()->raw_data());
   variable->index_ = index.value;
   variable->initializer_position_ = initializer_position.value;
   variable->bit_field_ = bit_field.value;
@@ -183,11 +203,19 @@ BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Deserialize
 }
 
 BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeVariableMap(ByteArray serialized_binast, int offset, Scope* scope) {
-  auto total_variable_entries = DeserializeUint32(serialized_binast, offset);
-  offset = total_variable_entries.new_offset;
+  auto total_local_variables = DeserializeUint32(serialized_binast, offset);
+  offset = total_local_variables.new_offset;
 
-  for (uint32_t i = 0; i < total_variable_entries.value; ++i) {
-    auto new_variable = DeserializeVariable(serialized_binast, offset, scope);
+  for (uint32_t i = 0; i < total_local_variables.value; ++i) {
+    auto new_variable = DeserializeLocalVariable(serialized_binast, offset, scope);
+    offset = new_variable.new_offset;
+  }
+
+  auto total_nonlocal_variables = DeserializeUint32(serialized_binast, offset);
+  offset = total_nonlocal_variables.new_offset;
+
+  for (uint32_t i = 0; i < total_nonlocal_variables.value; ++i) {
+    auto new_variable = DeserializeNonLocalVariable(serialized_binast, offset, scope);
     offset = new_variable.new_offset;
   }
 

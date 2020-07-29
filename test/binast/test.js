@@ -20,7 +20,7 @@ function newSetTimeout(func, delayMs) {
 setTimeout = newSetTimeout;
 
 function tickRunLoop(nextDeadline) {
-  oldSetTimeout(function() {
+  oldSetTimeout(function timeoutCallback() {
     // We don't currently have a deadline, so look for the next timer callback to find a new deadline.
     if (nextDeadline === null || nextDeadline === undefined) {
       // We're out of timer callbacks, so there's no more deadlines and we can now exit.
@@ -30,6 +30,7 @@ function tickRunLoop(nextDeadline) {
       var nextCallback = timerCallbacks[timerCallbacks.length - 1];
       nextDeadline = nextCallback.deadline;
     }
+
    
     // We have a deadline, so check if we've hit it. 
     var currentTime = new Date();
