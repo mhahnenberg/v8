@@ -5,7 +5,6 @@
 #ifndef V8_PARSING_BINAST_VISITOR_H_
 #define V8_PARSING_BINAST_VISITOR_H_
 
-#include "binast.h"
 #include "src/ast/ast.h"
 
 namespace v8{

@@ -4,7 +4,6 @@
 
 #include "src/parsing/binast-parser.h"
 #include "src/parsing/parse-info.h"
-#include "src/parsing/binast.h"
 #include "src/zone/zone-list-inl.h"
 #include "src/parsing/binast-parse-data.h"
 
@@ -13,7 +12,7 @@
 namespace v8 {
 namespace internal {
 
-BinAstParser::BinAstParser(BinAstParseInfo* info)
+BinAstParser::BinAstParser(ParseInfo* info)
   : ParserBase<BinAstParser>(
     info->zone(), &scanner_, info->stack_limit(), static_cast<v8::Extension*>(nullptr),
     info->GetOrCreateAstValueFactory(), info->pending_error_handler(),
@@ -24,7 +23,7 @@ BinAstParser::BinAstParser(BinAstParseInfo* info)
 {
 }
 
-void BinAstParser::InitializeEmptyScopeChain(BinAstParseInfo* info) {
+void BinAstParser::InitializeEmptyScopeChain(ParseInfo* info) {
   DCHECK_NULL(original_scope_);
   DCHECK_NULL(info->script_scope());
   DeclarationScope* script_scope =
@@ -35,7 +34,7 @@ void BinAstParser::InitializeEmptyScopeChain(BinAstParseInfo* info) {
 
 namespace {
 
-void MaybeResetCharacterStream(BinAstParseInfo* info, FunctionLiteral* literal) {
+void MaybeResetCharacterStream(ParseInfo* info, FunctionLiteral* literal) {
   // Don't reset the character stream if there is an asm.js module since it will
   // be used again by the asm-parser.
   if (info->contains_asm_module()) {
@@ -47,7 +46,7 @@ void MaybeResetCharacterStream(BinAstParseInfo* info, FunctionLiteral* literal) 
 
 } // namespace
 
-void BinAstParser::ParseProgram(BinAstParseInfo* info)
+void BinAstParser::ParseProgram(ParseInfo* info)
 {
   FunctionLiteral* result = nullptr;
 
@@ -61,7 +60,7 @@ void BinAstParser::ParseProgram(BinAstParseInfo* info)
   PostProcessParseResult(info, result);
 }
 
-FunctionLiteral* BinAstParser::DoParseProgram(BinAstParseInfo* info)
+FunctionLiteral* BinAstParser::DoParseProgram(ParseInfo* info)
 {
   // TODO(binast): START
   // Need to figure out exactly how to setup scope stuff.
@@ -164,7 +163,7 @@ FunctionLiteral* BinAstParser::DoParseProgram(BinAstParseInfo* info)
   return result;
 }
 
-FunctionLiteral* BinAstParser::DoParseFunction(BinAstParseInfo* info,
+FunctionLiteral* BinAstParser::DoParseFunction(ParseInfo* info,
                                          int start_position, int end_position,
                                          int function_literal_id,
                                          const AstRawString* raw_name) {
@@ -236,7 +235,7 @@ FunctionLiteral* BinAstParser::DoParseFunction(BinAstParseInfo* info,
   return result;
 }
 
-void BinAstParser::PostProcessParseResult(BinAstParseInfo* info, FunctionLiteral* literal)
+void BinAstParser::PostProcessParseResult(ParseInfo* info, FunctionLiteral* literal)
 {
   if (literal == nullptr) return;
 
@@ -652,7 +651,7 @@ FunctionLiteral* BinAstParser::ParseFunctionLiteral(
   return function_literal;
 }
 
-void BinAstParser::ParseOnBackground(BinAstParseInfo* info, int start_position,
+void BinAstParser::ParseOnBackground(ParseInfo* info, int start_position,
                                      int end_position, int function_literal_id) {
   RuntimeCallTimerScope runtimeTimer(
       runtime_call_stats_, RuntimeCallCounterId::kParseBackgroundProgram);

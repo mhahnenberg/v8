@@ -5,7 +5,7 @@
 #ifndef V8_PARSING_BINAST_PARSER_H_
 #define V8_PARSING_BINAST_PARSER_H_
 
-#include "src/parsing/binast.h"
+#include "src/strings/string-hasher-inl.h"
 #include "src/parsing/parse-info.h"
 #include "src/parsing/parser-base.h"
 #include "src/ast/ast.h"
@@ -136,17 +136,17 @@ struct ParserTypes<BinAstParser> {
 
 class BinAstParser : public ParserBase<BinAstParser> {
  public:
-  explicit BinAstParser(BinAstParseInfo* info);
+  explicit BinAstParser(ParseInfo* info);
 
   static bool IsPreParser() { return false; }
 
   // Sets the literal on |info| if parsing succeeded.
-  void ParseOnBackground(BinAstParseInfo* info, int start_position, int end_position,
+  void ParseOnBackground(ParseInfo* info, int start_position, int end_position,
                          int function_literal_id);
 
   // Initializes an empty scope chain for top-level scripts, or scopes which
   // consist of only the native context.
-  void InitializeEmptyScopeChain(BinAstParseInfo* info);
+  void InitializeEmptyScopeChain(ParseInfo* info);
 
   void PrepareGeneratorVariables()
   {
@@ -161,10 +161,10 @@ class BinAstParser : public ParserBase<BinAstParser> {
     return nullptr;
   }
 
-  void ParseProgram(BinAstParseInfo* info);
+  void ParseProgram(ParseInfo* info);
 
 
-  FunctionLiteral* DoParseFunction(BinAstParseInfo* info,
+  FunctionLiteral* DoParseFunction(ParseInfo* info,
                                    int start_position, int end_position,
                                    int function_literal_id,
                                    const AstRawString* raw_name);
@@ -207,8 +207,8 @@ class BinAstParser : public ParserBase<BinAstParser> {
     return scope()->NewTemporary(name);
   }
 
-  FunctionLiteral* DoParseProgram(BinAstParseInfo* info);
-  void PostProcessParseResult(BinAstParseInfo* info, FunctionLiteral* literal);
+  FunctionLiteral* DoParseProgram(ParseInfo* info);
+  void PostProcessParseResult(ParseInfo* info, FunctionLiteral* literal);
 
   // If we assign a function literal to a property we pretenure the
   // literal so it can be added as a constant function property.
@@ -1578,9 +1578,9 @@ class BinAstParser : public ParserBase<BinAstParser> {
     Scanner::Location location, Token::Value token,
     MessageTemplate message = MessageTemplate::kUnexpectedToken);
 
-  BinAstParseInfo* info() const { return info_; }
+  ParseInfo* info() const { return info_; }
 
-  BinAstParseInfo* info_;
+  ParseInfo* info_;
   Scanner scanner_;
   Mode mode_;
 
