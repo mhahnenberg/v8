@@ -181,11 +181,7 @@ void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* function_
   DCHECK(current_index == num_entries + 1);
 }
 
-void BinAstSerializeVisitor::SerializeAst(BinAstNode* root) {
-  // TODO(binast): Remove (they currently make output slightly easier to read)
-  static std::mutex global_lock;
-  std::lock_guard<std::mutex> lock(global_lock);
-
+void BinAstSerializeVisitor::SerializeAst(AstNode* root) {
   auto start = std::chrono::high_resolution_clock::now();
   FunctionLiteral* literal = root->AsFunctionLiteral();
   DCHECK(literal != nullptr);
