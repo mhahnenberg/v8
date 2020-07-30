@@ -102,6 +102,7 @@ inline void BinAstSerializeVisitor::SerializeInt32(int32_t value) {
 
 void BinAstSerializeVisitor::SerializeRawString(const AstRawString* s) {
   DCHECK(s != nullptr);
+  DCHECK(string_table_indices_.count(s) == 0);
   uint32_t length = s->byte_length();
   bool is_one_byte = s->is_one_byte();
   uint32_t hash_field = s->hash_field();
