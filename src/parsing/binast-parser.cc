@@ -4,7 +4,6 @@
 
 #include "src/parsing/binast-parser.h"
 #include "src/parsing/parse-info.h"
-#include "src/parsing/binast.h"
 #include "src/zone/zone-list-inl.h"
 #include "src/parsing/binast-parse-data.h"
 
@@ -13,7 +12,7 @@
 namespace v8 {
 namespace internal {
 
-BinAstParser::BinAstParser(BinAstParseInfo* info)
+BinAstParser::BinAstParser(ParseInfo* info)
   : ParserBase<BinAstParser>(
     info->zone(), &scanner_, info->stack_limit(), static_cast<v8::Extension*>(nullptr),
     info->GetOrCreateAstValueFactory(), info->pending_error_handler(),
@@ -24,7 +23,7 @@ BinAstParser::BinAstParser(BinAstParseInfo* info)
 {
 }
 
-void BinAstParser::InitializeEmptyScopeChain(BinAstParseInfo* info) {
+void BinAstParser::InitializeEmptyScopeChain(ParseInfo* info) {
   DCHECK_NULL(original_scope_);
   DCHECK_NULL(info->script_scope());
   DeclarationScope* script_scope =
@@ -35,7 +34,7 @@ void BinAstParser::InitializeEmptyScopeChain(BinAstParseInfo* info) {
 
 namespace {
 
-void MaybeResetCharacterStream(BinAstParseInfo* info, BinAstFunctionLiteral* literal) {
+void MaybeResetCharacterStream(ParseInfo* info, FunctionLiteral* literal) {
   // Don't reset the character stream if there is an asm.js module since it will
   // be used again by the asm-parser.
   if (info->contains_asm_module()) {
@@ -47,9 +46,9 @@ void MaybeResetCharacterStream(BinAstParseInfo* info, BinAstFunctionLiteral* lit
 
 } // namespace
 
-void BinAstParser::ParseProgram(BinAstParseInfo* info)
+void BinAstParser::ParseProgram(ParseInfo* info)
 {
-  BinAstFunctionLiteral* result = nullptr;
+  FunctionLiteral* result = nullptr;
 
   scanner_.Initialize();
 
@@ -61,7 +60,7 @@ void BinAstParser::ParseProgram(BinAstParseInfo* info)
   PostProcessParseResult(info, result);
 }
 
-BinAstFunctionLiteral* BinAstParser::DoParseProgram(BinAstParseInfo* info)
+FunctionLiteral* BinAstParser::DoParseProgram(ParseInfo* info)
 {
   // TODO(binast): START
   // Need to figure out exactly how to setup scope stuff.
@@ -78,7 +77,7 @@ BinAstFunctionLiteral* BinAstParser::DoParseProgram(BinAstParseInfo* info)
   original_scope_ = scope_;
   // TODO(binast): END
 
-  BinAstFunctionLiteral* result = nullptr;
+  FunctionLiteral* result = nullptr;
   {
     Scope* outer = original_scope_;
     DCHECK_NOT_NULL(outer);
@@ -94,7 +93,7 @@ BinAstFunctionLiteral* BinAstParser::DoParseProgram(BinAstParseInfo* info)
     scope->set_start_position(0);
 
     FunctionState function_state(&function_state_, &scope_, scope);
-    ScopedPtrList<BinAstStatement> body(pointer_buffer());
+    ScopedPtrList<Statement> body(pointer_buffer());
     int beg_pos = scanner()->location().beg_pos;
     if (flags().is_module()) {
       // TODO
@@ -164,7 +163,7 @@ BinAstFunctionLiteral* BinAstParser::DoParseProgram(BinAstParseInfo* info)
   return result;
 }
 
-BinAstFunctionLiteral* BinAstParser::DoParseFunction(BinAstParseInfo* info,
+FunctionLiteral* BinAstParser::DoParseFunction(ParseInfo* info,
                                          int start_position, int end_position,
                                          int function_literal_id,
                                          const AstRawString* raw_name) {
@@ -181,7 +180,7 @@ BinAstFunctionLiteral* BinAstParser::DoParseFunction(BinAstParseInfo* info,
   ParsingModeScope parsing_mode(this, PARSE_EAGERLY);
 
   // Place holder for the result.
-  BinAstFunctionLiteral* result = nullptr;
+  FunctionLiteral* result = nullptr;
 
   {
     // Parse the function literal.
@@ -236,7 +235,7 @@ BinAstFunctionLiteral* BinAstParser::DoParseFunction(BinAstParseInfo* info,
   return result;
 }
 
-void BinAstParser::PostProcessParseResult(BinAstParseInfo* info, BinAstFunctionLiteral* literal)
+void BinAstParser::PostProcessParseResult(ParseInfo* info, FunctionLiteral* literal)
 {
   if (literal == nullptr) return;
 
@@ -280,7 +279,7 @@ void BinAstParserFormalParameters::ValidateStrictMode(BinAstParser* parser) cons
   }
 }
 
-BinAstExpression* BinAstParser::ExpressionFromLiteral(Token::Value token, int pos) {
+Expression* BinAstParser::ExpressionFromLiteral(Token::Value token, int pos) {
   switch (token) {
     case Token::NULL_LITERAL:
       return factory()->NewNullLiteral(pos);
@@ -308,8 +307,8 @@ BinAstExpression* BinAstParser::ExpressionFromLiteral(Token::Value token, int po
   return FailureExpression();
 }
 
-BinAstStatement* BinAstParser::DeclareFunction(const AstRawString* variable_name,
-                                   BinAstFunctionLiteral* function, VariableMode mode,
+Statement* BinAstParser::DeclareFunction(const AstRawString* variable_name,
+                                   FunctionLiteral* function, VariableMode mode,
                                    VariableKind kind, int beg_pos, int end_pos,
                                    ZonePtrList<const AstRawString>* names) {
   Declaration* declaration =
@@ -337,7 +336,7 @@ BinAstStatement* BinAstParser::DeclareFunction(const AstRawString* variable_name
 }
 
 void BinAstParser::ParseFunction(
-    ScopedPtrList<BinAstStatement>* body, const AstRawString* function_name, int pos,
+    ScopedPtrList<Statement>* body, const AstRawString* function_name, int pos,
     FunctionKind kind, FunctionSyntaxKind function_syntax_kind,
     DeclarationScope* function_scope, int* num_parameters, int* function_length,
     bool* has_duplicate_parameters, int* expected_property_count,
@@ -371,7 +370,7 @@ void BinAstParser::ParseFunction(
       // declared directly here.
       for (const AstRawString* arg : *arguments_for_wrapped_function) {
         const bool is_rest = false;
-        BinAstExpression* argument = ExpressionFromIdentifier(arg, kNoSourcePosition);
+        Expression* argument = ExpressionFromIdentifier(arg, kNoSourcePosition);
         AddFormalParameter(&formals, argument, NullExpression(),
                            kNoSourcePosition, is_rest);
       }
@@ -421,7 +420,7 @@ void BinAstParser::ParseFunction(
   *suspend_count = function_state.suspend_count();
 }
 
-BinAstFunctionLiteral* BinAstParser::ParseFunctionLiteral(
+FunctionLiteral* BinAstParser::ParseFunctionLiteral(
     const AstRawString* function_name, Scanner::Location function_name_location,
     FunctionNameValidity function_name_validity, FunctionKind kind,
     int function_token_pos, FunctionSyntaxKind function_syntax_kind,
@@ -545,7 +544,7 @@ BinAstFunctionLiteral* BinAstParser::ParseFunctionLiteral(
   //                        should_preparse_inner || should_post_parallel_task;
   bool should_preparse = false;
 
-  ScopedPtrList<BinAstStatement> body(pointer_buffer());
+  ScopedPtrList<Statement> body(pointer_buffer());
   int expected_property_count = 0;
   int suspend_count = -1;
   int num_parameters = -1;
@@ -625,7 +624,7 @@ BinAstFunctionLiteral* BinAstParser::ParseFunctionLiteral(
                                : FunctionLiteral::kNoDuplicateParameters;
 
   // Note that the FunctionLiteral needs to be created in the main Zone again.
-  BinAstFunctionLiteral* function_literal = factory()->NewFunctionLiteral(
+  FunctionLiteral* function_literal = factory()->NewFunctionLiteral(
       function_name, scope, body, expected_property_count, num_parameters,
       function_length, duplicate_parameters, function_syntax_kind,
       eager_compile_hint, pos, true, function_literal_id,
@@ -652,14 +651,14 @@ BinAstFunctionLiteral* BinAstParser::ParseFunctionLiteral(
   return function_literal;
 }
 
-void BinAstParser::ParseOnBackground(BinAstParseInfo* info, int start_position,
+void BinAstParser::ParseOnBackground(ParseInfo* info, int start_position,
                                      int end_position, int function_literal_id) {
   RuntimeCallTimerScope runtimeTimer(
       runtime_call_stats_, RuntimeCallCounterId::kParseBackgroundProgram);
   parsing_on_main_thread_ = false;
 
   DCHECK_NULL(info->literal());
-  BinAstFunctionLiteral* result = nullptr;
+  FunctionLiteral* result = nullptr;
 
   scanner_.Initialize();
 

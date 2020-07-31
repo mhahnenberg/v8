@@ -3,9 +3,9 @@
 #include "src/parsing/scanner-character-streams.h"
 #include "src/parsing/binast-parser.h"
 #include "src/parsing/binast-visitor.h"
-#include "src/parsing/binast-print-visitor.h"
 #include "include/v8.h"
 #include "src/d8/d8.h"
+#include "src/ast/prettyprinter.h"
 
 static const char* test_scripts[] = {
   // TODO(binast): (sloppy mode) "42",
@@ -18,6 +18,8 @@ static const char* test_scripts[] = {
   "'use strict';\nfunction square(x) { return x * x; }\nconsole.log('square(5) =', square(5));",
   "'use strict';\nvar obj = {};",
   "'use strict';\nvar obj = {foo: 'bar', bar: 1, baz: function(x) { return x; }};",
+  "'use strict';\nvar obj = {}; obj.foo = 'bar';",
+  "'use strict';\nvar arr = [];",
 };
 
 static const size_t num_test_scripts = sizeof(test_scripts) / sizeof(char*);
@@ -30,14 +32,15 @@ static void ParseScript(v8::Isolate* isolate, const char* script) {
   v8::Isolate::Scope isolate_scope(isolate);
   v8::internal::Isolate* i_isolate = reinterpret_cast<v8::internal::Isolate*>(isolate);
   v8::internal::UnoptimizedCompileFlags flags = v8::internal::UnoptimizedCompileFlags::ForTest(i_isolate);
+  v8::internal::UnoptimizedCompileState state(i_isolate);
 
   // Are these right?
   flags.set_is_toplevel(true);
   flags.set_is_eager(true);
 
   // Create ParseInfo
-  printf("Creating BinAstParseInfo...");
-  v8::internal::BinAstParseInfo parseInfo(parseInfoZone.release(), flags, i_isolate->ast_string_constants());
+  printf("Creating ParseInfo...");
+  v8::internal::ParseInfo parseInfo(i_isolate, flags, &state);
   parseInfo.set_character_stream(v8::internal::ScannerStream::ForTesting(script, strlen(script)));
   printf("Done!\n");
 
@@ -53,9 +56,8 @@ static void ParseScript(v8::Isolate* isolate, const char* script) {
 
   // Examine result.
   printf("Dumping AST...\n");
-  v8::internal::BinAstPrintVisitor visitor;
-  visitor.VisitNode(parseInfo.literal());
-  printf("\n");
+  v8::internal::AstPrinter ast_printer(i_isolate->stack_guard()->real_climit());
+  printf("%s\n", ast_printer.PrintProgram(parseInfo.literal()));
 }
 
 int main(int argc, char* argv[]) {

@@ -6,7 +6,6 @@
 #define V8_PARSING_BINAST_SERIALIZE_VISITOR_H_
 
 #include "src/parsing/binast-visitor.h"
-#include <mutex>
 #include "src/ast/scopes.h"
 
 namespace v8 {
@@ -16,30 +15,31 @@ namespace internal {
 // Serializes binAST format into a linear sequence of bytes.
 class BinAstSerializeVisitor final : public BinAstVisitor {
  public:
-  BinAstSerializeVisitor(BinAstValueFactory* ast_value_factory)
+  BinAstSerializeVisitor(AstValueFactory* ast_value_factory)
     : BinAstVisitor(),
       ast_value_factory_(ast_value_factory) {
   }
   std::vector<uint8_t>& serialized_bytes() { return byte_data_; }
 
-  void SerializeAst(BinAstNode* root);
+  void SerializeAst(AstNode* root);
 
-  virtual void VisitFunctionLiteral(BinAstFunctionLiteral* function_literal) override;
-  virtual void VisitBlock(BinAstBlock* block) override;
-  virtual void VisitIfStatement(BinAstIfStatement* if_statement) override;
-  virtual void VisitExpressionStatement(BinAstExpressionStatement* statement) override;
-  virtual void VisitLiteral(BinAstLiteral* literal) override;
-  virtual void VisitEmptyStatement(BinAstEmptyStatement* empty_statement) override;
-  virtual void VisitAssignment(BinAstAssignment* assignment) override;
-  virtual void VisitVariableProxyExpression(BinAstVariableProxyExpression* var_proxy) override;
-  virtual void VisitForStatement(BinAstForStatement* for_statement) override;
-  virtual void VisitCompareOperation(BinAstCompareOperation* compare) override;
-  virtual void VisitCountOperation(BinAstCountOperation* operation) override;
-  virtual void VisitCall(BinAstCall* call) override;
-  virtual void VisitProperty(BinAstProperty* property) override;
-  virtual void VisitReturnStatement(BinAstReturnStatement* return_statement) override;
-  virtual void VisitBinaryOperation(BinAstBinaryOperation* binary_op) override;
-  virtual void VisitObjectLiteral(BinAstObjectLiteral* binary_op) override;
+  virtual void VisitFunctionLiteral(FunctionLiteral* function_literal) override;
+  virtual void VisitBlock(Block* block) override;
+  virtual void VisitIfStatement(IfStatement* if_statement) override;
+  virtual void VisitExpressionStatement(ExpressionStatement* statement) override;
+  virtual void VisitLiteral(Literal* literal) override;
+  virtual void VisitEmptyStatement(EmptyStatement* empty_statement) override;
+  virtual void VisitAssignment(Assignment* assignment) override;
+  virtual void VisitVariableProxyExpression(VariableProxyExpression* var_proxy) override;
+  virtual void VisitForStatement(ForStatement* for_statement) override;
+  virtual void VisitCompareOperation(CompareOperation* compare) override;
+  virtual void VisitCountOperation(CountOperation* operation) override;
+  virtual void VisitCall(Call* call) override;
+  virtual void VisitProperty(Property* property) override;
+  virtual void VisitReturnStatement(ReturnStatement* return_statement) override;
+  virtual void VisitBinaryOperation(BinaryOperation* binary_op) override;
+  virtual void VisitObjectLiteral(ObjectLiteral* binary_op) override;
+  virtual void VisitArrayLiteral(ArrayLiteral *array_literal) override;
 
  private:
   void SerializeUint32(uint32_t value);
@@ -54,7 +54,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeScopeVariableMap(Scope* scope);
   void SerializeDeclarationScope(DeclarationScope* scope);
 
-  BinAstValueFactory* ast_value_factory_;
+  AstValueFactory* ast_value_factory_;
   std::unordered_map<const AstRawString*, uint32_t> string_table_indices_;
   std::vector<uint8_t> byte_data_;
 };
@@ -179,9 +179,9 @@ void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* function_
   DCHECK(current_index == num_entries + 1);
 }
 
-void BinAstSerializeVisitor::SerializeAst(BinAstNode* root) {
+void BinAstSerializeVisitor::SerializeAst(AstNode* root) {
   auto start = std::chrono::high_resolution_clock::now();
-  BinAstFunctionLiteral* literal = root->AsFunctionLiteral();
+  FunctionLiteral* literal = root->AsFunctionLiteral();
   DCHECK(literal != nullptr);
   SerializeStringTable(literal->raw_name());
   VisitNode(root);
@@ -240,7 +240,7 @@ void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* scope) 
   SerializeScopeVariableMap(scope);
 }
 
-void BinAstSerializeVisitor::VisitFunctionLiteral(BinAstFunctionLiteral* function_literal) {
+void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
   SerializeUint32(function_literal->bit_field_);
   SerializeInt32(function_literal->position_);
   const AstConsString* name = function_literal->raw_name();
@@ -248,66 +248,69 @@ void BinAstSerializeVisitor::VisitFunctionLiteral(BinAstFunctionLiteral* functio
   SerializeDeclarationScope(function_literal->scope());
 }
 
-void BinAstSerializeVisitor::VisitBlock(BinAstBlock* block) {
+void BinAstSerializeVisitor::VisitBlock(Block* block) {
 
 }
 
-void BinAstSerializeVisitor::VisitIfStatement(BinAstIfStatement* if_statement) {
+void BinAstSerializeVisitor::VisitIfStatement(IfStatement* if_statement) {
 
 }
 
-void BinAstSerializeVisitor::VisitExpressionStatement(BinAstExpressionStatement* statement) {
+void BinAstSerializeVisitor::VisitExpressionStatement(ExpressionStatement* statement) {
 
 }
 
-void BinAstSerializeVisitor::VisitLiteral(BinAstLiteral* literal) {
+void BinAstSerializeVisitor::VisitLiteral(Literal* literal) {
 
 }
 
-void BinAstSerializeVisitor::VisitEmptyStatement(BinAstEmptyStatement* empty_statement) {
+void BinAstSerializeVisitor::VisitEmptyStatement(EmptyStatement* empty_statement) {
 
 }
 
-void BinAstSerializeVisitor::VisitAssignment(BinAstAssignment* assignment) {
+void BinAstSerializeVisitor::VisitAssignment(Assignment* assignment) {
 
 }
 
-void BinAstSerializeVisitor::VisitVariableProxyExpression(BinAstVariableProxyExpression* var_proxy) {
+void BinAstSerializeVisitor::VisitVariableProxyExpression(VariableProxyExpression* var_proxy) {
 
 }
 
-void BinAstSerializeVisitor::VisitForStatement(BinAstForStatement* for_statement) {
+void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statement) {
 
 }
 
-void BinAstSerializeVisitor::VisitCompareOperation(BinAstCompareOperation* compare) {
+void BinAstSerializeVisitor::VisitCompareOperation(CompareOperation* compare) {
 
 }
 
-void BinAstSerializeVisitor::VisitCountOperation(BinAstCountOperation* operation) {
+void BinAstSerializeVisitor::VisitCountOperation(CountOperation* operation) {
 
 }
 
-void BinAstSerializeVisitor::VisitCall(BinAstCall* call) {
+void BinAstSerializeVisitor::VisitCall(Call* call) {
 
 }
 
-void BinAstSerializeVisitor::VisitProperty(BinAstProperty* property) {
+void BinAstSerializeVisitor::VisitProperty(Property* property) {
 
 }
 
-void BinAstSerializeVisitor::VisitReturnStatement(BinAstReturnStatement* return_statement) {
+void BinAstSerializeVisitor::VisitReturnStatement(ReturnStatement* return_statement) {
 
 }
 
-void BinAstSerializeVisitor::VisitBinaryOperation(BinAstBinaryOperation* binary_op) {
+void BinAstSerializeVisitor::VisitBinaryOperation(BinaryOperation* binary_op) {
 
 }
 
-void BinAstSerializeVisitor::VisitObjectLiteral(BinAstObjectLiteral* object_literal) {
+void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_literal) {
   
 }
 
+void BinAstSerializeVisitor::VisitArrayLiteral(ArrayLiteral* array_literal) {
+  
+}
 
 }  // namespace internal
 }  // namespace v8

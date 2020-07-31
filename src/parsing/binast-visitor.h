@@ -5,109 +5,116 @@
 #ifndef V8_PARSING_BINAST_VISITOR_H_
 #define V8_PARSING_BINAST_VISITOR_H_
 
-#include "binast.h"
+#include "src/ast/ast.h"
 
 namespace v8{
 namespace internal {
 
 class BinAstVisitor {
 public:
-  virtual void VisitFunctionLiteral(BinAstFunctionLiteral* function_literal) = 0;
-  virtual void VisitBlock(BinAstBlock* block) = 0;
-  virtual void VisitIfStatement(BinAstIfStatement* if_statement) = 0;
-  virtual void VisitExpressionStatement(BinAstExpressionStatement* statement) = 0;
-  virtual void VisitLiteral(BinAstLiteral* literal) = 0;
-  virtual void VisitEmptyStatement(BinAstEmptyStatement* empty_statement) = 0;
-  virtual void VisitAssignment(BinAstAssignment* assignment) = 0;
-  virtual void VisitVariableProxyExpression(BinAstVariableProxyExpression* var_proxy) = 0;
-  virtual void VisitForStatement(BinAstForStatement* for_statement) = 0;
-  virtual void VisitCompareOperation(BinAstCompareOperation* compare) = 0;
-  virtual void VisitCountOperation(BinAstCountOperation* operation) = 0;
-  virtual void VisitCall(BinAstCall* call) = 0;
-  virtual void VisitProperty(BinAstProperty* property) = 0;
-  virtual void VisitReturnStatement(BinAstReturnStatement* return_statement) = 0;
-  virtual void VisitBinaryOperation(BinAstBinaryOperation* binary_op) = 0;
-  virtual void VisitObjectLiteral(BinAstObjectLiteral* object_literal) = 0;
+  virtual void VisitFunctionLiteral(FunctionLiteral* function_literal) = 0;
+  virtual void VisitBlock(Block* block) = 0;
+  virtual void VisitIfStatement(IfStatement* if_statement) = 0;
+  virtual void VisitExpressionStatement(ExpressionStatement* statement) = 0;
+  virtual void VisitLiteral(Literal* literal) = 0;
+  virtual void VisitEmptyStatement(EmptyStatement* empty_statement) = 0;
+  virtual void VisitAssignment(Assignment* assignment) = 0;
+  virtual void VisitVariableProxyExpression(VariableProxyExpression* var_proxy) = 0;
+  virtual void VisitForStatement(ForStatement* for_statement) = 0;
+  virtual void VisitCompareOperation(CompareOperation* compare) = 0;
+  virtual void VisitCountOperation(CountOperation* operation) = 0;
+  virtual void VisitCall(Call* call) = 0;
+  virtual void VisitProperty(Property* property) = 0;
+  virtual void VisitReturnStatement(ReturnStatement* return_statement) = 0;
+  virtual void VisitBinaryOperation(BinaryOperation* binary_op) = 0;
+  virtual void VisitObjectLiteral(ObjectLiteral* object_literal) = 0;
+  virtual void VisitArrayLiteral(ArrayLiteral* array_literal) = 0;
 
-  void VisitNode(BinAstNode* node) {
+
+  void VisitNode(AstNode* node) {
     switch (node->node_type()) {
-      case BinAstNode::kFunctionLiteral: {
-        VisitFunctionLiteral(static_cast<BinAstFunctionLiteral*>(node));
+      case AstNode::kFunctionLiteral: {
+        VisitFunctionLiteral(static_cast<FunctionLiteral*>(node));
         break;
       }
 
-      case BinAstNode::kBlock: {
-        VisitBlock(static_cast<BinAstBlock*>(node));
+      case AstNode::kBlock: {
+        VisitBlock(static_cast<Block*>(node));
         break;
       }
 
-      case BinAstNode::kIfStatement: {
-        VisitIfStatement(static_cast<BinAstIfStatement*>(node));
+      case AstNode::kIfStatement: {
+        VisitIfStatement(static_cast<IfStatement*>(node));
         break;
       }
 
-      case BinAstNode::kExpressionStatement: {
-        VisitExpressionStatement(static_cast<BinAstExpressionStatement*>(node));
+      case AstNode::kExpressionStatement: {
+        VisitExpressionStatement(static_cast<ExpressionStatement*>(node));
         break;
       }
 
-      case BinAstNode::kLiteral: {
-        VisitLiteral(static_cast<BinAstLiteral*>(node));
+      case AstNode::kLiteral: {
+        VisitLiteral(static_cast<Literal*>(node));
         break;
       }
 
-      case BinAstNode::kEmptyStatement: {
-        VisitEmptyStatement(static_cast<BinAstEmptyStatement*>(node));
+      case AstNode::kEmptyStatement: {
+        VisitEmptyStatement(static_cast<EmptyStatement*>(node));
         break;
       }
 
-      case BinAstNode::kAssignment: {
-        VisitAssignment(static_cast<BinAstAssignment*>(node));
+      case AstNode::kAssignment: {
+        VisitAssignment(static_cast<Assignment*>(node));
         break;
       }
 
-      case BinAstNode::kVariableProxyExpression: {
-        VisitVariableProxyExpression(static_cast<BinAstVariableProxyExpression*>(node));
+      case AstNode::kVariableProxyExpression: {
+        VisitVariableProxyExpression(static_cast<VariableProxyExpression*>(node));
         break;
       }
 
-      case BinAstNode::kForStatement: {
-        VisitForStatement(static_cast<BinAstForStatement*>(node));
+      case AstNode::kForStatement: {
+        VisitForStatement(static_cast<ForStatement*>(node));
         break;
       }
 
-      case BinAstNode::kCompareOperation: {
-        VisitCompareOperation(static_cast<BinAstCompareOperation*>(node));
+      case AstNode::kCompareOperation: {
+        VisitCompareOperation(static_cast<CompareOperation*>(node));
         break;
       }
 
-      case BinAstNode::kCountOperation: {
-        VisitCountOperation(static_cast<BinAstCountOperation*>(node));
+      case AstNode::kCountOperation: {
+        VisitCountOperation(static_cast<CountOperation*>(node));
         break;
       }
 
-      case BinAstNode::kCall: {
-        VisitCall(static_cast<BinAstCall*>(node));
+      case AstNode::kCall: {
+        VisitCall(static_cast<Call*>(node));
         break;
       }
 
-      case BinAstNode::kProperty: {
-        VisitProperty(static_cast<BinAstProperty*>(node));
+      case AstNode::kProperty: {
+        VisitProperty(static_cast<Property*>(node));
         break;
       }
 
-      case BinAstNode::kReturnStatement: {
-        VisitReturnStatement(static_cast<BinAstReturnStatement*>(node));
+      case AstNode::kReturnStatement: {
+        VisitReturnStatement(static_cast<ReturnStatement*>(node));
         break;
       }
 
-      case BinAstNode::kBinaryOperation: {
-        VisitBinaryOperation(static_cast<BinAstBinaryOperation*>(node));
+      case AstNode::kBinaryOperation: {
+        VisitBinaryOperation(static_cast<BinaryOperation*>(node));
         break;
       }
 
-      case BinAstNode::kObjectLiteral: {
-        VisitObjectLiteral(static_cast<BinAstObjectLiteral*>(node));
+      case AstNode::kObjectLiteral: {
+        VisitObjectLiteral(static_cast<ObjectLiteral*>(node));
+        break;
+      }
+
+      case AstNode::kArrayLiteral: {
+        VisitArrayLiteral(static_cast<ArrayLiteral*>(node));
         break;
       }
 
