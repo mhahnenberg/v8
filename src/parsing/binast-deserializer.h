@@ -6,6 +6,7 @@
 #define V8_PARSING_BINAST_DESERIALIZER_H_
 
 #include <unordered_map>
+#include "src/parsing/parser.h"
 #include "src/handles/handles.h"
 
 namespace v8 {
@@ -13,9 +14,9 @@ namespace internal {
 
 class AstNode;
 class ByteArray;
+class Declaration;
 class FunctionLiteral;
 class ParseInfo;
-class Parser;
 class AstConsString;
 class AstRawString;
 
@@ -32,6 +33,8 @@ class BinAstDeserializer {
     int new_offset;
   };
 
+  Zone* zone() { return parser_->zone(); }
+
   DeserializeResult<uint32_t> DeserializeUint32(ByteArray bytes, int offset);
   DeserializeResult<uint16_t> DeserializeUint16(ByteArray bytes, int offset);
   DeserializeResult<uint8_t> DeserializeUint8(ByteArray bytes, int offset);
@@ -44,7 +47,10 @@ class BinAstDeserializer {
 
   DeserializeResult<Variable*> DeserializeLocalVariable(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeNonLocalVariable(ByteArray serialized_binast, int offset, Scope* scope);
+  DeserializeResult<Variable*> DeserializeScopeVariableReference(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<std::nullptr_t> DeserializeScopeVariableMap(ByteArray serialized_binast, int offset, Scope* scope);
+  DeserializeResult<Declaration*> DeserializeDeclaration(ByteArray serialized_binast, int offset, Scope* scope);
+  DeserializeResult<std::nullptr_t> DeserializeScopeDeclarations(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<DeclarationScope*> DeserializeDeclarationScope(ByteArray serialized_binast, int offset);
 
   DeserializeResult<AstNode*> DeserializeAstNode(ByteArray serialized_ast, int offset);
@@ -52,6 +58,7 @@ class BinAstDeserializer {
 
   Parser* parser_;
   std::unordered_map<uint32_t, const AstRawString*> string_table_;
+  std::unordered_map<Scope*, std::unordered_map<uint32_t, Variable*>> variables_by_scope_;
 };
 
 }  // namespace internal

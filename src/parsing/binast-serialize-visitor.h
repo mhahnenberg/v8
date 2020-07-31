@@ -51,12 +51,17 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeRawStringReference(const AstRawString* s);
   void SerializeStringTable(const AstConsString* function_name);
   void SerializeVariable(Variable* variable);
+  void SerializeScopeVariableReference(Scope* scope, Variable* variable);
   void SerializeScopeVariableMap(Scope* scope);
+  void SerializeDeclaration(Scope* scope, Declaration* decl);
+  void SerializeScopeDeclarations(Scope* scope);
   void SerializeDeclarationScope(DeclarationScope* scope);
+
 
   AstValueFactory* ast_value_factory_;
   std::unordered_map<const AstRawString*, uint32_t> string_table_indices_;
   std::vector<uint8_t> byte_data_;
+  std::unordered_map<Scope*, std::unordered_map<Variable*, uint32_t>> vars_by_scope_;
 };
 
 inline void BinAstSerializeVisitor::SerializeUint32(uint32_t value) {
@@ -205,6 +210,17 @@ void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
   SerializeUint16(variable->bit_field_);
 }
 
+void BinAstSerializeVisitor::SerializeScopeVariableReference(Scope* scope, Variable* variable) {
+  auto scope_var_ids_result = vars_by_scope_.find(scope);
+  DCHECK(scope_var_ids_result != vars_by_scope_.end());
+  std::unordered_map<Variable*, uint32_t>& scope_var_ids = scope_var_ids_result->second;
+
+  auto var_id_result = scope_var_ids.find(variable);
+  DCHECK(var_id_result != scope_var_ids.end());
+  uint32_t var_id = var_id_result->second;
+  SerializeUint32(var_id);
+}
+
 void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
   // Serialize locals first.
   std::unordered_set<const AstRawString*> locals;
@@ -212,11 +228,16 @@ void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
     locals.insert(variable->raw_name());
   }
 
+  DCHECK(vars_by_scope_.count(scope) == 0);
+  vars_by_scope_.insert({scope, std::unordered_map<Variable*, uint32_t>()});
+  std::unordered_map<Variable*, uint32_t>& var_ids = vars_by_scope_[scope];
+
   DCHECK(locals.size() < UINT32_MAX);
   uint32_t total_local_vars = static_cast<uint32_t>(locals.size());
   SerializeUint32(total_local_vars);
   for (Variable* variable : scope->locals_) {
     SerializeVariable(variable);
+    var_ids.insert({variable, var_ids.size()});
   }
 
   // Now serialize any remaining variables we missed
@@ -227,10 +248,31 @@ void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
     Variable* variable = reinterpret_cast<Variable*>(entry->value);
     if (locals.count(variable->raw_name()) == 0) {
       SerializeVariable(variable);
+      var_ids.insert({variable, var_ids.size()});
       serialized_nonlocal_vars += 1;
     }
   }
   DCHECK(total_nonlocal_vars == serialized_nonlocal_vars);
+}
+
+void BinAstSerializeVisitor::SerializeDeclaration(Scope* scope, Declaration* decl) {
+  SerializeInt32(decl->position());
+  SerializeUint8(decl->type());
+  SerializeScopeVariableReference(scope, decl->var());
+}
+
+void BinAstSerializeVisitor::SerializeScopeDeclarations(Scope* scope) {
+  uint32_t num_decls = 0;
+  for (Declaration* decl : *scope->declarations()) {
+    (void)decl;
+    num_decls += 1;
+  }
+
+  SerializeUint32(num_decls);
+
+  for (Declaration* decl : *scope->declarations()) {
+    SerializeDeclaration(scope, decl);
+  }
 }
 
 void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* scope) {
@@ -238,6 +280,7 @@ void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* scope) 
   SerializeUint8(scope_type);
   SerializeUint8(scope->function_kind());
   SerializeScopeVariableMap(scope);
+  SerializeScopeDeclarations(scope);
 }
 
 void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
