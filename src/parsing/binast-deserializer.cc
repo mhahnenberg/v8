@@ -202,12 +202,32 @@ BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Deserialize
   return {variable, offset};
 }
 
+BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeScopeVariableReference(ByteArray serialized_binast, int offset, Scope* scope) {
+  auto variable_reference = DeserializeUint32(serialized_binast, offset);
+  offset = variable_reference.new_offset;
+
+  auto scope_vars_by_id_result = variables_by_scope_.find(scope);
+  DCHECK(scope_vars_by_id_result != variables_by_scope_.end());
+  std::unordered_map<uint32_t, Variable*>& scope_vars_by_id = scope_vars_by_id_result->second;
+
+  auto variable_result = scope_vars_by_id.find(variable_reference.value);
+  DCHECK(variable_result != scope_vars_by_id.end());
+  Variable* variable = variable_result->second;
+
+  return {variable, offset};
+}
+
 BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeVariableMap(ByteArray serialized_binast, int offset, Scope* scope) {
   auto total_local_variables = DeserializeUint32(serialized_binast, offset);
   offset = total_local_variables.new_offset;
 
+  DCHECK(variables_by_scope_.count(scope) == 0);
+  variables_by_scope_.insert({scope, std::unordered_map<uint32_t, Variable*>()});
+  std::unordered_map<uint32_t, Variable*>& scope_vars_by_id = variables_by_scope_[scope];
+
   for (uint32_t i = 0; i < total_local_variables.value; ++i) {
     auto new_variable = DeserializeLocalVariable(serialized_binast, offset, scope);
+    scope_vars_by_id.insert({scope_vars_by_id.size(), new_variable.value});
     offset = new_variable.new_offset;
   }
 
@@ -216,7 +236,36 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
 
   for (uint32_t i = 0; i < total_nonlocal_variables.value; ++i) {
     auto new_variable = DeserializeNonLocalVariable(serialized_binast, offset, scope);
+    scope_vars_by_id.insert({scope_vars_by_id.size(), new_variable.value});
     offset = new_variable.new_offset;
+  }
+
+  return {nullptr, offset};
+}
+
+BinAstDeserializer::DeserializeResult<Declaration*> BinAstDeserializer::DeserializeDeclaration(ByteArray serialized_binast, int offset, Scope* scope) {
+  auto start_pos = DeserializeInt32(serialized_binast, offset);
+  offset = start_pos.new_offset;
+
+  auto decl_type = DeserializeUint8(serialized_binast, offset);
+  offset = decl_type.new_offset;
+
+  auto variable = DeserializeScopeVariableReference(serialized_binast, offset, scope);
+  offset = variable.new_offset;
+
+  Declaration* decl = new (zone()) Declaration(start_pos.value, static_cast<Declaration::DeclType>(decl_type.value));
+  decl->set_var(variable.value);
+  return {decl, offset};
+}
+
+BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeDeclarations(ByteArray serialized_binast, int offset, Scope* scope) {
+  auto num_decls = DeserializeUint32(serialized_binast, offset);
+  offset = num_decls.new_offset;
+
+  for (uint32_t i = 0; i < num_decls.value; ++i) {
+    auto decl_result = DeserializeDeclaration(serialized_binast, offset, scope);
+    scope->decls_.Add(decl_result.value);
+    offset = decl_result.new_offset;
   }
 
   return {nullptr, offset};
@@ -268,6 +317,8 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
   // locals_
   // unresolved_list_
   // decls_
+  auto declarations_result = DeserializeScopeDeclarations(serialized_binast, offset, scope);
+  offset = declarations_result.new_offset;
   // scope_info_ TODO(binast): do we need this?
 #ifdef DEBUG
   // scope_name_

@@ -387,6 +387,7 @@ class Declaration : public ZoneObject {
   int position() const { return start_pos_; }
 
  protected:
+  friend class BinAstDeserializer;
   Declaration(int pos, DeclType type) : start_pos_(pos), type_(type), var_(nullptr), next_(nullptr) {}
 
  private:
