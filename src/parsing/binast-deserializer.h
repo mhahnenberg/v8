@@ -39,6 +39,7 @@ class BinAstDeserializer {
   DeserializeResult<uint16_t> DeserializeUint16(ByteArray bytes, int offset);
   DeserializeResult<uint8_t> DeserializeUint8(ByteArray bytes, int offset);
   DeserializeResult<int32_t> DeserializeInt32(ByteArray bytes, int offset);
+  DeserializeResult<std::array<bool, 16>> DeserializeUint16Flags(ByteArray bytes, int offset);
 
   DeserializeResult<const AstRawString*> DeserializeRawString(ByteArray bytes, int offset);
   DeserializeResult<std::nullptr_t> DeserializeStringTable(ByteArray bytes, int offset);

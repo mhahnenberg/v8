@@ -44,6 +44,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
  private:
   void SerializeUint32(uint32_t value);
   void SerializeUint16(uint16_t value);
+  void SerializeUint16Flags(const std::list<bool>& flags);
   void SerializeInt32(int32_t value);
   void SerializeUint8(uint8_t value);
   void SerializeRawString(const AstRawString* s);
@@ -86,6 +87,16 @@ inline void BinAstSerializeVisitor::SerializeUint16(uint16_t value) {
     uint8_t truncated_final_value = final_value;
     byte_data_.push_back(truncated_final_value);
   }
+}
+
+inline void BinAstSerializeVisitor::SerializeUint16Flags(const std::list<bool>& flags) {
+  DCHECK(flags.size() <= 16);
+  uint16_t encoded_flags = 0;
+  for (bool flag : flags) {
+    uint16_t encoded_flag = static_cast<uint16_t>(flag);
+    encoded_flags = (encoded_flags << 1) | encoded_flag;
+  }
+  SerializeUint16(encoded_flags);
 }
 
 
@@ -281,6 +292,30 @@ void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* scope) 
   SerializeUint8(scope->function_kind());
   SerializeScopeVariableMap(scope);
   SerializeScopeDeclarations(scope);
+#ifdef DEBUG
+  SerializeRawStringReference(scope->scope_name_);
+  SerializeUint8(scope->already_resolved_);
+  SerializeUint8(scope->needs_migration_);
+#endif
+  SerializeInt32(scope->start_position());
+  SerializeInt32(scope->end_position());
+  SerializeInt32(scope->num_stack_slots());
+  SerializeInt32(scope->num_heap_slots());
+  SerializeUint16Flags({
+    scope->is_strict_,
+    scope->calls_eval_,
+    scope->sloppy_eval_can_extend_vars_,
+    scope->scope_nonlinear_,
+    scope->is_hidden_,
+    scope->is_debug_evaluate_scope_,
+    scope->inner_scope_calls_eval_,
+    scope->force_context_allocation_for_parameters_,
+    scope->is_declaration_scope_,
+    scope->private_name_lookup_skips_outer_class_,
+    scope->must_use_preparsed_scope_data_,
+    scope->is_repl_mode_scope_,
+    scope->deserialized_scope_uses_external_cache_,
+  });
 }
 
 void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
