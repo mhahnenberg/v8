@@ -1596,7 +1596,6 @@ BackgroundBinAstParseTask::BackgroundBinAstParseTask(
       compile_state_(*outer_parse_info->state()),
       info_(ParseInfo::ForFunction(flags_, &compile_state_,
                                            function_literal, function_name)),
-      binast_info_(std::make_unique<BinAstParseInfo>(info_.get(), flags_)),
       language_mode_(info_->language_mode())
 {
   DCHECK_EQ(outer_parse_info->parameters_end_pos(), kNoSourcePosition);
@@ -1608,7 +1607,7 @@ BackgroundBinAstParseTask::BackgroundBinAstParseTask(
   std::unique_ptr<Utf16CharacterStream> character_stream =
       outer_parse_info->character_stream()->Clone();
   character_stream->Seek(start_position_);
-  binast_info_->set_character_stream(std::move(character_stream));
+  info_->set_character_stream(std::move(character_stream));
 }
 
 BackgroundBinAstParseTask::~BackgroundBinAstParseTask() = default;
@@ -1725,27 +1724,27 @@ void BackgroundBinAstParseTask::Run() {
   DisallowHeapAccess no_heap_access;
 
   TimedHistogramScope timer(timer_);
-  base::Optional<OffThreadParseInfoScope<BinAstParseInfo>> off_thread_scope(
-      base::in_place, binast_info_.get(), worker_thread_runtime_call_stats_,
+  base::Optional<OffThreadParseInfoScope<ParseInfo>> off_thread_scope(
+      base::in_place, info_.get(), worker_thread_runtime_call_stats_,
       stack_size_);
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
                "BackgroundBinAstParseTask::Run");
   RuntimeCallTimerScope runtimeTimer(
-      binast_info_->runtime_call_stats(),
+      info_->runtime_call_stats(),
       RuntimeCallCounterId::kCompileBackgroundCompileTask);
 
   // Update the character stream's runtime call stats.
-  binast_info_->character_stream()->set_runtime_call_stats(
-      binast_info_->runtime_call_stats());
+  info_->character_stream()->set_runtime_call_stats(
+      info_->runtime_call_stats());
 
   // Parser needs to stay alive for finalizing the parsing on the main
   // thread.
-  parser_.reset(new BinAstParser(binast_info_.get()));
-  parser_->InitializeEmptyScopeChain(binast_info_.get());
-  parser_->ParseOnBackground(binast_info_.get(), start_position_, end_position_, function_literal_id_);
+  parser_.reset(new BinAstParser(info_.get()));
+  parser_->InitializeEmptyScopeChain(info_.get());
+  parser_->ParseOnBackground(info_.get(), start_position_, end_position_, function_literal_id_);
 
   // Save the language mode and record whether we collected source positions.
-  language_mode_ = binast_info_->language_mode();
+  language_mode_ = info_->language_mode();
 
   // TODO(binast): Should we do some kind of finalization on the background thread instead of waiting for the main thread?
   // TODO(binast): Might be able to more eagerly clean up some of the resources in this task.
@@ -1753,16 +1752,16 @@ void BackgroundBinAstParseTask::Run() {
 
 bool BackgroundBinAstParseTask::Finalize(Isolate* isolate, Handle<SharedFunctionInfo> function) {
   // TODO(binast): Remove this logging.
-  // const AstRawString* inferred_name = binast_info()->function_name();
+  // const AstRawString* inferred_name = info()->function_name();
   // printf("Finalizing '%.*s'!\n", inferred_name->byte_length(), inferred_name->raw_data());
   HandleScope scope(isolate);
   // TODO(binast): Write implementation of ProducedBinAstParseData that actually performs some kind of serialization,
   // and create an instance of that class during the BinAstParser's run.
-  Handle<BinAstParseData> binast_parse_data = binast_info()->literal()->produced_binast_parse_data()->Serialize(isolate);
+  Handle<BinAstParseData> binast_parse_data = info()->literal()->produced_binast_parse_data()->Serialize(isolate);
   Handle<UncompiledData> data = isolate->factory()->NewUncompiledDataWithBinAstParseData(
-        binast_info()->literal()->GetInferredName(isolate),
-        binast_info()->literal()->start_position(),
-        binast_info()->literal()->end_position(),
+        info()->literal()->GetInferredName(isolate),
+        info()->literal()->start_position(),
+        info()->literal()->end_position(),
         binast_parse_data);
   function->set_uncompiled_data(*data);
   // printf("Done!\n");

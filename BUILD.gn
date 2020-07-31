@@ -3864,7 +3864,6 @@ v8_source_set("v8_base_without_compiler") {
     "src/parsing/parsing.cc",
     "src/parsing/binast-deserializer.cc",
     "src/parsing/binast-parser.cc",
-    "src/parsing/binast.cc",
     "src/parsing/binast-parse-data.cc",
     "src/parsing/pending-compilation-error-handler.cc",
     "src/parsing/preparse-data.cc",

@@ -5,9 +5,10 @@
 #ifndef V8_PARSING_BINAST_PARSER_H_
 #define V8_PARSING_BINAST_PARSER_H_
 
-#include "src/parsing/binast.h"
+#include "src/strings/string-hasher-inl.h"
 #include "src/parsing/parse-info.h"
 #include "src/parsing/parser-base.h"
+#include "src/ast/ast.h"
 #include "src/parsing/parser.h"
 #include "src/base/overflowing-math.h"
 #include "src/base/ieee754.h"
@@ -20,7 +21,7 @@ class ParseInfo;
 // TODO: Figure out what to do here. Probably just want the same functionality as the normal (eager) parser.
 // class BinAstFuncNameInferrer {
 //  public:
-//   explicit BinAstFuncNameInferrer(BinAstValueFactory* avf) {}
+//   explicit BinAstFuncNameInferrer(AstValueFactory* avf) {}
 //   void RemoveAsyncKeywordFromEnd() const {}
 //   void Infer() const {}
 //   void RemoveLastFunction() const {}
@@ -41,17 +42,17 @@ class BinAstParser;
 
 struct BinAstParserFormalParameters : FormalParametersBase {
   struct Parameter : public ZoneObject {
-    Parameter(BinAstExpression* pattern, BinAstExpression* initializer, int position,
+    Parameter(Expression* pattern, Expression* initializer, int position,
               int initializer_end_position, bool is_rest)
         : initializer_and_is_rest(initializer, is_rest),
           pattern(pattern),
           position(position),
           initializer_end_position(initializer_end_position) {}
 
-    PointerWithPayload<BinAstExpression, bool, 1> initializer_and_is_rest;
+    PointerWithPayload<Expression, bool, 1> initializer_and_is_rest;
 
-    BinAstExpression* pattern;
-    BinAstExpression* initializer() const {
+    Expression* pattern;
+    Expression* initializer() const {
       return initializer_and_is_rest.GetPointer();
     }
     int position;
@@ -99,54 +100,54 @@ struct ParserTypes<BinAstParser> {
   using Impl = BinAstParser;
 
   // Return types for traversing functions.
-  using Block = v8::internal::BinAstBlock*;
-  using BreakableStatement = v8::internal::BinAstBreakableStatement*;
+  using Block = v8::internal::Block*;
+  using BreakableStatement = v8::internal::BreakableStatement*;
 
   // TODO(binast): Add support for classes
   using ClassLiteralProperty = /* TODO(binast) */ v8::internal::ClassLiteralProperty*;
   using ClassPropertyList = /* TODO(binast) */ZonePtrList<v8::internal::ClassLiteralProperty>*;
   using ClassStaticElementList = /* TODO(binast) */ZonePtrList<ClassLiteral::StaticElement>*;
 
-  using Expression = v8::internal::BinAstExpression*;
-  using ExpressionList = ScopedPtrList<v8::internal::BinAstExpression>;
+  using Expression = v8::internal::Expression*;
+  using ExpressionList = ScopedPtrList<v8::internal::Expression>;
   using FormalParameters = /* TODO(binast) */BinAstParserFormalParameters;
-  using ForStatement = BinAstForStatement*;
-  using FunctionLiteral = v8::internal::BinAstFunctionLiteral*;
+  using ForStatement = v8::internal::ForStatement*;
+  using FunctionLiteral = v8::internal::FunctionLiteral*;
   using Identifier = const AstRawString*;
-  using IterationStatement = v8::internal::BinAstIterationStatement*;
-  using ObjectLiteralProperty = BinAstObjectLiteral::Property*;
-  using ObjectPropertyList = ScopedPtrList<v8::internal::BinAstObjectLiteralProperty>;
-  using Statement = v8::internal::BinAstStatement*;
-  using StatementList = ScopedPtrList<BinAstStatement>;
+  using IterationStatement = v8::internal::IterationStatement*;
+  using ObjectLiteralProperty = ObjectLiteral::Property*;
+  using ObjectPropertyList = ScopedPtrList<v8::internal::ObjectLiteralProperty>;
+  using Statement = v8::internal::Statement*;
+  using StatementList = ScopedPtrList<v8::internal::Statement>;
 
   // TODO(binast): Add support for suspend
   using Suspend = /* TODO(binast) */int;
 
   // For constructing objects returned by the traversing functions.
-  using Factory = BinAstNodeFactory;
+  using Factory = AstNodeFactory;
 
   // Other implementation-specific tasks.
   using FuncNameInferrer = v8::internal::FuncNameInferrer<ParserTypes<BinAstParser>>;
   using SourceRange = v8::internal::SourceRange;
   using SourceRangeScope = v8::internal::SourceRangeScope;
-  using AstValueFactory = BinAstValueFactory;
+  using AstValueFactory = AstValueFactory;
   using AstRawString = AstRawString;
 };
 
 
 class BinAstParser : public ParserBase<BinAstParser> {
  public:
-  explicit BinAstParser(BinAstParseInfo* info);
+  explicit BinAstParser(ParseInfo* info);
 
   static bool IsPreParser() { return false; }
 
   // Sets the literal on |info| if parsing succeeded.
-  void ParseOnBackground(BinAstParseInfo* info, int start_position, int end_position,
+  void ParseOnBackground(ParseInfo* info, int start_position, int end_position,
                          int function_literal_id);
 
   // Initializes an empty scope chain for top-level scripts, or scopes which
   // consist of only the native context.
-  void InitializeEmptyScopeChain(BinAstParseInfo* info);
+  void InitializeEmptyScopeChain(ParseInfo* info);
 
   void PrepareGeneratorVariables()
   {
@@ -161,10 +162,10 @@ class BinAstParser : public ParserBase<BinAstParser> {
     return nullptr;
   }
 
-  void ParseProgram(BinAstParseInfo* info);
+  void ParseProgram(ParseInfo* info);
 
 
-  BinAstFunctionLiteral* DoParseFunction(BinAstParseInfo* info,
+  FunctionLiteral* DoParseFunction(ParseInfo* info,
                                    int start_position, int end_position,
                                    int function_literal_id,
                                    const AstRawString* raw_name);
@@ -207,25 +208,25 @@ class BinAstParser : public ParserBase<BinAstParser> {
     return scope()->NewTemporary(name);
   }
 
-  BinAstFunctionLiteral* DoParseProgram(BinAstParseInfo* info);
-  void PostProcessParseResult(BinAstParseInfo* info, BinAstFunctionLiteral* literal);
+  FunctionLiteral* DoParseProgram(ParseInfo* info);
+  void PostProcessParseResult(ParseInfo* info, FunctionLiteral* literal);
 
   // If we assign a function literal to a property we pretenure the
   // literal so it can be added as a constant function property.
   V8_INLINE static void CheckAssigningFunctionLiteralToProperty(
-      BinAstExpression* left, BinAstExpression* right) {
+      Expression* left, Expression* right) {
     DCHECK_NOT_NULL(left);
     if (left->IsProperty() && right->IsFunctionLiteral()) {
       right->AsFunctionLiteral()->set_pretenure();
     }
   }
 
-  void ParseModuleItemList(ScopedPtrList<BinAstStatement>* body)
+  void ParseModuleItemList(ScopedPtrList<Statement>* body)
   {
     // TODO(binast)
     DCHECK(false);
   }
-  BinAstStatement* ParseModuleItem()
+  Statement* ParseModuleItem()
   {
     // TODO(binast)
     DCHECK(false);
@@ -242,13 +243,13 @@ class BinAstParser : public ParserBase<BinAstParser> {
     // TODO(binast)
     DCHECK(false);
   }
-  BinAstStatement* ParseExportDeclaration()
+  Statement* ParseExportDeclaration()
   {
     // TODO(binast)
     DCHECK(false);
     return nullptr;
   }
-  BinAstStatement* ParseExportDefault()
+  Statement* ParseExportDefault()
   {
     // TODO(binast)
     DCHECK(false);
@@ -282,9 +283,9 @@ class BinAstParser : public ParserBase<BinAstParser> {
     DCHECK(false);
     return nullptr;
   }
-  BinAstStatement* BuildInitializationBlock(DeclarationParsingResult* parsing_result)
+  Statement* BuildInitializationBlock(DeclarationParsingResult* parsing_result)
   {
-    ScopedPtrList<BinAstStatement> statements(pointer_buffer());
+    ScopedPtrList<Statement> statements(pointer_buffer());
     for (const auto& declaration : parsing_result->declarations) {
       if (!declaration.initializer) continue;
       InitializeVariables(&statements, parsing_result->descriptor.kind,
@@ -292,7 +293,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     }
     return factory()->NewBlock(true, statements);
   }
-  BinAstExpression* RewriteReturn(BinAstExpression* return_value, int pos)
+  Expression* RewriteReturn(Expression* return_value, int pos)
   {
     if (IsDerivedConstructor(function_state_->kind())) {
     // For subclass constructors we need to return this in case of undefined;
@@ -307,11 +308,11 @@ class BinAstParser : public ParserBase<BinAstParser> {
     // temp = expr
     Variable* temp = NewTemporary(ast_value_factory()->empty_string());
     VariableProxy* proxy = factory()->NewVariableProxy(temp);
-    BinAstAssignment* assign = factory()->NewAssignment(
+    Assignment* assign = factory()->NewAssignment(
         Token::ASSIGN, factory()->NewVariableProxyExpression(proxy), return_value, pos);
 
     // temp === undefined
-    BinAstExpression* is_undefined = factory()->NewCompareOperation(
+    Expression* is_undefined = factory()->NewCompareOperation(
         Token::EQ_STRICT, assign,
         factory()->NewUndefinedLiteral(kNoSourcePosition), pos);
 
@@ -325,14 +326,14 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
   return return_value;
   }
-  BinAstStatement* RewriteSwitchStatement(BinAstSwitchStatement* switch_statement,
+  Statement* RewriteSwitchStatement(SwitchStatement* switch_statement,
                                     Scope* scope)
   {
     // TODO(binast)
     DCHECK(false);
     return nullptr;
   }
-  BinAstBlock* RewriteCatchPattern(CatchInfo* catch_info)
+  Block* RewriteCatchPattern(CatchInfo* catch_info)
   {
     // TODO(binast)
     DCHECK(false);
@@ -343,9 +344,9 @@ class BinAstParser : public ParserBase<BinAstParser> {
     // TODO(binast)
     DCHECK(false);
   }
-  BinAstStatement* RewriteTryStatement(BinAstBlock* try_block, BinAstBlock* catch_block,
+  Statement* RewriteTryStatement(Block* try_block, Block* catch_block,
                                  const SourceRange& catch_range,
-                                 BinAstBlock* finally_block,
+                                 Block* finally_block,
                                  const SourceRange& finally_range,
                                  const CatchInfo& catch_info, int pos)
   {
@@ -355,14 +356,14 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   void ParseAndRewriteGeneratorFunctionBody(int pos, FunctionKind kind,
-                                            ScopedPtrList<BinAstStatement>* body)
+                                            ScopedPtrList<Statement>* body)
   {
     // TODO(binast)
     DCHECK(false);
   }
 
   void ParseAndRewriteAsyncGeneratorFunctionBody(
-      int pos, FunctionKind kind, ScopedPtrList<BinAstStatement>* body)
+      int pos, FunctionKind kind, ScopedPtrList<Statement>* body)
   {
     // TODO(binast)
     DCHECK(false);
@@ -372,8 +373,8 @@ class BinAstParser : public ParserBase<BinAstParser> {
                               FunctionSyntaxKind function_syntax_kind,
                               DeclarationScope* function_scope);
 
-  BinAstStatement* DeclareFunction(const AstRawString* variable_name,
-                             BinAstFunctionLiteral* function, VariableMode mode,
+  Statement* DeclareFunction(const AstRawString* variable_name,
+                             FunctionLiteral* function, VariableMode mode,
                              VariableKind kind, int beg_pos, int end_pos,
                              ZonePtrList<const AstRawString>* names);
 
@@ -409,7 +410,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
 
   // Insert initializer statements for var-bindings shadowing parameter bindings
   // from a non-simple parameter list.
-  void InsertShadowingVarBindingInitializers(BinAstBlock* block)
+  void InsertShadowingVarBindingInitializers(Block* block)
   {
     // TODO(binast)
     DCHECK(false);
@@ -492,21 +493,21 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   void DeclareArrowFunctionFormalParameters(
-    BinAstParserFormalParameters* parameters, BinAstExpression* params,
+    BinAstParserFormalParameters* parameters, Expression* params,
     const Scanner::Location& params_loc)
   {
     // TODO(binast)
     DCHECK(false);
   }
 
-  BinAstExpression* ExpressionListToExpression(const ScopedPtrList<BinAstExpression>& args)
+  Expression* ExpressionListToExpression(const ScopedPtrList<Expression>& args)
   {
     // TODO(binast)
     DCHECK(false);
     return nullptr;
   }
 
-  BinAstStatement* DeclareClass(const AstRawString* variable_name, BinAstExpression* value,
+  Statement* DeclareClass(const AstRawString* variable_name, Expression* value,
                         ZonePtrList<const AstRawString>* names,
                         int class_token_pos, int end_pos)
   {
@@ -567,12 +568,12 @@ class BinAstParser : public ParserBase<BinAstParser> {
     // TODO(binast)
     DCHECK(false);
   }
-  void AddClassStaticBlock(BinAstBlock* block, ClassInfo* class_info)
+  void AddClassStaticBlock(Block* block, ClassInfo* class_info)
   {
     // TODO(binast)
     DCHECK(false);
   }
-  BinAstExpression* RewriteClassLiteral(ClassScope* block_scope,
+  Expression* RewriteClassLiteral(ClassScope* block_scope,
                                 const AstRawString* name,
                                 ClassInfo* class_info, int pos, int end_pos)
   {
@@ -602,7 +603,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     return false;
   }
 
-  BinAstBlock* BuildParameterInitializationBlock(
+  Block* BuildParameterInitializationBlock(
       const BinAstParserFormalParameters& parameters)
   {
     // TODO(bigint)
@@ -610,7 +611,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     return nullptr;
   }
 
-  BinAstBlock* BuildRejectPromiseOnException(BinAstBlock* block,
+  Block* BuildRejectPromiseOnException(Block* block,
                                        REPLMode repl_mode = REPLMode::kNo)
   {
     // TODO(bigint)
@@ -619,7 +620,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   void ParseFunction(
-      ScopedPtrList<BinAstStatement>* body, const AstRawString* function_name,
+      ScopedPtrList<Statement>* body, const AstRawString* function_name,
       int pos, FunctionKind kind, FunctionSyntaxKind function_syntax_kind,
       DeclarationScope* function_scope, int* num_parameters,
       int* function_length, bool* has_duplicate_parameters,
@@ -633,7 +634,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
 
     const ZonePtrList<const AstRawString>* cooked() const { return &cooked_; }
     const ZonePtrList<const AstRawString>* raw() const { return &raw_; }
-    const ZonePtrList<BinAstExpression>* expressions() const { return &expressions_; }
+    const ZonePtrList<Expression>* expressions() const { return &expressions_; }
     int position() const { return pos_; }
 
     void AddTemplateSpan(const AstRawString* cooked, const AstRawString* raw,
@@ -643,14 +644,14 @@ class BinAstParser : public ParserBase<BinAstParser> {
       raw_.Add(raw, zone);
     }
 
-    void AddExpression(BinAstExpression* expression, Zone* zone) {
+    void AddExpression(Expression* expression, Zone* zone) {
       expressions_.Add(expression, zone);
     }
 
    private:
     ZonePtrList<const AstRawString> cooked_;
     ZonePtrList<const AstRawString> raw_;
-    ZonePtrList<BinAstExpression> expressions_;
+    ZonePtrList<Expression> expressions_;
     int pos_;
   };
 
@@ -675,27 +676,27 @@ class BinAstParser : public ParserBase<BinAstParser> {
     DCHECK(false);
   }
   void AddTemplateExpression(TemplateLiteralState* state,
-                             BinAstExpression* expression)
+                             Expression* expression)
   {
     // TODO(binast)
     DCHECK(false);
   }
-  BinAstExpression* CloseTemplateLiteral(TemplateLiteralState* state, int start,
-                                   BinAstExpression* tag)
-  {
-    // TODO(binast)
-    DCHECK(false);
-    return nullptr;
-  }
-
-  BinAstStatement* DeclareNative(const AstRawString* name, int pos)
+  Expression* CloseTemplateLiteral(TemplateLiteralState* state, int start,
+                                   Expression* tag)
   {
     // TODO(binast)
     DCHECK(false);
     return nullptr;
   }
 
-  BinAstBlock* IgnoreCompletion(BinAstStatement* statement)
+  Statement* DeclareNative(const AstRawString* name, int pos)
+  {
+    // TODO(binast)
+    DCHECK(false);
+    return nullptr;
+  }
+
+  Block* IgnoreCompletion(Statement* statement)
   {
     // TODO(binast)
     DCHECK(false);
@@ -714,7 +715,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   void InitializeVariables(
-      ScopedPtrList<BinAstStatement>* statements, VariableKind kind,
+      ScopedPtrList<Statement>* statements, VariableKind kind,
       const DeclarationParsingResult::Declaration* declaration)
   {
     if (has_error()) return;
@@ -725,48 +726,48 @@ class BinAstParser : public ParserBase<BinAstParser> {
     if (pos == kNoSourcePosition) {
       pos = declaration->initializer->position();
     }
-    BinAstAssignment* assignment = factory()->NewAssignment(
+    Assignment* assignment = factory()->NewAssignment(
         Token::INIT, declaration->pattern, declaration->initializer, pos);
     statements->Add(factory()->NewExpressionStatement(assignment, pos));
   }
 
-  BinAstBlock* RewriteForVarInLegacy(const ForInfo& for_info)
+  Block* RewriteForVarInLegacy(const ForInfo& for_info)
   {
     // TODO(binast)
     DCHECK(false);
     return nullptr;
   }
-  void DesugarBindingInForEachStatement(ForInfo* for_info, BinAstBlock** body_block,
-                                        BinAstExpression** each_variable)
+  void DesugarBindingInForEachStatement(ForInfo* for_info, Block** body_block,
+                                        Expression** each_variable)
   {
     // TODO(binast)
     DCHECK(false);
   }
-  BinAstBlock* CreateForEachStatementTDZ(BinAstBlock* init_block, const ForInfo& for_info)
-  {
-    // TODO(binast)
-    DCHECK(false);
-    return nullptr;
-  }
-
-  BinAstStatement* DesugarLexicalBindingsInForStatement(
-      BinAstForStatement* loop, BinAstStatement* init, BinAstExpression* cond, BinAstStatement* next,
-      BinAstStatement* body, Scope* inner_scope, const ForInfo& for_info)
+  Block* CreateForEachStatementTDZ(Block* init_block, const ForInfo& for_info)
   {
     // TODO(binast)
     DCHECK(false);
     return nullptr;
   }
 
+  Statement* DesugarLexicalBindingsInForStatement(
+      ForStatement* loop, Statement* init, Expression* cond, Statement* next,
+      Statement* body, Scope* inner_scope, const ForInfo& for_info)
+  {
+    // TODO(binast)
+    DCHECK(false);
+    return nullptr;
+  }
 
-  BinAstFunctionLiteral* ParseFunctionLiteral(
+
+  FunctionLiteral* ParseFunctionLiteral(
     const AstRawString* name, Scanner::Location function_name_location,
     FunctionNameValidity function_name_validity, FunctionKind kind,
     int function_token_position, FunctionSyntaxKind type,
     LanguageMode language_mode,
     ZonePtrList<const AstRawString>* arguments_for_wrapped_function);
 
-  BinAstObjectLiteral* InitializeObjectLiteral(BinAstObjectLiteral* object_literal) {
+  ObjectLiteral* InitializeObjectLiteral(ObjectLiteral* object_literal) {
     object_literal->CalculateEmitStore(main_zone());
     return object_literal;
   }
@@ -798,7 +799,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     DCHECK(false);
   }
 
-  class BinAstThisExpression* ThisExpression() {
+  class ThisExpression* ThisExpression() {
     // UseThis();
     // return factory()->ThisExpression();
     // TODO(binast)
@@ -806,7 +807,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     return nullptr;
   }
   
-  class BinAstThisExpression* NewThisExpression(int pos) {
+  class ThisExpression* NewThisExpression(int pos) {
     //UseThis();
     //return factory()->NewThisExpression(pos);
     DCHECK(false);
@@ -814,34 +815,34 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
 
-  BinAstExpression* NewSuperPropertyReference(int pos)
+  Expression* NewSuperPropertyReference(int pos)
   {
     // TODO(binast)
     DCHECK(false);
     return nullptr;
   }
-  BinAstExpression* NewSuperCallReference(int pos)
+  Expression* NewSuperCallReference(int pos)
   {
     // TODO(binast)
     DCHECK(false);
     return nullptr;
   }
-  BinAstExpression* NewTargetExpression(int pos)
+  Expression* NewTargetExpression(int pos)
   {
     // TODO(binast)
     DCHECK(false);
     return nullptr;
   }
-  BinAstExpression* ImportMetaExpression(int pos)
+  Expression* ImportMetaExpression(int pos)
   {
     // TODO(binast)
     DCHECK(false);
     return nullptr;
   }
 
-  BinAstExpression* ExpressionFromLiteral(Token::Value token, int pos);
+  Expression* ExpressionFromLiteral(Token::Value token, int pos);
 
-  V8_INLINE BinAstVariableProxyExpression* ExpressionFromPrivateName(
+  V8_INLINE VariableProxyExpression* ExpressionFromPrivateName(
       PrivateNameScopeIterator* private_name_scope, const AstRawString* name,
       int start_position) {
     // VariableProxy* proxy = factory()->ast_node_factory()->NewVariableProxy(
@@ -853,7 +854,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     return nullptr;
   }
 
-  V8_INLINE BinAstVariableProxyExpression* ExpressionFromIdentifier(
+  V8_INLINE VariableProxyExpression* ExpressionFromIdentifier(
     const AstRawString* name, int start_position,
     InferName infer = InferName::kYes) {
     if (infer == InferName::kYes) {
@@ -877,10 +878,10 @@ class BinAstParser : public ParserBase<BinAstParser> {
     return nullptr;
   }
 
-  V8_INLINE ZonePtrList<BinAstExpression>* NewExpressionList(int size) const {
-    return zone()->New<ZonePtrList<BinAstExpression>>(size, zone());
+  V8_INLINE ZonePtrList<Expression>* NewExpressionList(int size) const {
+    return zone()->New<ZonePtrList<Expression>>(size, zone());
   }
-  V8_INLINE ZonePtrList<BinAstObjectLiteral::Property>* NewObjectPropertyList(
+  V8_INLINE ZonePtrList<ObjectLiteral::Property>* NewObjectPropertyList(
       int size) const {
     // return zone()->New<ZonePtrList<ObjectLiteral::Property>>(size, zone());
     // TODO(binast)
@@ -900,20 +901,20 @@ class BinAstParser : public ParserBase<BinAstParser> {
     DCHECK(false);
     return nullptr;
   }
-  V8_INLINE ZonePtrList<BinAstStatement>* NewStatementList(int size) const {
-    return zone()->New<ZonePtrList<BinAstStatement>>(size, zone());
+  V8_INLINE ZonePtrList<Statement>* NewStatementList(int size) const {
+    return zone()->New<ZonePtrList<Statement>>(size, zone());
   }
 
-  BinAstExpression* NewV8Intrinsic(const AstRawString* name,
-                             const ScopedPtrList<BinAstExpression>& args, int pos)
+  Expression* NewV8Intrinsic(const AstRawString* name,
+                             const ScopedPtrList<Expression>& args, int pos)
   {
     // TODO(binast)
     DCHECK(false);
     return nullptr;
   }
 
-  BinAstExpression* NewV8RuntimeFunctionForFuzzing(
-      const Runtime::Function* function, const ScopedPtrList<BinAstExpression>& args,
+  Expression* NewV8RuntimeFunctionForFuzzing(
+      const Runtime::Function* function, const ScopedPtrList<Expression>& args,
       int pos)
   {
     // TODO(binast)
@@ -921,14 +922,14 @@ class BinAstParser : public ParserBase<BinAstParser> {
     return nullptr;
   }
 
-  V8_INLINE BinAstStatement* NewThrowStatement(BinAstExpression* exception, int pos) {
+  V8_INLINE Statement* NewThrowStatement(Expression* exception, int pos) {
     return factory()->NewExpressionStatement(
         factory()->NewThrow(exception, pos), pos);
   }
 
   V8_INLINE void AddFormalParameter(BinAstParserFormalParameters* parameters,
-                                    BinAstExpression* pattern,
-                                    BinAstExpression* initializer,
+                                    Expression* pattern,
+                                    Expression* initializer,
                                     int initializer_end_position,
                                     bool is_rest) {
     parameters->UpdateArityAndFunctionLength(initializer != nullptr, is_rest);
@@ -962,7 +963,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   // Returns true if we have a binary expression between two numeric
   // literals. In that case, *x will be changed to an expression which is the
   // computed value.
-  bool ShortcutNumericLiteralBinaryExpression(BinAstExpression** x, BinAstExpression* y,
+  bool ShortcutNumericLiteralBinaryExpression(Expression** x, Expression* y,
                                               Token::Value op, int pos)
   {
     // TODO(binast): Dedupe this with normal AST implementation
@@ -1029,7 +1030,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   // expression (with the same operation) and a value, which can be collapsed
   // into a single n-ary expression. In that case, *x will be changed to an
   // n-ary expression.
-  bool CollapseNaryExpression(BinAstExpression** x, BinAstExpression* y, Token::Value op,
+  bool CollapseNaryExpression(Expression** x, Expression* y, Token::Value op,
                               int pos, const SourceRange& range)
   {
     // TODO(binast): Dedupe this with other AST implementation
@@ -1038,9 +1039,9 @@ class BinAstParser : public ParserBase<BinAstParser> {
 
     // Convert *x into an nary operation with the given op, returning false if
     // this is not possible.
-    BinAstNaryOperation* nary = nullptr;
+    NaryOperation* nary = nullptr;
     if ((*x)->IsBinaryOperation()) {
-      BinAstBinaryOperation* binop = (*x)->AsBinaryOperation();
+      BinaryOperation* binop = (*x)->AsBinaryOperation();
       if (binop->op() != op) return false;
 
       nary = factory()->NewNaryOperation(op, binop->left(), 2);
@@ -1069,7 +1070,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   // + <Number literal> -> <Number literal>
   // - <Number literal> -> <Number literal with value negated>
   // ~ <literal> -> true / false
-  BinAstExpression* BuildUnaryExpression(BinAstExpression* expression, Token::Value op,
+  Expression* BuildUnaryExpression(Expression* expression, Token::Value op,
                                    int pos)
   {
     // TODO(binast)
@@ -1077,8 +1078,8 @@ class BinAstParser : public ParserBase<BinAstParser> {
     return nullptr;
   }
 
-  BinAstExpression* SpreadCall(BinAstExpression* function,
-                         const ScopedPtrList<BinAstExpression>& args, int pos,
+  Expression* SpreadCall(Expression* function,
+                         const ScopedPtrList<Expression>& args, int pos,
                          Call::PossiblyEval is_possibly_eval,
                          bool optional_chain)
   {
@@ -1086,8 +1087,8 @@ class BinAstParser : public ParserBase<BinAstParser> {
     DCHECK(false);
     return nullptr;
   }
-  BinAstExpression* SpreadCallNew(BinAstExpression* function,
-                            const ScopedPtrList<BinAstExpression>& args, int pos)
+  Expression* SpreadCallNew(Expression* function,
+                            const ScopedPtrList<Expression>& args, int pos)
   {
     // TODO(binast)
     DCHECK(false);
@@ -1101,7 +1102,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     DCHECK(false);
   }
 
-  void SetFunctionNameFromPropertyName(BinAstLiteralProperty* property,
+  void SetFunctionNameFromPropertyName(LiteralProperty* property,
                                        const AstRawString* name,
                                        const AstRawString* prefix = nullptr) {
     if (has_error()) return;
@@ -1120,11 +1121,11 @@ class BinAstParser : public ParserBase<BinAstParser> {
                      name != nullptr);
     }
 
-    BinAstExpression* value = property->value();
+    Expression* value = property->value();
     SetFunctionName(value, name, prefix);
   }
 
-  void SetFunctionNameFromPropertyName(BinAstObjectLiteralProperty* property,
+  void SetFunctionNameFromPropertyName(ObjectLiteralProperty* property,
                                        const AstRawString* name,
                                        const AstRawString* prefix = nullptr)
   {
@@ -1136,12 +1137,12 @@ class BinAstParser : public ParserBase<BinAstParser> {
     DCHECK(!property->value()->IsAnonymousFunctionDefinition() ||
           property->kind() == ObjectLiteralProperty::COMPUTED);
 
-    SetFunctionNameFromPropertyName(static_cast<BinAstLiteralProperty*>(property), name,
+    SetFunctionNameFromPropertyName(static_cast<LiteralProperty*>(property), name,
                                     prefix);
   }
 
-  void SetFunctionNameFromIdentifierRef(BinAstExpression* value,
-                                        BinAstExpression* identifier)
+  void SetFunctionNameFromIdentifierRef(Expression* value,
+                                        Expression* identifier)
   {
     if (!identifier->IsVariableProxyExpression()) return;
     SetFunctionName(value, identifier->AsVariableProxyExpression()->raw_name());
@@ -1151,22 +1152,22 @@ class BinAstParser : public ParserBase<BinAstParser> {
   V8_INLINE static std::nullptr_t NullIdentifier() { return nullptr; }
   V8_INLINE static std::nullptr_t NullExpression() { return nullptr; }
   V8_INLINE static std::nullptr_t NullLiteralProperty() { return nullptr; }
-  V8_INLINE static ZonePtrList<BinAstExpression>* NullExpressionList() {
+  V8_INLINE static ZonePtrList<Expression>* NullExpressionList() {
     return nullptr;
   }
-  V8_INLINE static ZonePtrList<BinAstStatement>* NullStatementList() {
+  V8_INLINE static ZonePtrList<Statement>* NullStatementList() {
     return nullptr;
   }
   V8_INLINE static std::nullptr_t NullStatement() { return nullptr; }
   V8_INLINE static std::nullptr_t NullBlock() { return nullptr; }
-  BinAstExpression* FailureExpression() { return factory()->FailureExpression(); }
+  Expression* FailureExpression() { return factory()->FailureExpression(); }
 
   template <typename T>
   V8_INLINE static bool IsNull(T subject) {
     return subject == nullptr;
   }
 
-  V8_INLINE static bool IsIterationStatement(BinAstStatement* subject) {
+  V8_INLINE static bool IsIterationStatement(Statement* subject) {
     return subject->AsIterationStatement() != nullptr;
   }
 
@@ -1191,7 +1192,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     fni_.PushVariableName(id);
   }
 
-  V8_INLINE void PushPropertyName(BinAstExpression* expression) {
+  V8_INLINE void PushPropertyName(Expression* expression) {
     if (expression->IsPropertyName()) {
       fni_.PushLiteralName(expression->AsLiteral()->AsRawPropertyName());
     } else {
@@ -1205,7 +1206,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     fni_.PushEnclosingName(name);
   }
 
-  V8_INLINE void AddFunctionForNameInference(BinAstFunctionLiteral* func_to_infer) {
+  V8_INLINE void AddFunctionForNameInference(FunctionLiteral* func_to_infer) {
     // fni_.AddFunction(func_to_infer);
     // TODO(binast)
     DCHECK(false);
@@ -1232,7 +1233,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     info_->set_contains_asm_module(true);
   }
 
-  V8_INLINE void RecordBlockSourceRange(BinAstBlock* node,
+  V8_INLINE void RecordBlockSourceRange(Block* node,
                                         int32_t continuation_position) {
     // if (source_range_map_ == nullptr) return;
     // source_range_map_->Insert(
@@ -1240,7 +1241,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     // TODO(binast)
   }
 
-  V8_INLINE void RecordCaseClauseSourceRange(BinAstCaseClause* node,
+  V8_INLINE void RecordCaseClauseSourceRange(CaseClause* node,
                                              const SourceRange& body_range) {
     // if (source_range_map_ == nullptr) return;
     // source_range_map_->Insert(node,
@@ -1249,7 +1250,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     DCHECK(false);
   }
 
-  V8_INLINE void RecordConditionalSourceRange(BinAstExpression* node,
+  V8_INLINE void RecordConditionalSourceRange(Expression* node,
                                               const SourceRange& then_range,
                                               const SourceRange& else_range) {
     // if (source_range_map_ == nullptr) return;
@@ -1260,14 +1261,14 @@ class BinAstParser : public ParserBase<BinAstParser> {
     DCHECK(false);
   }
 
-  V8_INLINE void RecordFunctionLiteralSourceRange(BinAstFunctionLiteral* node) {
+  V8_INLINE void RecordFunctionLiteralSourceRange(FunctionLiteral* node) {
     // if (source_range_map_ == nullptr) return;
     // source_range_map_->Insert(node, new (zone()) FunctionLiteralSourceRanges);
     // TODO(binast)
   }
 
   V8_INLINE void RecordBinaryOperationSourceRange(
-      BinAstExpression* node, const SourceRange& right_range) {
+      Expression* node, const SourceRange& right_range) {
     // if (source_range_map_ == nullptr) return;
     // source_range_map_->Insert(node->AsBinaryOperation(),
     //                           new (zone())
@@ -1275,7 +1276,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     // TODO(binast)
   }
 
-  V8_INLINE void RecordJumpStatementSourceRange(BinAstStatement* node,
+  V8_INLINE void RecordJumpStatementSourceRange(Statement* node,
                                                 int32_t continuation_position) {
     // if (source_range_map_ == nullptr) return;
     // source_range_map_->Insert(
@@ -1284,7 +1285,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     // TODO(binast)
   }
 
-  V8_INLINE void RecordIfStatementSourceRange(BinAstStatement* node,
+  V8_INLINE void RecordIfStatementSourceRange(Statement* node,
                                               const SourceRange& then_range,
                                               const SourceRange& else_range) {
     // if (source_range_map_ == nullptr) return;
@@ -1295,7 +1296,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   V8_INLINE void RecordIterationStatementSourceRange(
-      BinAstIterationStatement* node, const SourceRange& body_range) {
+      IterationStatement* node, const SourceRange& body_range) {
     // if (source_range_map_ == nullptr) return;
     // source_range_map_->Insert(
     //     node, new (zone()) IterationStatementSourceRanges(body_range));
@@ -1303,7 +1304,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   // Used to record source ranges of expressions associated with optional chain:
-  V8_INLINE void RecordExpressionSourceRange(BinAstExpression* node,
+  V8_INLINE void RecordExpressionSourceRange(Expression* node,
                                              const SourceRange& right_range) {
     // if (source_range_map_ == nullptr) return;
     // source_range_map_->Insert(node,
@@ -1311,7 +1312,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     // TODO(binast)
   }
 
-  V8_INLINE void RecordSuspendSourceRange(BinAstExpression* node,
+  V8_INLINE void RecordSuspendSourceRange(Expression* node,
                                           int32_t continuation_position) {
     // if (source_range_map_ == nullptr) return;
     // source_range_map_->Insert(static_cast<Suspend*>(node),
@@ -1322,7 +1323,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   V8_INLINE void RecordSwitchStatementSourceRange(
-      BinAstStatement* node, int32_t continuation_position) {
+      Statement* node, int32_t continuation_position) {
     // if (source_range_map_ == nullptr) return;
     // source_range_map_->Insert(
     //     node->AsSwitchStatement(),
@@ -1331,7 +1332,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     DCHECK(false);
   }
 
-  V8_INLINE void RecordThrowSourceRange(BinAstStatement* node,
+  V8_INLINE void RecordThrowSourceRange(Statement* node,
                                         int32_t continuation_position) {
     // if (source_range_map_ == nullptr) return;
     // ExpressionStatement* expr_stmt = static_cast<ExpressionStatement*>(node);
@@ -1343,7 +1344,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   V8_INLINE void RecordTryCatchStatementSourceRange(
-      BinAstTryCatchStatement* node, const SourceRange& body_range) {
+      TryCatchStatement* node, const SourceRange& body_range) {
     // if (source_range_map_ == nullptr) return;
     // source_range_map_->Insert(
     //     node, new (zone()) TryCatchStatementSourceRanges(body_range));
@@ -1352,7 +1353,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   V8_INLINE void RecordTryFinallyStatementSourceRange(
-      BinAstTryFinallyStatement* node, const SourceRange& body_range) {
+      TryFinallyStatement* node, const SourceRange& body_range) {
     // if (source_range_map_ == nullptr) return;
     // source_range_map_->Insert(
     //     node, new (zone()) TryFinallyStatementSourceRanges(body_range));
@@ -1368,7 +1369,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   V8_INLINE void ConvertBinaryToNaryOperationSourceRange(
-      BinAstBinaryOperation* binary_op, BinAstNaryOperation* nary_op) {
+      BinaryOperation* binary_op, NaryOperation* nary_op) {
     // TODO(binast)
     DCHECK(false);
     // if (source_range_map_ == nullptr) return;
@@ -1384,7 +1385,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     //     nary_op, new (zone()) NaryOperationSourceRanges(zone(), range));
   }
 
-  V8_INLINE void AppendNaryOperationSourceRange(BinAstNaryOperation* node,
+  V8_INLINE void AppendNaryOperationSourceRange(NaryOperation* node,
                                                 const SourceRange& range) {
     // TODO(binast)
     DCHECK(false);
@@ -1397,15 +1398,15 @@ class BinAstParser : public ParserBase<BinAstParser> {
     // DCHECK_EQ(node->subsequent_length(), ranges->RangeCount());
   }
 
-  void RewriteAsyncFunctionBody(ScopedPtrList<BinAstStatement>* body, BinAstBlock* block,
-                              BinAstExpression* return_value,
+  void RewriteAsyncFunctionBody(ScopedPtrList<Statement>* body, Block* block,
+                              Expression* return_value,
                               REPLMode repl_mode = REPLMode::kNo)
   {
     // TODO(binast)
     DCHECK(false);
   }
 
-  void SetFunctionName(BinAstExpression* value, const AstRawString* name,
+  void SetFunctionName(Expression* value, const AstRawString* name,
                       const AstRawString* prefix = nullptr)
   {
     if (!value->IsAnonymousFunctionDefinition() &&
@@ -1452,9 +1453,9 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   // Returns true if the expression is of type "this.foo".
-  V8_INLINE static bool IsThisProperty(BinAstExpression* expression) {
+  V8_INLINE static bool IsThisProperty(Expression* expression) {
     DCHECK_NOT_NULL(expression);
-    BinAstProperty* property = expression->AsProperty();
+    Property* property = expression->AsProperty();
     return property != nullptr && property->obj()->IsThisExpression();
     // TODO(binast)
     // DCHECK(false);
@@ -1462,7 +1463,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   // Returns true if the expression is of type "obj.#foo".
-  V8_INLINE static bool IsPrivateReference(BinAstExpression* expression) {
+  V8_INLINE static bool IsPrivateReference(Expression* expression) {
     // DCHECK_NOT_NULL(expression);
     // Property* property = expression->AsProperty();
     // return property != nullptr && property->IsPrivateReference();
@@ -1474,20 +1475,20 @@ class BinAstParser : public ParserBase<BinAstParser> {
   // This returns true if the expression is an indentifier (wrapped
   // inside a variable proxy).  We exclude the case of 'this', which
   // has been converted to a variable proxy.
-  /* V8_INLINE */ static bool IsIdentifier(BinAstExpression* expression) {
-    BinAstVariableProxyExpression* operand = expression->AsVariableProxyExpression();
+  /* V8_INLINE */ static bool IsIdentifier(Expression* expression) {
+    VariableProxyExpression* operand = expression->AsVariableProxyExpression();
     return operand != nullptr && !operand->is_new_target();
     // TODO(binast)
     // DCHECK(false);
     // return false;
   }
 
-  V8_INLINE static const AstRawString* AsIdentifier(BinAstExpression* expression) {
+  V8_INLINE static const AstRawString* AsIdentifier(Expression* expression) {
     DCHECK(IsIdentifier(expression));
     return expression->AsVariableProxyExpression()->raw_name();
   }
 
-  V8_INLINE VariableProxy* AsIdentifierExpression(BinAstExpression* expression) {
+  V8_INLINE VariableProxy* AsIdentifierExpression(Expression* expression) {
     // return expression->AsVariableProxyExpression();
     // TODO(binast)
     DCHECK(false);
@@ -1509,11 +1510,11 @@ class BinAstParser : public ParserBase<BinAstParser> {
   }
 
   V8_INLINE static bool IsBoilerplateProperty(
-      BinAstObjectLiteral::Property* property) {
+      ObjectLiteral::Property* property) {
     return !property->IsPrototype();
   }
 
-  V8_INLINE bool IsNative(BinAstExpression* expr) const {
+  V8_INLINE bool IsNative(Expression* expr) const {
     // DCHECK_NOT_NULL(expr);
     // return expr->IsVariableProxyExpression() &&
     //        expr->AsVariableProxyExpression()->raw_name() ==
@@ -1534,17 +1535,17 @@ class BinAstParser : public ParserBase<BinAstParser> {
   // Returns true if the statement is an expression statement containing
   // a single string literal.  If a second argument is given, the literal
   // is also compared with it and the result is true only if they are equal.
-  V8_INLINE bool IsStringLiteral(BinAstStatement* statement,
+  V8_INLINE bool IsStringLiteral(Statement* statement,
                                  const AstRawString* arg = nullptr) const {
-    BinAstExpressionStatement* e_stat = statement->AsExpressionStatement();
+    ExpressionStatement* e_stat = statement->AsExpressionStatement();
     if (e_stat == nullptr) return false;
-    BinAstLiteral* literal = e_stat->expression()->AsLiteral();
+    Literal* literal = e_stat->expression()->AsLiteral();
     if (literal == nullptr || !literal->IsString()) return false;
     return arg == nullptr || literal->AsRawString() == arg;
   }
 
   // Generate AST node that throws a ReferenceError with the given type.
-  V8_INLINE BinAstExpression* NewThrowReferenceError(MessageTemplate message,
+  V8_INLINE Expression* NewThrowReferenceError(MessageTemplate message,
                                                int pos) {
     // return NewThrowError(Runtime::kNewReferenceError, message,
     //                      ast_value_factory()->empty_string(), pos);
@@ -1556,7 +1557,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
   // Generate AST node that throws a SyntaxError with the given
   // type. The first argument may be null (in the handle sense) in
   // which case no arguments are passed to the constructor.
-  V8_INLINE BinAstExpression* NewThrowSyntaxError(MessageTemplate message,
+  V8_INLINE Expression* NewThrowSyntaxError(MessageTemplate message,
                                             const AstRawString* arg, int pos) {
     // return NewThrowError(Runtime::kNewSyntaxError, message, arg, pos);
     // TODO(binast)
@@ -1566,7 +1567,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
 
   // Generate AST node that throws a TypeError with the given
   // type. Both arguments must be non-null (in the handle sense).
-  V8_INLINE BinAstExpression* NewThrowTypeError(MessageTemplate message,
+  V8_INLINE Expression* NewThrowTypeError(MessageTemplate message,
                                           const AstRawString* arg, int pos) {
     // return NewThrowError(Runtime::kNewTypeError, message, arg, pos);
     // TODO(binast)
@@ -1598,7 +1599,7 @@ class BinAstParser : public ParserBase<BinAstParser> {
     return arg;
   }
 
-  BinAstIterationStatement* AsIterationStatement(BinAstBreakableStatement* s) {
+  IterationStatement* AsIterationStatement(BreakableStatement* s) {
     return s->AsIterationStatement();
   }
 
@@ -1606,9 +1607,9 @@ class BinAstParser : public ParserBase<BinAstParser> {
     Scanner::Location location, Token::Value token,
     MessageTemplate message = MessageTemplate::kUnexpectedToken);
 
-  BinAstParseInfo* info() const { return info_; }
+  ParseInfo* info() const { return info_; }
 
-  BinAstParseInfo* info_;
+  ParseInfo* info_;
   Scanner scanner_;
   Mode mode_;
 

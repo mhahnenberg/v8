@@ -22,6 +22,7 @@
 #include "src/parsing/token.h"
 #include "src/runtime/runtime.h"
 #include "src/zone/zone-list.h"
+#include "src/parsing/binast-parse-data.h"
 
 namespace v8 {
 namespace internal {
@@ -145,6 +146,15 @@ class AstNode: public ZoneObject {
 #undef DECLARE_TYPE_ENUM
 
   NodeType node_type() const { return NodeTypeField::decode(bit_field_); }
+  const char* node_type_name() const {
+    switch (node_type()) {
+      #define NODE_TYPE_NAME(type) case k##type: return #type;
+        AST_NODE_LIST(NODE_TYPE_NAME)
+        FAILURE_NODE_LIST(NODE_TYPE_NAME)
+      #undef NODE_TYPE_NAME
+    }
+  }
+
   int position() const { return position_; }
 
 #ifdef DEBUG
@@ -164,6 +174,7 @@ class AstNode: public ZoneObject {
   MaterializedLiteral* AsMaterializedLiteral();
 
  private:
+  friend class BinAstSerializeVisitor;
   friend class BinAstDeserializer;
 
   int position_;
@@ -2467,6 +2478,15 @@ class FunctionLiteral final : public Expression {
     return produced_preparse_data_;
   }
 
+  ProducedBinAstParseData* produced_binast_parse_data() const {
+    return produced_binast_parse_data_;
+  }
+
+  void set_produced_binast_parse_data(
+      ProducedBinAstParseData* produced_binast_parse_data) {
+    produced_binast_parse_data_ = produced_binast_parse_data;
+  }
+
  private:
   friend class AstNodeFactory;
   friend Zone;
@@ -2533,6 +2553,7 @@ class FunctionLiteral final : public Expression {
   AstConsString* raw_inferred_name_;
   Handle<String> inferred_name_;
   ProducedPreparseData* produced_preparse_data_;
+  ProducedBinAstParseData* produced_binast_parse_data_;
 };
 
 // Property is used for passing information
