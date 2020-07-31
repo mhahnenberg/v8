@@ -39,6 +39,17 @@ BinAstDeserializer::DeserializeResult<uint16_t> BinAstDeserializer::DeserializeU
   return {result, offset + sizeof(uint16_t)};
 }
 
+BinAstDeserializer::DeserializeResult<std::array<bool, 16>> BinAstDeserializer::DeserializeUint16Flags(ByteArray bytes, int offset) {
+  std::array<bool, 16> flags;
+  auto encoded_flags_result = DeserializeUint16(bytes, offset);
+  offset = encoded_flags_result.new_offset;
+  uint16_t encoded_flags = encoded_flags_result.value;
+  for (size_t i = 0; i < flags.size(); ++i) {
+    auto shift = flags.size() - i - 1;
+    flags[i] = (encoded_flags >> shift) & 0x1;
+  }
+  return {flags, offset};
+}
 
 BinAstDeserializer::DeserializeResult<uint8_t> BinAstDeserializer::DeserializeUint8(ByteArray bytes, int offset) {
   return {bytes.get(offset), offset + sizeof(uint8_t)};
@@ -273,13 +284,10 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
 
 
 BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::DeserializeDeclarationScope(ByteArray serialized_binast, int offset) {
-  Scope* scope = nullptr;
-  // Scope data:
-  // scope_type_
+  DeclarationScope* scope = nullptr;
   auto scope_type = DeserializeUint8(serialized_binast, offset);
   offset = scope_type.new_offset;
 
-  // function_kind_
   auto function_kind = DeserializeUint8(serialized_binast, offset);
   offset = function_kind.new_offset;
 
@@ -288,7 +296,8 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
     case EVAL_SCOPE:
     case MODULE_SCOPE:
     case SCRIPT_SCOPE:
-    case CATCH_SCOPE: {
+    case CATCH_SCOPE:
+    case WITH_SCOPE: {
       UNREACHABLE();
     }
     case FUNCTION_SCOPE: {
@@ -299,7 +308,6 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
       scope = parser_->NewVarblockScope();
       break;
     }
-    case WITH_SCOPE:
     default: {
       UNREACHABLE();
     }
@@ -319,29 +327,53 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
   // decls_
   auto declarations_result = DeserializeScopeDeclarations(serialized_binast, offset, scope);
   offset = declarations_result.new_offset;
+
   // scope_info_ TODO(binast): do we need this?
 #ifdef DEBUG
-  // scope_name_
-  // already_resolved_
-  // needs_migration_
+  auto scope_name_result = DeserializeRawStringReference(serialized_binast, offset);
+  offset = scope_name_result.new_offset;
+  scope->SetScopeName(scope_name_result.value);
+
+  auto already_resolved_result = DeserializeUint8(serialized_binast, offset);
+  offset = already_resolved_result.new_offset;
+  scope->already_resolved_ = already_resolved_result.value;
+
+  auto needs_migration_result = DeserializeUint8(serialized_binast, offset);
+  offset = needs_migration_result.new_offset;
+  scope->needs_migration_ = needs_migration_result.value;
 #endif
-  // start_position_
-  // end_position_
-  // num_stack_slots_
-  // num_heap_slots_
-  // is_strict_
-  // calls_eval_
-  // sloppy_eval_can_extend_vars_
-  // scope_nonlinear_
-  // is_hidden_
-  // is_debug_evaluate_scope_
-  // inner_scope_calls_eval_
-  // force_context_allocation_for_parameters_
-  // is_declaration_scope_
-  // private_name_lookup_skips_outer_class_
-  // must_use_preparsed_scope_data_
-  // is_repl_mode_scope_
-  // deserialized_scope_uses_external_cache_
+  auto start_position_result = DeserializeInt32(serialized_binast, offset);
+  offset = start_position_result.new_offset;
+  scope->set_start_position(start_position_result.value);
+
+  auto end_position_result = DeserializeInt32(serialized_binast, offset);
+  offset = end_position_result.new_offset;
+  scope->set_end_position(end_position_result.value);
+
+  auto num_stack_slots_result = DeserializeInt32(serialized_binast, offset);
+  offset = num_stack_slots_result.new_offset;
+  scope->num_stack_slots_ = num_stack_slots_result.value;
+
+  auto num_heap_slots_result = DeserializeInt32(serialized_binast, offset);
+  offset = num_heap_slots_result.new_offset;
+  scope->num_heap_slots_ = num_heap_slots_result.value;
+
+  auto encoded_boolean_flags_result = DeserializeUint16Flags(serialized_binast, offset);
+  offset = encoded_boolean_flags_result.new_offset;
+
+  scope->is_strict_ = encoded_boolean_flags_result.value[0];
+  scope->calls_eval_ = encoded_boolean_flags_result.value[1];
+  scope->sloppy_eval_can_extend_vars_ = encoded_boolean_flags_result.value[2];
+  scope->scope_nonlinear_ = encoded_boolean_flags_result.value[3];
+  scope->is_hidden_ = encoded_boolean_flags_result.value[4];
+  scope->is_debug_evaluate_scope_ = encoded_boolean_flags_result.value[5];
+  scope->inner_scope_calls_eval_ = encoded_boolean_flags_result.value[6];
+  scope->force_context_allocation_for_parameters_ = encoded_boolean_flags_result.value[7];
+  scope->is_declaration_scope_ = encoded_boolean_flags_result.value[8];
+  scope->private_name_lookup_skips_outer_class_ = encoded_boolean_flags_result.value[9];
+  scope->must_use_preparsed_scope_data_ = encoded_boolean_flags_result.value[10];
+  scope->is_repl_mode_scope_ = encoded_boolean_flags_result.value[11];
+  scope->deserialized_scope_uses_external_cache_ = encoded_boolean_flags_result.value[12];
 
   // DeclarationScope data:
   // has_simple_parameters_
