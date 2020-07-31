@@ -10,10 +10,10 @@
 namespace v8 {
 namespace internal {
 
-class BinAstFunctionLiteral;
+class FunctionLiteral;
 class ZoneBinAstParseData;
 class BinAstParseData;
-class BinAstValueFactory;
+class AstValueFactory;
 
 class ProducedBinAstParseData : public ZoneObject {
  public:
@@ -30,7 +30,7 @@ class ProducedBinAstParseData : public ZoneObject {
 
 class ZoneBinAstParseDataBuilder {
  public:
-  static ZoneBinAstParseData* Serialize(Zone* zone, BinAstValueFactory* ast_value_factory, BinAstFunctionLiteral* function_literal);
+  static ZoneBinAstParseData* Serialize(Zone* zone, AstValueFactory* ast_value_factory, FunctionLiteral* function_literal);
 };
 
 }  // namespace internal

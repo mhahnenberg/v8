@@ -32,7 +32,6 @@ class OptimizedCompilationInfo;
 class OptimizedCompilationJob;
 class ParseInfo;
 class Parser;
-class BinAstParseInfo;
 class BinAstParser;
 class RuntimeCallStats;
 class ScriptData;
@@ -445,10 +444,6 @@ class BackgroundBinAstParseTask : public BackgroundTask {
     DCHECK_NOT_NULL(info_);
     return info_.get();
   }
-  BinAstParseInfo* binast_info() {
-    DCHECK_NOT_NULL(binast_info_);
-    return binast_info_.get();
-  }
   BinAstParser* parser() { return parser_.get(); }
   UnoptimizedCompileFlags flags() const { return flags_; }
   const UnoptimizedCompileState* compile_state() const {
@@ -472,7 +467,6 @@ class BackgroundBinAstParseTask : public BackgroundTask {
   UnoptimizedCompileFlags flags_;
   UnoptimizedCompileState compile_state_;
   std::unique_ptr<ParseInfo> info_;
-  std::unique_ptr<BinAstParseInfo> binast_info_;
   std::unique_ptr<BinAstParser> parser_;
   LanguageMode language_mode_;
 };
