@@ -166,6 +166,7 @@ class V8_EXPORT_PRIVATE Parser : public NON_EXPORTED_BASE(ParserBase<Parser>) {
 
  private:
   friend class ParserBase<Parser>;
+  friend class BinAstParser;
   friend struct ParserFormalParameters;
   friend class i::ExpressionScope<ParserTypes<Parser>>;
   friend class i::VariableDeclarationParsingScope<ParserTypes<Parser>>;
