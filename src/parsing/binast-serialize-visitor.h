@@ -11,6 +11,12 @@
 namespace v8 {
 namespace internal {
 
+enum ScopeVariableKind : uint8_t {
+  Null = 0,
+  Reference = 1,
+  Definition = 2,
+};
+
 // TODO(binast)
 // Serializes binAST format into a linear sequence of bytes.
 class BinAstSerializeVisitor final : public BinAstVisitor {
@@ -52,7 +58,9 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeRawStringReference(const AstRawString* s);
   void SerializeStringTable(const AstConsString* function_name);
   void SerializeVariable(Variable* variable);
+  void SerializeScopeVariable(Scope* scope, Variable* variable);
   void SerializeScopeVariableReference(Scope* scope, Variable* variable);
+  void SerializeScopeVariableOrReference(Scope* scope, Variable* variable);
   void SerializeScopeVariableMap(Scope* scope);
   void SerializeDeclaration(Scope* scope, Declaration* decl);
   void SerializeScopeDeclarations(Scope* scope);
@@ -96,6 +104,13 @@ inline void BinAstSerializeVisitor::SerializeUint16Flags(const std::list<bool>& 
     uint16_t encoded_flag = static_cast<uint16_t>(flag);
     encoded_flags = (encoded_flags << 1) | encoded_flag;
   }
+
+  // For any unused flags, shift the encoding over so that the first flag is in the most significant bit.
+  // This makes it so that we don't need to know how many flags were serialized while deserializing (i.e.
+  // whatever is unused can be ignored);
+  for (size_t i = 16; i > flags.size(); i--) {
+    encoded_flags <<= 1;
+  }
   SerializeUint16(encoded_flags);
 }
 
@@ -116,7 +131,7 @@ inline void BinAstSerializeVisitor::SerializeInt32(int32_t value) {
   }
 }
 
-void BinAstSerializeVisitor::SerializeRawString(const AstRawString* s) {
+inline void BinAstSerializeVisitor::SerializeRawString(const AstRawString* s) {
   DCHECK(s != nullptr);
   DCHECK(string_table_indices_.count(s) == 0);
   uint32_t length = s->byte_length();
@@ -134,14 +149,14 @@ void BinAstSerializeVisitor::SerializeRawString(const AstRawString* s) {
   }
 }
 
-void BinAstSerializeVisitor::SerializeRawStringReference(const AstRawString* s) {
+inline void BinAstSerializeVisitor::SerializeRawStringReference(const AstRawString* s) {
   auto lookup_result = string_table_indices_.find(s);
   DCHECK(lookup_result != string_table_indices_.end());
   uint32_t string_table_index = lookup_result->second;
   SerializeUint32(string_table_index);
 }
 
-void BinAstSerializeVisitor::SerializeConsString(const AstConsString* cons_string) {
+inline void BinAstSerializeVisitor::SerializeConsString(const AstConsString* cons_string) {
   if (cons_string == nullptr) {
     // TODO(binast): This makes it impossible to distinguish between a nullptr and an empty AstConsString. Not sure if it will matter...
     SerializeUint32(0);
@@ -162,7 +177,7 @@ void BinAstSerializeVisitor::SerializeConsString(const AstConsString* cons_strin
   }
 }
 
-void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* function_name) {
+inline void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* function_name) {
   uint32_t num_entries = ast_value_factory_->string_table_.occupancy();
   // We serialize the outer function raw_name too.
   // TODO(binast): Do we need to?
@@ -195,7 +210,7 @@ void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* function_
   DCHECK(current_index == num_entries + 1);
 }
 
-void BinAstSerializeVisitor::SerializeAst(AstNode* root) {
+inline void BinAstSerializeVisitor::SerializeAst(AstNode* root) {
   auto start = std::chrono::high_resolution_clock::now();
   FunctionLiteral* literal = root->AsFunctionLiteral();
   DCHECK(literal != nullptr);
@@ -211,7 +226,7 @@ void BinAstSerializeVisitor::SerializeAst(AstNode* root) {
   printf("' in %lld us\n", microseconds);
 }
 
-void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
+inline void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
   SerializeRawStringReference(variable->raw_name());
 
   // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
@@ -221,7 +236,11 @@ void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
   SerializeUint16(variable->bit_field_);
 }
 
-void BinAstSerializeVisitor::SerializeScopeVariableReference(Scope* scope, Variable* variable) {
+inline void BinAstSerializeVisitor::SerializeScopeVariableReference(Scope* scope, Variable* variable) {
+  if (variable == nullptr) {
+    SerializeUint32(0);
+    return;
+  }
   auto scope_var_ids_result = vars_by_scope_.find(scope);
   DCHECK(scope_var_ids_result != vars_by_scope_.end());
   std::unordered_map<Variable*, uint32_t>& scope_var_ids = scope_var_ids_result->second;
@@ -232,7 +251,7 @@ void BinAstSerializeVisitor::SerializeScopeVariableReference(Scope* scope, Varia
   SerializeUint32(var_id);
 }
 
-void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
+inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
   // Serialize locals first.
   std::unordered_set<const AstRawString*> locals;
   for (Variable* variable : scope->locals_) {
@@ -248,7 +267,7 @@ void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
   SerializeUint32(total_local_vars);
   for (Variable* variable : scope->locals_) {
     SerializeVariable(variable);
-    var_ids.insert({variable, var_ids.size()});
+    var_ids.insert({variable, var_ids.size() + 1});
   }
 
   // Now serialize any remaining variables we missed
@@ -259,20 +278,20 @@ void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
     Variable* variable = reinterpret_cast<Variable*>(entry->value);
     if (locals.count(variable->raw_name()) == 0) {
       SerializeVariable(variable);
-      var_ids.insert({variable, var_ids.size()});
+      var_ids.insert({variable, var_ids.size() + 1});
       serialized_nonlocal_vars += 1;
     }
   }
   DCHECK(total_nonlocal_vars == serialized_nonlocal_vars);
 }
 
-void BinAstSerializeVisitor::SerializeDeclaration(Scope* scope, Declaration* decl) {
+inline void BinAstSerializeVisitor::SerializeDeclaration(Scope* scope, Declaration* decl) {
   SerializeInt32(decl->position());
   SerializeUint8(decl->type());
   SerializeScopeVariableReference(scope, decl->var());
 }
 
-void BinAstSerializeVisitor::SerializeScopeDeclarations(Scope* scope) {
+inline void BinAstSerializeVisitor::SerializeScopeDeclarations(Scope* scope) {
   uint32_t num_decls = 0;
   for (Declaration* decl : *scope->declarations()) {
     (void)decl;
@@ -286,7 +305,30 @@ void BinAstSerializeVisitor::SerializeScopeDeclarations(Scope* scope) {
   }
 }
 
-void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* scope) {
+inline void BinAstSerializeVisitor::SerializeScopeVariable(Scope* scope, Variable* variable) {
+  SerializeVariable(variable);
+  auto& vars_in_scope = vars_by_scope_[scope];
+  DCHECK(vars_in_scope.count(variable) == 0);
+  vars_in_scope.insert({variable, vars_in_scope.size() + 1});
+}
+
+inline void BinAstSerializeVisitor::SerializeScopeVariableOrReference(Scope* scope, Variable* variable) {
+  if (variable == nullptr) {
+    SerializeUint8(ScopeVariableKind::Null);
+    return;
+  }
+
+  auto& vars_in_scope = vars_by_scope_[scope];
+  if (vars_in_scope.count(variable) == 0) {
+    SerializeUint8(ScopeVariableKind::Definition);
+    SerializeScopeVariable(scope, variable);
+  } else {
+    SerializeUint8(ScopeVariableKind::Reference);
+    SerializeScopeVariableReference(scope, variable);
+  }
+}
+
+inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* scope) {
   ScopeType scope_type = scope->scope_type();
   SerializeUint8(scope_type);
   SerializeUint8(scope->function_kind());
@@ -301,6 +343,7 @@ void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* scope) 
   SerializeInt32(scope->end_position());
   SerializeInt32(scope->num_stack_slots());
   SerializeInt32(scope->num_heap_slots());
+  // Standard Scope flags
   SerializeUint16Flags({
     scope->is_strict_,
     scope->calls_eval_,
@@ -316,9 +359,37 @@ void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* scope) 
     scope->is_repl_mode_scope_,
     scope->deserialized_scope_uses_external_cache_,
   });
+  // DeclarationScope-specific flags
+  SerializeUint16Flags({
+    scope->has_simple_parameters_,
+    scope->is_asm_module_,
+    scope->force_eager_compilation_,
+    scope->has_rest_,
+    scope->has_arguments_parameter_,
+    scope->scope_uses_super_property_,
+    scope->should_eager_compile_,
+    scope->was_lazily_parsed_,
+    scope->is_skipped_function_,
+    scope->has_inferred_function_name_,
+    scope->has_checked_syntax_,
+    scope->has_this_reference_,
+    scope->has_this_declaration_,
+    scope->needs_private_name_context_chain_recalc_,
+  });
+
+  SerializeInt32(scope->num_parameters());
+  // TODO(binast): params_
+  // TODO(binast): sloppy_block_functions_
+
+  SerializeScopeVariableOrReference(scope, scope->receiver_);
+  SerializeScopeVariableOrReference(scope, scope->function_);
+  SerializeScopeVariableOrReference(scope, scope->new_target_);
+  SerializeScopeVariableOrReference(scope, scope->arguments_);
+
+  // TODO(binast): rare_data_
 }
 
-void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
+inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
   SerializeUint32(function_literal->bit_field_);
   SerializeInt32(function_literal->position_);
   const AstConsString* name = function_literal->raw_name();
@@ -326,67 +397,67 @@ void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_lite
   SerializeDeclarationScope(function_literal->scope());
 }
 
-void BinAstSerializeVisitor::VisitBlock(Block* block) {
+inline void BinAstSerializeVisitor::VisitBlock(Block* block) {
 
 }
 
-void BinAstSerializeVisitor::VisitIfStatement(IfStatement* if_statement) {
+inline void BinAstSerializeVisitor::VisitIfStatement(IfStatement* if_statement) {
 
 }
 
-void BinAstSerializeVisitor::VisitExpressionStatement(ExpressionStatement* statement) {
+inline void BinAstSerializeVisitor::VisitExpressionStatement(ExpressionStatement* statement) {
 
 }
 
-void BinAstSerializeVisitor::VisitLiteral(Literal* literal) {
+inline void BinAstSerializeVisitor::VisitLiteral(Literal* literal) {
 
 }
 
-void BinAstSerializeVisitor::VisitEmptyStatement(EmptyStatement* empty_statement) {
+inline void BinAstSerializeVisitor::VisitEmptyStatement(EmptyStatement* empty_statement) {
 
 }
 
-void BinAstSerializeVisitor::VisitAssignment(Assignment* assignment) {
+inline void BinAstSerializeVisitor::VisitAssignment(Assignment* assignment) {
 
 }
 
-void BinAstSerializeVisitor::VisitVariableProxyExpression(VariableProxyExpression* var_proxy) {
+inline void BinAstSerializeVisitor::VisitVariableProxyExpression(VariableProxyExpression* var_proxy) {
 
 }
 
-void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statement) {
+inline void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statement) {
 
 }
 
-void BinAstSerializeVisitor::VisitCompareOperation(CompareOperation* compare) {
+inline void BinAstSerializeVisitor::VisitCompareOperation(CompareOperation* compare) {
 
 }
 
-void BinAstSerializeVisitor::VisitCountOperation(CountOperation* operation) {
+inline void BinAstSerializeVisitor::VisitCountOperation(CountOperation* operation) {
 
 }
 
-void BinAstSerializeVisitor::VisitCall(Call* call) {
+inline void BinAstSerializeVisitor::VisitCall(Call* call) {
 
 }
 
-void BinAstSerializeVisitor::VisitProperty(Property* property) {
+inline void BinAstSerializeVisitor::VisitProperty(Property* property) {
 
 }
 
-void BinAstSerializeVisitor::VisitReturnStatement(ReturnStatement* return_statement) {
+inline void BinAstSerializeVisitor::VisitReturnStatement(ReturnStatement* return_statement) {
 
 }
 
-void BinAstSerializeVisitor::VisitBinaryOperation(BinaryOperation* binary_op) {
+inline void BinAstSerializeVisitor::VisitBinaryOperation(BinaryOperation* binary_op) {
 
 }
 
-void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_literal) {
+inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_literal) {
   
 }
 
-void BinAstSerializeVisitor::VisitArrayLiteral(ArrayLiteral* array_literal) {
+inline void BinAstSerializeVisitor::VisitArrayLiteral(ArrayLiteral* array_literal) {
   
 }
 

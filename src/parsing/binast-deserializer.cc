@@ -4,6 +4,7 @@
 
 #include "src/parsing/binast-deserializer.h"
 #include "src/ast/ast.h"
+#include "src/parsing/binast-serialize-visitor.h"
 #include "src/parsing/parser.h"
 #include "src/objects/fixed-array-inl.h"
 
@@ -107,6 +108,9 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
 BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserializer::DeserializeRawStringReference(ByteArray serialized_ast, int offset) {
   auto string_table_index = DeserializeUint32(serialized_ast, offset);
   offset = string_table_index.new_offset;
+  if (string_table_index.value == 0) {
+    return {nullptr, offset};
+  }
   auto lookup_result = string_table_.find(string_table_index.value);
   DCHECK(lookup_result != string_table_.end());
   const AstRawString* result = lookup_result->second;
@@ -191,6 +195,10 @@ BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Deserialize
   auto name = DeserializeRawStringReference(serialized_binast, offset);
   offset = name.new_offset;
 
+  if (name.value == nullptr) {
+    return {nullptr, offset};
+  }
+
   // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
   // next_
 
@@ -217,6 +225,10 @@ BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Deserialize
   auto variable_reference = DeserializeUint32(serialized_binast, offset);
   offset = variable_reference.new_offset;
 
+  if (variable_reference.value == 0) {
+    return {nullptr, offset};
+  }
+
   auto scope_vars_by_id_result = variables_by_scope_.find(scope);
   DCHECK(scope_vars_by_id_result != variables_by_scope_.end());
   std::unordered_map<uint32_t, Variable*>& scope_vars_by_id = scope_vars_by_id_result->second;
@@ -228,6 +240,45 @@ BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Deserialize
   return {variable, offset};
 }
 
+BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeScopeVariable(ByteArray serialized_binast, int offset, Scope* scope) {
+  auto variable_result = DeserializeNonLocalVariable(serialized_binast, offset, scope);
+  offset = variable_result.new_offset;
+  
+  Variable* variable = variable_result.value;
+  if (variable == nullptr) {
+    return {nullptr, offset};
+  }
+  auto& vars_in_scope = variables_by_scope_[scope];
+  vars_in_scope.insert({vars_in_scope.size() + 1, variable});
+  return {variable, offset};
+}
+
+
+BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeScopeVariableOrReference(ByteArray serialized_binast, int offset, Scope* scope) {
+  auto marker_result = DeserializeUint8(serialized_binast, offset);
+  offset = marker_result.new_offset;
+
+  switch (marker_result.value) {
+    case ScopeVariableKind::Null: {
+      return {nullptr, offset};
+    }
+    case ScopeVariableKind::Definition: {
+      auto scope_result = DeserializeScopeVariable(serialized_binast, offset, scope);
+      offset = scope_result.new_offset;
+      return {scope_result.value, offset};
+    }
+    case ScopeVariableKind::Reference: {
+      auto scope_result = DeserializeScopeVariableReference(serialized_binast, offset, scope);
+      offset = scope_result.new_offset;
+      return {scope_result.value, offset};
+    }
+    default: {
+      UNREACHABLE();
+    }
+  }
+}
+
+
 BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeVariableMap(ByteArray serialized_binast, int offset, Scope* scope) {
   auto total_local_variables = DeserializeUint32(serialized_binast, offset);
   offset = total_local_variables.new_offset;
@@ -238,7 +289,7 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
 
   for (uint32_t i = 0; i < total_local_variables.value; ++i) {
     auto new_variable = DeserializeLocalVariable(serialized_binast, offset, scope);
-    scope_vars_by_id.insert({scope_vars_by_id.size(), new_variable.value});
+    scope_vars_by_id.insert({scope_vars_by_id.size() + 1, new_variable.value});
     offset = new_variable.new_offset;
   }
 
@@ -247,7 +298,7 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
 
   for (uint32_t i = 0; i < total_nonlocal_variables.value; ++i) {
     auto new_variable = DeserializeNonLocalVariable(serialized_binast, offset, scope);
-    scope_vars_by_id.insert({scope_vars_by_id.size(), new_variable.value});
+    scope_vars_by_id.insert({scope_vars_by_id.size() + 1, new_variable.value});
     offset = new_variable.new_offset;
   }
 
@@ -376,35 +427,54 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
   scope->deserialized_scope_uses_external_cache_ = encoded_boolean_flags_result.value[12];
 
   // DeclarationScope data:
-  // has_simple_parameters_
-  // is_asm_module_
-  // force_eager_compilation_
-  // has_rest_
-  // has_arguments_parameter_
-  // scope_uses_super_property_
-  // should_eager_compile_
-  // was_lazily_parsed_
-#ifdef DEBUG
-  // is_being_lazy_parsed_
-#endif
-  // is_skipped_function_
-  // has_inferred_function_name_
-  // has_checked_syntax_
-  // has_this_reference_
-  // has_this_declaration_
-  // needs_private_name_context_chain_recalc_
-  // num_parameters_
-  // params_
-  // sloppy_block_functions_
-  // receiver_
+  auto encoded_decl_scope_bool_flags_result = DeserializeUint16Flags(serialized_binast, offset);
+  offset = encoded_decl_scope_bool_flags_result.new_offset;
+
+  scope->has_simple_parameters_ = encoded_decl_scope_bool_flags_result.value[0];
+  scope->is_asm_module_ = encoded_decl_scope_bool_flags_result.value[1];
+  scope->force_eager_compilation_ = encoded_decl_scope_bool_flags_result.value[2];
+  scope->has_rest_ = encoded_decl_scope_bool_flags_result.value[3];
+  scope->has_arguments_parameter_ = encoded_decl_scope_bool_flags_result.value[4];
+  scope->scope_uses_super_property_ = encoded_decl_scope_bool_flags_result.value[5];
+  scope->should_eager_compile_ = encoded_decl_scope_bool_flags_result.value[6];
+  scope->was_lazily_parsed_ = encoded_decl_scope_bool_flags_result.value[7];
+  scope->is_skipped_function_ = encoded_decl_scope_bool_flags_result.value[9];
+  scope->has_inferred_function_name_ = encoded_decl_scope_bool_flags_result.value[10];
+  scope->has_checked_syntax_ = encoded_decl_scope_bool_flags_result.value[11];
+  scope->has_this_reference_ = encoded_decl_scope_bool_flags_result.value[12];
+  scope->has_this_declaration_ = encoded_decl_scope_bool_flags_result.value[13];
+  scope->needs_private_name_context_chain_recalc_ = encoded_decl_scope_bool_flags_result.value[14];
+
+  auto num_parameters_result = DeserializeInt32(serialized_binast, offset);
+  offset = num_parameters_result.new_offset;
+  scope->num_parameters_ = num_parameters_result.value;
+
+  // params_: TODO(binast)
+
+  // sloppy_block_functions_: TODO(binast)
+
+  auto receiver_result = DeserializeScopeVariableOrReference(serialized_binast, offset, scope);
+  offset = receiver_result.new_offset;
+  scope->receiver_ = receiver_result.value;
+
   // function_
+  auto function_result = DeserializeScopeVariableOrReference(serialized_binast, offset, scope);
+  offset = function_result.new_offset;
+  scope->function_ = function_result.value;
+
   // new_target_
+  auto new_target_result = DeserializeScopeVariableOrReference(serialized_binast, offset, scope);
+  offset = new_target_result.new_offset;
+  scope->new_target_ = new_target_result.value;
+
   // arguments_
-  // rare_data_
+  auto arguments_result = DeserializeScopeVariableOrReference(serialized_binast, offset, scope);
+  offset = arguments_result.new_offset;
+  scope->arguments_ = arguments_result.value;
 
+  // rare_data_: TODO(binast)
 
-
-  return {nullptr, offset};
+  return {scope, offset};
 }
 
 BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::DeserializeFunctionLiteral(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {

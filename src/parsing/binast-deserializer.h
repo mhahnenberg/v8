@@ -49,6 +49,8 @@ class BinAstDeserializer {
   DeserializeResult<Variable*> DeserializeLocalVariable(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeNonLocalVariable(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeScopeVariableReference(ByteArray serialized_binast, int offset, Scope* scope);
+  DeserializeResult<Variable*> DeserializeScopeVariable(ByteArray serialized_binast, int offset, Scope* scope);
+  DeserializeResult<Variable*> DeserializeScopeVariableOrReference(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<std::nullptr_t> DeserializeScopeVariableMap(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<Declaration*> DeserializeDeclaration(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<std::nullptr_t> DeserializeScopeDeclarations(ByteArray serialized_binast, int offset, Scope* scope);

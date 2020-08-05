@@ -1231,6 +1231,8 @@ class V8_EXPORT_PRIVATE DeclarationScope : public Scope {
   void RewriteReplGlobalVariables();
 
  private:
+  friend class BinAstSerializeVisitor;
+  friend class BinAstDeserializer;
   V8_INLINE void AllocateParameter(Variable* var, int index);
 
   // Resolve and fill in the allocation information for all variables
