@@ -81,6 +81,14 @@ MaterializedLiteral* AstNode::AsMaterializedLiteral() {
   }
 }
 
+Statement* AstNode::AsStatement() {
+  switch (node_type()) {
+    STATEMENT_NODE_LIST(RETURN_NODE);
+    default:
+      return nullptr;
+  }
+}
+
 #undef RETURN_NODE
 
 bool Expression::IsSmiLiteral() const {
