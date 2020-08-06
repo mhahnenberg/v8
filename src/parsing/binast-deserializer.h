@@ -54,6 +54,7 @@ class BinAstDeserializer {
   DeserializeResult<std::nullptr_t> DeserializeScopeVariableMap(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<Declaration*> DeserializeDeclaration(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<std::nullptr_t> DeserializeScopeDeclarations(ByteArray serialized_binast, int offset, Scope* scope);
+  DeserializeResult<std::nullptr_t> DeserializeScopeParameters(ByteArray serialized_binast, int offset, DeclarationScope* scope);
   DeserializeResult<DeclarationScope*> DeserializeDeclarationScope(ByteArray serialized_binast, int offset);
 
   DeserializeResult<AstNode*> DeserializeAstNode(ByteArray serialized_ast, int offset);

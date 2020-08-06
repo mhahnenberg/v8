@@ -7,6 +7,7 @@
 #include "src/parsing/binast-serialize-visitor.h"
 #include "src/parsing/parser.h"
 #include "src/objects/fixed-array-inl.h"
+#include "src/zone/zone-list-inl.h"
 
 namespace v8 {
 namespace internal {
@@ -333,6 +334,19 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   return {nullptr, offset};
 }
 
+BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeParameters(ByteArray serialized_binast, int offset, DeclarationScope* scope) {
+  auto num_parameters_result = DeserializeInt32(serialized_binast, offset);
+  offset = num_parameters_result.new_offset;
+  scope->num_parameters_ = num_parameters_result.value;
+
+  for (int i = 0; i < num_parameters_result.value; ++i) {
+    auto param_result = DeserializeScopeVariableReference(serialized_binast, offset, scope);
+    offset = param_result.new_offset;
+    scope->params_.Add(param_result.value, zone());
+  }
+
+  return {nullptr, offset};
+}
 
 BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::DeserializeDeclarationScope(ByteArray serialized_binast, int offset) {
   DeclarationScope* scope = nullptr;
@@ -445,35 +459,28 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
   scope->has_this_declaration_ = encoded_decl_scope_bool_flags_result.value[13];
   scope->needs_private_name_context_chain_recalc_ = encoded_decl_scope_bool_flags_result.value[14];
 
-  auto num_parameters_result = DeserializeInt32(serialized_binast, offset);
-  offset = num_parameters_result.new_offset;
-  scope->num_parameters_ = num_parameters_result.value;
+  auto params_result = DeserializeScopeParameters(serialized_binast, offset, scope);
+  offset = params_result.new_offset;
 
-  // params_: TODO(binast)
-
-  // sloppy_block_functions_: TODO(binast)
+  // TODO(binast): sloppy_block_functions_ (needed for non-strict mode support)
 
   auto receiver_result = DeserializeScopeVariableOrReference(serialized_binast, offset, scope);
   offset = receiver_result.new_offset;
   scope->receiver_ = receiver_result.value;
 
-  // function_
   auto function_result = DeserializeScopeVariableOrReference(serialized_binast, offset, scope);
   offset = function_result.new_offset;
   scope->function_ = function_result.value;
 
-  // new_target_
   auto new_target_result = DeserializeScopeVariableOrReference(serialized_binast, offset, scope);
   offset = new_target_result.new_offset;
   scope->new_target_ = new_target_result.value;
 
-  // arguments_
   auto arguments_result = DeserializeScopeVariableOrReference(serialized_binast, offset, scope);
   offset = arguments_result.new_offset;
   scope->arguments_ = arguments_result.value;
 
-  // rare_data_: TODO(binast)
-
+  // TODO(binast): rare_data_ (needed for > ES5.1 features)
   return {scope, offset};
 }
 

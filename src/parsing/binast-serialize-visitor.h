@@ -64,6 +64,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeScopeVariableMap(Scope* scope);
   void SerializeDeclaration(Scope* scope, Declaration* decl);
   void SerializeScopeDeclarations(Scope* scope);
+  void SerializeScopeParameters(DeclarationScope* scope);
   void SerializeDeclarationScope(DeclarationScope* scope);
 
 
@@ -305,6 +306,14 @@ inline void BinAstSerializeVisitor::SerializeScopeDeclarations(Scope* scope) {
   }
 }
 
+inline void BinAstSerializeVisitor::SerializeScopeParameters(DeclarationScope* scope) {
+  SerializeInt32(scope->num_parameters());
+
+  for (Variable* variable : scope->params_) {
+    SerializeScopeVariableReference(scope, variable);
+  }
+}
+
 inline void BinAstSerializeVisitor::SerializeScopeVariable(Scope* scope, Variable* variable) {
   SerializeVariable(variable);
   auto& vars_in_scope = vars_by_scope_[scope];
@@ -377,16 +386,17 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
     scope->needs_private_name_context_chain_recalc_,
   });
 
-  SerializeInt32(scope->num_parameters());
-  // TODO(binast): params_
-  // TODO(binast): sloppy_block_functions_
+  SerializeScopeParameters(scope);
+  // TODO(binast): sloppy_block_functions_ (needed for non-strict mode support)
+  DCHECK(scope->sloppy_block_functions_.is_empty());
 
   SerializeScopeVariableOrReference(scope, scope->receiver_);
   SerializeScopeVariableOrReference(scope, scope->function_);
   SerializeScopeVariableOrReference(scope, scope->new_target_);
   SerializeScopeVariableOrReference(scope, scope->arguments_);
 
-  // TODO(binast): rare_data_
+  // TODO(binast): rare_data_ (needed for > ES5.1 feature support)
+  DCHECK(scope->rare_data_ == nullptr);
 }
 
 inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
