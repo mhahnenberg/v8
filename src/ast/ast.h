@@ -171,6 +171,7 @@ class AstNode: public ZoneObject {
   FAILURE_NODE_LIST(DECLARE_NODE_FUNCTIONS)
 #undef DECLARE_NODE_FUNCTIONS
 
+  Statement* AsStatement();
   IterationStatement* AsIterationStatement();
   MaterializedLiteral* AsMaterializedLiteral();
 
@@ -2463,6 +2464,7 @@ class FunctionLiteral final : public Expression {
  private:
   friend class AstNodeFactory;
   friend class BinAstSerializeVisitor;
+  friend class BinAstDeserializer;
 
   FunctionLiteral(Zone* zone, const AstConsString* name,
                   AstValueFactory* ast_value_factory, DeclarationScope* scope,
