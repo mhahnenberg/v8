@@ -59,6 +59,7 @@ class BinAstDeserializer {
 
   DeserializeResult<AstNode*> DeserializeAstNode(ByteArray serialized_ast, int offset);
   DeserializeResult<FunctionLiteral*> DeserializeFunctionLiteral(ByteArray serialized_ast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<std::nullptr_t> DeserializeNodeStub(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
 
   Parser* parser_;
   std::unordered_map<uint32_t, const AstRawString*> string_table_;
