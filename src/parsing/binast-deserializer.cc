@@ -19,6 +19,10 @@ BinAstDeserializer::BinAstDeserializer(Parser* parser)
 
 }
 
+Zone* BinAstDeserializer::zone() {
+  return parser_->zone();
+}
+
 BinAstDeserializer::DeserializeResult<uint32_t> BinAstDeserializer::DeserializeUint32(ByteArray bytes, int offset) {
   uint32_t result = 0;
   for (int i = 0; i < 4; ++i) {

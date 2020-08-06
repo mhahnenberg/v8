@@ -6,7 +6,6 @@
 #define V8_PARSING_BINAST_DESERIALIZER_H_
 
 #include <unordered_map>
-#include "src/parsing/parser.h"
 #include "src/handles/handles.h"
 
 namespace v8 {
@@ -20,6 +19,7 @@ class ReturnStatement;
 class ParseInfo;
 class AstConsString;
 class AstRawString;
+class Parser;
 
 class BinAstDeserializer {
  public:
@@ -34,8 +34,7 @@ class BinAstDeserializer {
     int new_offset;
   };
 
-  Zone* zone() { return parser_->zone(); }
-
+  Zone* zone();
   DeserializeResult<uint32_t> DeserializeUint32(ByteArray bytes, int offset);
   DeserializeResult<uint16_t> DeserializeUint16(ByteArray bytes, int offset);
   DeserializeResult<uint8_t> DeserializeUint8(ByteArray bytes, int offset);

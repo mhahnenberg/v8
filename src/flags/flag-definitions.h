@@ -1271,7 +1271,7 @@ DEFINE_BOOL(trace_maps, false, "trace map creation")
 DEFINE_BOOL(trace_maps_details, true, "also log map details")
 DEFINE_IMPLICATION(trace_maps, log_code)
 
-// parser.cc
+// abstract-parser.h
 DEFINE_BOOL(allow_natives_syntax, false, "allow natives syntax")
 DEFINE_BOOL(allow_natives_for_fuzzing, false,
             "allow only natives explicitly whitelisted for fuzzers")

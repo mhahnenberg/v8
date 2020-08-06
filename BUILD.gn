@@ -2905,7 +2905,7 @@ v8_source_set("v8_base_without_compiler") {
     "src/parsing/parse-info.cc",
     "src/parsing/parse-info.h",
     "src/parsing/parser-base.h",
-    "src/parsing/parser.cc",
+    "src/parsing/abstract-parser.h",
     "src/parsing/parser.h",
     "src/parsing/parsing.cc",
     "src/parsing/binast-deserializer.h",

@@ -32,20 +32,6 @@ void BinAstParser::InitializeEmptyScopeChain(ParseInfo* info) {
   original_scope_ = script_scope;
 }
 
-namespace {
-
-void MaybeResetCharacterStream(ParseInfo* info, FunctionLiteral* literal) {
-  // Don't reset the character stream if there is an asm.js module since it will
-  // be used again by the asm-parser.
-  if (info->contains_asm_module()) {
-    if (FLAG_stress_validate_asm) return;
-    if (literal != nullptr && literal->scope()->ContainsAsmModule()) return;
-  }
-  info->ResetCharacterStream();
-}
-
-} // namespace
-
 void BinAstParser::ParseProgram(ParseInfo* info)
 {
   FunctionLiteral* result = nullptr;
