@@ -2026,6 +2026,7 @@ class BinaryOperation final : public Expression {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstDeserializer;
   friend Zone;
 
   BinaryOperation(Token::Value op, Expression* left, Expression* right, int pos)

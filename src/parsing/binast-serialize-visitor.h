@@ -481,17 +481,20 @@ inline void BinAstSerializeVisitor::VisitCall(Call* call) {
 
 inline void BinAstSerializeVisitor::VisitProperty(Property* property) {
   SerializeAstNodeHeader(property);
-  // TODO(binast)
+  VisitNode(property->obj());
+  VisitNode(property->key());
 }
 
 inline void BinAstSerializeVisitor::VisitReturnStatement(ReturnStatement* return_statement) {
   SerializeAstNodeHeader(return_statement);
-  // TODO(binast)
+  SerializeInt32(return_statement->end_position());
+  VisitNode(return_statement->expression());
 }
 
 inline void BinAstSerializeVisitor::VisitBinaryOperation(BinaryOperation* binary_op) {
   SerializeAstNodeHeader(binary_op);
-  // TODO(binast)
+  VisitNode(binary_op->left());
+  VisitNode(binary_op->right());
 }
 
 inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_literal) {
