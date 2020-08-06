@@ -162,6 +162,18 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
     auto result = DeserializeFunctionLiteral(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
+  case AstNode::kReturnStatement: {
+    auto result = DeserializeReturnStatement(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
+  case AstNode::kBinaryOperation: {
+    auto result = DeserializeBinaryOperation(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
+  case AstNode::kProperty: {
+    auto result = DeserializeProperty(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
   case AstNode::kBlock:
   case AstNode::kIfStatement:
   case AstNode::kExpressionStatement:
@@ -173,9 +185,6 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
   case AstNode::kCompareOperation:
   case AstNode::kCountOperation:
   case AstNode::kCall:
-  case AstNode::kProperty:
-  case AstNode::kReturnStatement:
-  case AstNode::kBinaryOperation:
   case AstNode::kObjectLiteral:
   case AstNode::kArrayLiteral: {
     auto result = DeserializeNodeStub(serialized_binast, bit_field.value, position.value, offset);
@@ -568,6 +577,44 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   result->function_token_position_ = function_token_position.value;
   result->suspend_count_ = suspend_count.value;
 
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<ReturnStatement*> BinAstDeserializer::DeserializeReturnStatement(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto end_position = DeserializeInt32(serialized_binast, offset);
+  offset = end_position.new_offset;
+
+  auto expression = DeserializeAstNode(serialized_binast, offset);
+  offset = expression.new_offset;
+
+  ReturnStatement* result = parser_->factory()->NewReturnStatement(static_cast<Expression*>(expression.value), position, end_position.value);
+  result->bit_field_ = bit_field;
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<BinaryOperation*> BinAstDeserializer::DeserializeBinaryOperation(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto left = DeserializeAstNode(serialized_binast, offset);
+  offset = left.new_offset;
+
+  auto right = DeserializeAstNode(serialized_binast, offset);
+  offset = right.new_offset;
+
+  Token::Value op = BinaryOperation::OperatorField::decode(bit_field);
+
+  BinaryOperation* result = parser_->factory()->NewBinaryOperation(op, static_cast<Expression*>(left.value), static_cast<Expression*>(right.value), position);
+  result->bit_field_ = bit_field;
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<Property*> BinAstDeserializer::DeserializeProperty(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto obj = DeserializeAstNode(serialized_binast, offset);
+  offset = obj.new_offset;
+
+  auto key = DeserializeAstNode(serialized_binast, offset);
+  offset = key.new_offset;
+
+  Property* result = parser_->factory()->NewProperty(static_cast<Expression*>(obj.value), static_cast<Expression*>(key.value), position);
+  result->bit_field_ = bit_field;
   return {result, offset};
 }
 
