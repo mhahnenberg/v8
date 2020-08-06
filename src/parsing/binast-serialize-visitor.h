@@ -66,6 +66,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeScopeDeclarations(Scope* scope);
   void SerializeScopeParameters(DeclarationScope* scope);
   void SerializeDeclarationScope(DeclarationScope* scope);
+  void SerializeAstNodeHeader(AstNode* node);
 
 
   AstValueFactory* ast_value_factory_;
@@ -375,7 +376,7 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
     scope->force_eager_compilation_,
     scope->has_rest_,
     scope->has_arguments_parameter_,
-    scope->scope_uses_super_property_,
+    scope->uses_super_property_,
     scope->should_eager_compile_,
     scope->was_lazily_parsed_,
     scope->is_skipped_function_,
@@ -399,76 +400,108 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
   DCHECK(scope->rare_data_ == nullptr);
 }
 
+inline void BinAstSerializeVisitor::SerializeAstNodeHeader(AstNode* node) {
+  SerializeUint32(node->bit_field_);
+  SerializeInt32(node->position_);
+}
+
 inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
-  SerializeUint32(function_literal->bit_field_);
-  SerializeInt32(function_literal->position_);
+  SerializeAstNodeHeader(function_literal);
   const AstConsString* name = function_literal->raw_name();
   SerializeConsString(name);
   SerializeDeclarationScope(function_literal->scope());
+
+  SerializeInt32(function_literal->expected_property_count());
+  SerializeInt32(function_literal->parameter_count());
+  SerializeInt32(function_literal->function_length());
+  SerializeInt32(function_literal->function_token_position());
+  SerializeInt32(function_literal->suspend_count());
+  SerializeInt32(function_literal->function_literal_id());
+
+  SerializeInt32(function_literal->body()->length());
+  for (Statement* statement : *function_literal->body()) {
+    VisitNode(statement);
+  }
 }
 
 inline void BinAstSerializeVisitor::VisitBlock(Block* block) {
-
+  SerializeAstNodeHeader(block);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitIfStatement(IfStatement* if_statement) {
-
+  SerializeAstNodeHeader(if_statement);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitExpressionStatement(ExpressionStatement* statement) {
-
+  SerializeAstNodeHeader(statement);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitLiteral(Literal* literal) {
-
+  SerializeAstNodeHeader(literal);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitEmptyStatement(EmptyStatement* empty_statement) {
-
+  SerializeAstNodeHeader(empty_statement);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitAssignment(Assignment* assignment) {
-
+  SerializeAstNodeHeader(assignment);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitVariableProxyExpression(VariableProxyExpression* var_proxy) {
-
+  SerializeAstNodeHeader(var_proxy);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statement) {
-
+  SerializeAstNodeHeader(for_statement);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitCompareOperation(CompareOperation* compare) {
-
+  SerializeAstNodeHeader(compare);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitCountOperation(CountOperation* operation) {
-
+  SerializeAstNodeHeader(operation);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitCall(Call* call) {
-
+  SerializeAstNodeHeader(call);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitProperty(Property* property) {
-
+  SerializeAstNodeHeader(property);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitReturnStatement(ReturnStatement* return_statement) {
-
+  SerializeAstNodeHeader(return_statement);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitBinaryOperation(BinaryOperation* binary_op) {
-
+  SerializeAstNodeHeader(binary_op);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_literal) {
-  
+  SerializeAstNodeHeader(object_literal);
+  // TODO(binast)
 }
 
 inline void BinAstSerializeVisitor::VisitArrayLiteral(ArrayLiteral* array_literal) {
-  
+  SerializeAstNodeHeader(array_literal);
+  // TODO(binast)
 }
 
 }  // namespace internal

@@ -144,6 +144,8 @@ AstNode* BinAstDeserializer::DeserializeAst(ByteArray serialized_ast) {
   auto string_table_result = DeserializeStringTable(serialized_ast, offset);
   offset = string_table_result.new_offset;
   auto result = DeserializeAstNode(serialized_ast, offset);
+  // Check that we consumed all the bytes that were serialized.
+  DCHECK(result.new_offset == serialized_ast.length());
   return result.value;
 }
 
@@ -158,6 +160,25 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
   switch (nodeType) {
   case AstNode::kFunctionLiteral: {
     auto result = DeserializeFunctionLiteral(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
+  case AstNode::kBlock:
+  case AstNode::kIfStatement:
+  case AstNode::kExpressionStatement:
+  case AstNode::kLiteral:
+  case AstNode::kEmptyStatement:
+  case AstNode::kAssignment:
+  case AstNode::kVariableProxyExpression:
+  case AstNode::kForStatement:
+  case AstNode::kCompareOperation:
+  case AstNode::kCountOperation:
+  case AstNode::kCall:
+  case AstNode::kProperty:
+  case AstNode::kReturnStatement:
+  case AstNode::kBinaryOperation:
+  case AstNode::kObjectLiteral:
+  case AstNode::kArrayLiteral: {
+    auto result = DeserializeNodeStub(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
   default: {
@@ -316,7 +337,7 @@ BinAstDeserializer::DeserializeResult<Declaration*> BinAstDeserializer::Deserial
   auto variable = DeserializeScopeVariableReference(serialized_binast, offset, scope);
   offset = variable.new_offset;
 
-  Declaration* decl = new (zone()) Declaration(start_pos.value, static_cast<Declaration::DeclType>(decl_type.value));
+  Declaration* decl = zone()->New<Declaration>(start_pos.value, static_cast<Declaration::DeclType>(decl_type.value));
   decl->set_var(variable.value);
   return {decl, offset};
 }
@@ -449,7 +470,7 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
   scope->force_eager_compilation_ = encoded_decl_scope_bool_flags_result.value[2];
   scope->has_rest_ = encoded_decl_scope_bool_flags_result.value[3];
   scope->has_arguments_parameter_ = encoded_decl_scope_bool_flags_result.value[4];
-  scope->scope_uses_super_property_ = encoded_decl_scope_bool_flags_result.value[5];
+  scope->uses_super_property_ = encoded_decl_scope_bool_flags_result.value[5];
   scope->should_eager_compile_ = encoded_decl_scope_bool_flags_result.value[6];
   scope->was_lazily_parsed_ = encoded_decl_scope_bool_flags_result.value[7];
   scope->is_skipped_function_ = encoded_decl_scope_bool_flags_result.value[9];
@@ -485,7 +506,6 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
 }
 
 BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::DeserializeFunctionLiteral(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
-  std::vector<void*> pointer_buffer;
   // TODO(binast): Kind of silly that we serialize a cons string only to deserialized into a raw string
   auto name = DeserializeConsString(serialized_binast, offset);
   offset = name.new_offset;
@@ -505,22 +525,56 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   auto scope = DeserializeDeclarationScope(serialized_binast, offset);
   offset = scope.new_offset;
   
-  /* TODO */const ScopedPtrList<Statement> body(&pointer_buffer);
-  /* TODO */int expected_property_count = 0;
-  /* TODO */int parameter_count = 0;
-  /* TODO */int function_length = 0;
-  /* TODO */FunctionLiteral::ParameterFlag has_duplicate_parameters = FunctionLiteral::ParameterFlag::kNoDuplicateParameters;
-  /* TODO */FunctionSyntaxKind function_syntax_kind = FunctionSyntaxKind::kDeclaration;
-  /* TODO */FunctionLiteral::EagerCompileHint eager_compile_hint = FunctionLiteral::EagerCompileHint::kShouldLazyCompile;
-  /* TODO */bool has_braces = false;
-  /* TODO */int function_literal_id = 0;
+  auto expected_property_count = DeserializeInt32(serialized_binast, offset);
+  offset = expected_property_count.new_offset;
+
+  auto parameter_count = DeserializeInt32(serialized_binast, offset);
+  offset = parameter_count.new_offset;
+
+  auto function_length = DeserializeInt32(serialized_binast, offset);
+  offset = function_length.new_offset;
+
+  auto function_token_position = DeserializeInt32(serialized_binast, offset);
+  offset = function_token_position.new_offset;
+
+  auto suspend_count = DeserializeInt32(serialized_binast, offset);
+  offset = suspend_count.new_offset;
+
+  auto function_literal_id = DeserializeInt32(serialized_binast, offset);
+  offset = function_literal_id.new_offset;
+
+  FunctionLiteral::ParameterFlag has_duplicate_parameters = FunctionLiteral::HasDuplicateParameters::decode(bit_field) ? FunctionLiteral::ParameterFlag::kHasDuplicateParameters : FunctionLiteral::ParameterFlag::kNoDuplicateParameters;
+  FunctionSyntaxKind function_syntax_kind = FunctionLiteral::FunctionSyntaxKindBits::decode(bit_field);
+  FunctionLiteral::EagerCompileHint eager_compile_hint = scope.value->ShouldEagerCompile() ? FunctionLiteral::kShouldEagerCompile : FunctionLiteral::kShouldLazyCompile;
+  bool has_braces = FunctionLiteral::HasBracesField::decode(bit_field);
+
+  std::vector<void*> pointer_buffer;
+  ScopedPtrList<Statement> body(&pointer_buffer);
+  auto num_statements = DeserializeInt32(serialized_binast, offset);
+  offset = num_statements.new_offset;
+
+  for (int i = 0; i < num_statements.value; ++i) {
+    auto statement = DeserializeAstNode(serialized_binast, offset);
+    offset = statement.new_offset;
+    DCHECK(statement.value == nullptr || statement.value->AsStatement() != nullptr);
+    body.Add(static_cast<Statement*>(statement.value));
+  }
+
   FunctionLiteral* result = parser_->factory()->NewFunctionLiteral(
-    raw_name, scope.value, body, expected_property_count, parameter_count, 
-    function_length, has_duplicate_parameters, function_syntax_kind,
-    eager_compile_hint, position, has_braces, function_literal_id);
+    raw_name, scope.value, body, expected_property_count.value, parameter_count.value,
+    function_length.value, has_duplicate_parameters, function_syntax_kind,
+    eager_compile_hint, position, has_braces, function_literal_id.value);
+
+  result->function_token_position_ = function_token_position.value;
+  result->suspend_count_ = suspend_count.value;
+
   return {result, offset};
 }
 
+// This is just a placeholder while we implement the various nodes that we'll support.
+BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeNodeStub(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  return {nullptr, offset};
+}
 
 }  // namespace internal
 }  // namespace v8
