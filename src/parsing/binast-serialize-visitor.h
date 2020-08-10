@@ -58,21 +58,21 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeRawStringReference(const AstRawString* s);
   void SerializeStringTable(const AstConsString* function_name);
   void SerializeVariable(Variable* variable);
-  void SerializeScopeVariable(Scope* scope, Variable* variable);
-  void SerializeScopeVariableReference(Scope* scope, Variable* variable);
-  void SerializeScopeVariableOrReference(Scope* scope, Variable* variable);
+  void SerializeVariableReference(Variable* variable);
+  void SerializeVariableOrReference(Variable* variable);
   void SerializeScopeVariableMap(Scope* scope);
   void SerializeDeclaration(Scope* scope, Declaration* decl);
   void SerializeScopeDeclarations(Scope* scope);
   void SerializeScopeParameters(DeclarationScope* scope);
   void SerializeDeclarationScope(DeclarationScope* scope);
   void SerializeAstNodeHeader(AstNode* node);
-
+  void SerializeVariableProxy(VariableProxy* proxy);
 
   AstValueFactory* ast_value_factory_;
   std::unordered_map<const AstRawString*, uint32_t> string_table_indices_;
   std::vector<uint8_t> byte_data_;
-  std::unordered_map<Scope*, std::unordered_map<Variable*, uint32_t>> vars_by_scope_;
+  std::unordered_map<Variable*, uint32_t> variable_ids_;
+  std::unordered_map<VariableProxy*, int> var_proxy_ids;
 };
 
 inline void BinAstSerializeVisitor::SerializeUint32(uint32_t value) {
@@ -236,19 +236,18 @@ inline void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
   SerializeInt32(variable->index());
   SerializeInt32(variable->initializer_position());
   SerializeUint16(variable->bit_field_);
+
+  DCHECK(variable_ids_.count(variable) == 0);
+  variable_ids_.insert({variable, variable_ids_.size() + 1});
 }
 
-inline void BinAstSerializeVisitor::SerializeScopeVariableReference(Scope* scope, Variable* variable) {
+inline void BinAstSerializeVisitor::SerializeVariableReference(Variable* variable) {
   if (variable == nullptr) {
     SerializeUint32(0);
     return;
   }
-  auto scope_var_ids_result = vars_by_scope_.find(scope);
-  DCHECK(scope_var_ids_result != vars_by_scope_.end());
-  std::unordered_map<Variable*, uint32_t>& scope_var_ids = scope_var_ids_result->second;
-
-  auto var_id_result = scope_var_ids.find(variable);
-  DCHECK(var_id_result != scope_var_ids.end());
+  auto var_id_result = variable_ids_.find(variable);
+  DCHECK(var_id_result != variable_ids_.end());
   uint32_t var_id = var_id_result->second;
   SerializeUint32(var_id);
 }
@@ -260,16 +259,12 @@ inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
     locals.insert(variable->raw_name());
   }
 
-  DCHECK(vars_by_scope_.count(scope) == 0);
-  vars_by_scope_.insert({scope, std::unordered_map<Variable*, uint32_t>()});
-  std::unordered_map<Variable*, uint32_t>& var_ids = vars_by_scope_[scope];
-
   DCHECK(locals.size() < UINT32_MAX);
   uint32_t total_local_vars = static_cast<uint32_t>(locals.size());
   SerializeUint32(total_local_vars);
   for (Variable* variable : scope->locals_) {
     SerializeVariable(variable);
-    var_ids.insert({variable, var_ids.size() + 1});
+
   }
 
   // Now serialize any remaining variables we missed
@@ -280,7 +275,6 @@ inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
     Variable* variable = reinterpret_cast<Variable*>(entry->value);
     if (locals.count(variable->raw_name()) == 0) {
       SerializeVariable(variable);
-      var_ids.insert({variable, var_ids.size() + 1});
       serialized_nonlocal_vars += 1;
     }
   }
@@ -290,7 +284,7 @@ inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
 inline void BinAstSerializeVisitor::SerializeDeclaration(Scope* scope, Declaration* decl) {
   SerializeInt32(decl->position());
   SerializeUint8(decl->type());
-  SerializeScopeVariableReference(scope, decl->var());
+  SerializeVariableReference(decl->var());
 }
 
 inline void BinAstSerializeVisitor::SerializeScopeDeclarations(Scope* scope) {
@@ -311,30 +305,24 @@ inline void BinAstSerializeVisitor::SerializeScopeParameters(DeclarationScope* s
   SerializeInt32(scope->num_parameters());
 
   for (Variable* variable : scope->params_) {
-    SerializeScopeVariableReference(scope, variable);
+    SerializeVariableReference(variable);
   }
 }
 
-inline void BinAstSerializeVisitor::SerializeScopeVariable(Scope* scope, Variable* variable) {
-  SerializeVariable(variable);
-  auto& vars_in_scope = vars_by_scope_[scope];
-  DCHECK(vars_in_scope.count(variable) == 0);
-  vars_in_scope.insert({variable, vars_in_scope.size() + 1});
-}
-
-inline void BinAstSerializeVisitor::SerializeScopeVariableOrReference(Scope* scope, Variable* variable) {
+// Note: This could be deserialized as a Scoped or Non-scoped Variable depending on the context.
+inline void BinAstSerializeVisitor::SerializeVariableOrReference(Variable* variable) {
   if (variable == nullptr) {
     SerializeUint8(ScopeVariableKind::Null);
     return;
   }
 
-  auto& vars_in_scope = vars_by_scope_[scope];
-  if (vars_in_scope.count(variable) == 0) {
+  if (variable_ids_.count(variable) == 0) {
     SerializeUint8(ScopeVariableKind::Definition);
-    SerializeScopeVariable(scope, variable);
+    SerializeVariable(variable);
   } else {
+    DCHECK(variable->scope() != nullptr);
     SerializeUint8(ScopeVariableKind::Reference);
-    SerializeScopeVariableReference(scope, variable);
+    SerializeVariableReference(variable);
   }
 }
 
@@ -391,10 +379,10 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
   // TODO(binast): sloppy_block_functions_ (needed for non-strict mode support)
   DCHECK(scope->sloppy_block_functions_.is_empty());
 
-  SerializeScopeVariableOrReference(scope, scope->receiver_);
-  SerializeScopeVariableOrReference(scope, scope->function_);
-  SerializeScopeVariableOrReference(scope, scope->new_target_);
-  SerializeScopeVariableOrReference(scope, scope->arguments_);
+  SerializeVariableOrReference(scope->receiver_);
+  SerializeVariableOrReference(scope->function_);
+  SerializeVariableOrReference(scope->new_target_);
+  SerializeVariableOrReference(scope->arguments_);
 
   // TODO(binast): rare_data_ (needed for > ES5.1 feature support)
   DCHECK(scope->rare_data_ == nullptr);
@@ -403,6 +391,48 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
 inline void BinAstSerializeVisitor::SerializeAstNodeHeader(AstNode* node) {
   SerializeUint32(node->bit_field_);
   SerializeInt32(node->position_);
+}
+
+inline void BinAstSerializeVisitor::SerializeVariableProxy(VariableProxy* proxy) {
+  SerializeInt32(proxy->position());
+  SerializeUint32(proxy->bit_field_);
+  if (proxy->is_resolved()) {
+    SerializeVariableOrReference(proxy->var());
+  } else {
+    SerializeRawStringReference(proxy->raw_name());
+  }
+
+  // We need to be able to reproduce this chain of unresolved variable proxies,
+  // so we store all encountered VariableProxy objects in a map with their start
+  // positions, which should be unique per variable. We can then use this information
+  // during deserialization to link all of the VariableProxy objects.
+  if (proxy->next_unresolved_ == nullptr) {
+    // There is no next unresolved proxy, so store -1 which is an impossible start position.
+    SerializeInt32(-1);
+  } else {
+    // There is a next unresolved proxy, so look it up and add it if necessary.
+    int next_unresolved_position;
+    auto lookup_result = var_proxy_ids.find(proxy->next_unresolved_);
+    if (lookup_result == var_proxy_ids.end()) {
+      next_unresolved_position = proxy->next_unresolved_->position();
+      var_proxy_ids[proxy->next_unresolved_] = next_unresolved_position;
+    } else {
+      next_unresolved_position = lookup_result->second;
+    }
+    SerializeInt32(next_unresolved_position);
+  }
+  // Also insert ourself into the VariableProxy map if necessary.
+  auto lookup_result = var_proxy_ids.find(proxy);
+  if (lookup_result == var_proxy_ids.end()) {
+    var_proxy_ids[proxy] = proxy->position();
+  }
+
+  printf("\n  Serialized a VariableProxy for Variable '%.*s'\n", proxy->raw_name()->byte_length(), proxy->raw_name()->raw_data());
+}
+
+inline void ToDoBinAst() {
+  // TODO(binast): Delete this function when it's no longer needed.
+  // UNREACHABLE();
 }
 
 inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
@@ -426,57 +456,57 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
 
 inline void BinAstSerializeVisitor::VisitBlock(Block* block) {
   SerializeAstNodeHeader(block);
-  // TODO(binast)
+  ToDoBinAst();
 }
 
 inline void BinAstSerializeVisitor::VisitIfStatement(IfStatement* if_statement) {
   SerializeAstNodeHeader(if_statement);
-  // TODO(binast)
+  ToDoBinAst();
 }
 
 inline void BinAstSerializeVisitor::VisitExpressionStatement(ExpressionStatement* statement) {
   SerializeAstNodeHeader(statement);
-  // TODO(binast)
+  VisitNode(statement->expression());
 }
 
 inline void BinAstSerializeVisitor::VisitLiteral(Literal* literal) {
   SerializeAstNodeHeader(literal);
-  // TODO(binast)
+  ToDoBinAst();
 }
 
 inline void BinAstSerializeVisitor::VisitEmptyStatement(EmptyStatement* empty_statement) {
   SerializeAstNodeHeader(empty_statement);
-  // TODO(binast)
+  ToDoBinAst();
 }
 
 inline void BinAstSerializeVisitor::VisitAssignment(Assignment* assignment) {
   SerializeAstNodeHeader(assignment);
-  // TODO(binast)
+  ToDoBinAst();
 }
 
-inline void BinAstSerializeVisitor::VisitVariableProxyExpression(VariableProxyExpression* var_proxy) {
-  SerializeAstNodeHeader(var_proxy);
-  // TODO(binast)
+inline void BinAstSerializeVisitor::VisitVariableProxyExpression(VariableProxyExpression* var_proxy_expr) {
+  SerializeAstNodeHeader(var_proxy_expr);
+  SerializeVariableProxy(var_proxy_expr->proxy_);
 }
 
 inline void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statement) {
   SerializeAstNodeHeader(for_statement);
-  // TODO(binast)
+  ToDoBinAst();
 }
 
 inline void BinAstSerializeVisitor::VisitCompareOperation(CompareOperation* compare) {
   SerializeAstNodeHeader(compare);
-  // TODO(binast)
+  ToDoBinAst();
 }
 
 inline void BinAstSerializeVisitor::VisitCountOperation(CountOperation* operation) {
   SerializeAstNodeHeader(operation);
-  // TODO(binast)
+  ToDoBinAst();
 }
 
 inline void BinAstSerializeVisitor::VisitCall(Call* call) {
   SerializeAstNodeHeader(call);
-  // TODO(binast)
+  ToDoBinAst();
 }
 
 inline void BinAstSerializeVisitor::VisitProperty(Property* property) {
@@ -499,12 +529,12 @@ inline void BinAstSerializeVisitor::VisitBinaryOperation(BinaryOperation* binary
 
 inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_literal) {
   SerializeAstNodeHeader(object_literal);
-  // TODO(binast)
+  ToDoBinAst();
 }
 
 inline void BinAstSerializeVisitor::VisitArrayLiteral(ArrayLiteral* array_literal) {
   SerializeAstNodeHeader(array_literal);
-  // TODO(binast)
+  ToDoBinAst();
 }
 
 }  // namespace internal

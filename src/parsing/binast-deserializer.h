@@ -49,9 +49,11 @@ class BinAstDeserializer {
 
   DeserializeResult<Variable*> DeserializeLocalVariable(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeNonLocalVariable(ByteArray serialized_binast, int offset, Scope* scope);
-  DeserializeResult<Variable*> DeserializeScopeVariableReference(ByteArray serialized_binast, int offset, Scope* scope);
+  DeserializeResult<Variable*> DeserializeVariableReference(ByteArray serialized_binast, int offset);
   DeserializeResult<Variable*> DeserializeScopeVariable(ByteArray serialized_binast, int offset, Scope* scope);
+  DeserializeResult<Variable*> DeserializeNonScopeVariable(ByteArray serialized_binast, int offset);
   DeserializeResult<Variable*> DeserializeScopeVariableOrReference(ByteArray serialized_binast, int offset, Scope* scope);
+  DeserializeResult<Variable*> DeserializeNonScopeVariableOrReference(ByteArray serialized_binast, int offset);
   DeserializeResult<std::nullptr_t> DeserializeScopeVariableMap(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<Declaration*> DeserializeDeclaration(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<std::nullptr_t> DeserializeScopeDeclarations(ByteArray serialized_binast, int offset, Scope* scope);
@@ -63,11 +65,17 @@ class BinAstDeserializer {
   DeserializeResult<ReturnStatement*> DeserializeReturnStatement(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<BinaryOperation*> DeserializeBinaryOperation(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<Property*> DeserializeProperty(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<ExpressionStatement*> DeserializeExpressionStatement(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<VariableProxy*> DeserializeVariableProxy(ByteArray serialized_binast, int offset);
+  DeserializeResult<VariableProxyExpression*> DeserializeVariableProxyExpression(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<std::nullptr_t> DeserializeNodeStub(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
+
+  void LinkUnresolvedVariableProxies();
 
   Parser* parser_;
   std::unordered_map<uint32_t, const AstRawString*> string_table_;
-  std::unordered_map<Scope*, std::unordered_map<uint32_t, Variable*>> variables_by_scope_;
+  std::unordered_map<uint32_t, Variable*> variables_by_id_;
+  std::unordered_map<uint32_t, VariableProxy*> variable_proxies_by_position_;
 };
 
 }  // namespace internal
