@@ -16,6 +16,7 @@ class AstNode;
 class ByteArray;
 class Declaration;
 class FunctionLiteral;
+class ReturnStatement;
 class ParseInfo;
 class AstConsString;
 class AstRawString;
@@ -59,6 +60,9 @@ class BinAstDeserializer {
 
   DeserializeResult<AstNode*> DeserializeAstNode(ByteArray serialized_ast, int offset);
   DeserializeResult<FunctionLiteral*> DeserializeFunctionLiteral(ByteArray serialized_ast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<ReturnStatement*> DeserializeReturnStatement(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<BinaryOperation*> DeserializeBinaryOperation(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<Property*> DeserializeProperty(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<std::nullptr_t> DeserializeNodeStub(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
 
   Parser* parser_;
