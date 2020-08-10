@@ -139,6 +139,20 @@ BinAstDeserializer::DeserializeResult<AstConsString*> BinAstDeserializer::Deseri
   return {cons_string, offset};
 }
 
+void BinAstDeserializer::LinkUnresolvedVariableProxies() {
+  for (auto it = variable_proxies_by_position_.begin(); it != variable_proxies_by_position_.end(); ++it) {
+    VariableProxy* var_proxy = it->second;
+    if (var_proxy->next_unresolved_ == nullptr) {
+      continue;
+    }
+
+    int next_unresolved_position = (int)(std::intptr_t)var_proxy->next_unresolved_;
+    auto lookup_result = variable_proxies_by_position_.find(next_unresolved_position);
+    DCHECK(lookup_result != variable_proxies_by_position_.end());
+    var_proxy->next_unresolved_ = lookup_result->second;
+  }
+}
+
 AstNode* BinAstDeserializer::DeserializeAst(ByteArray serialized_ast) {
   int offset = 0;
   auto string_table_result = DeserializeStringTable(serialized_ast, offset);
@@ -146,6 +160,7 @@ AstNode* BinAstDeserializer::DeserializeAst(ByteArray serialized_ast) {
   auto result = DeserializeAstNode(serialized_ast, offset);
   // Check that we consumed all the bytes that were serialized.
   DCHECK(result.new_offset == serialized_ast.length());
+  LinkUnresolvedVariableProxies();
   return result.value;
 }
 
@@ -174,13 +189,19 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
     auto result = DeserializeProperty(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
+  case AstNode::kExpressionStatement: {
+    auto result = DeserializeExpressionStatement(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
+  case AstNode::kVariableProxyExpression: {
+    auto result = DeserializeVariableProxyExpression(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
   case AstNode::kBlock:
   case AstNode::kIfStatement:
-  case AstNode::kExpressionStatement:
   case AstNode::kLiteral:
   case AstNode::kEmptyStatement:
   case AstNode::kAssignment:
-  case AstNode::kVariableProxyExpression:
   case AstNode::kForStatement:
   case AstNode::kCompareOperation:
   case AstNode::kCountOperation:
@@ -252,7 +273,7 @@ BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Deserialize
   return {variable, offset};
 }
 
-BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeScopeVariableReference(ByteArray serialized_binast, int offset, Scope* scope) {
+BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeVariableReference(ByteArray serialized_binast, int offset) {
   auto variable_reference = DeserializeUint32(serialized_binast, offset);
   offset = variable_reference.new_offset;
 
@@ -260,12 +281,8 @@ BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Deserialize
     return {nullptr, offset};
   }
 
-  auto scope_vars_by_id_result = variables_by_scope_.find(scope);
-  DCHECK(scope_vars_by_id_result != variables_by_scope_.end());
-  std::unordered_map<uint32_t, Variable*>& scope_vars_by_id = scope_vars_by_id_result->second;
-
-  auto variable_result = scope_vars_by_id.find(variable_reference.value);
-  DCHECK(variable_result != scope_vars_by_id.end());
+  auto variable_result = variables_by_id_.find(variable_reference.value);
+  DCHECK(variable_result != variables_by_id_.end());
   Variable* variable = variable_result->second;
 
   return {variable, offset};
@@ -279,8 +296,36 @@ BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Deserialize
   if (variable == nullptr) {
     return {nullptr, offset};
   }
-  auto& vars_in_scope = variables_by_scope_[scope];
-  vars_in_scope.insert({vars_in_scope.size() + 1, variable});
+  variables_by_id_.insert({variables_by_id_.size() + 1, variable});
+  return {variable, offset};
+}
+
+// This is for Variables that didn't belong to any particular Scope, i.e. their scope_ field was null.
+BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeNonScopeVariable(ByteArray serialized_binast, int offset) {
+  auto name = DeserializeRawStringReference(serialized_binast, offset);
+  offset = name.new_offset;
+
+  if (name.value == nullptr) {
+    return {nullptr, offset};
+  }
+
+  // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
+  // next_
+
+  auto index = DeserializeInt32(serialized_binast, offset);
+  offset = index.new_offset;
+
+  auto initializer_position = DeserializeInt32(serialized_binast, offset);
+  offset = initializer_position.new_offset;
+
+  auto bit_field = DeserializeUint16(serialized_binast, offset);
+  offset = bit_field.new_offset;
+
+  // We just use bogus values for mode, etc. since they're already encoded in the bit field
+  Variable* variable = zone()->New<Variable>(nullptr, name.value, VariableMode::kVar, NORMAL_VARIABLE, kCreatedInitialized, kMaybeAssigned, IsStaticFlag::kNotStatic);
+  variable->index_ = index.value;
+  variable->initializer_position_ = initializer_position.value;
+  variable->bit_field_ = bit_field.value;
   return {variable, offset};
 }
 
@@ -299,7 +344,7 @@ BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Deserialize
       return {scope_result.value, offset};
     }
     case ScopeVariableKind::Reference: {
-      auto scope_result = DeserializeScopeVariableReference(serialized_binast, offset, scope);
+      auto scope_result = DeserializeVariableReference(serialized_binast, offset);
       offset = scope_result.new_offset;
       return {scope_result.value, offset};
     }
@@ -309,18 +354,37 @@ BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Deserialize
   }
 }
 
+BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeNonScopeVariableOrReference(ByteArray serialized_binast, int offset) {
+  auto marker_result = DeserializeUint8(serialized_binast, offset);
+  offset = marker_result.new_offset;
+
+  switch (marker_result.value) {
+    case ScopeVariableKind::Null: {
+      return {nullptr, offset};
+    }
+    case ScopeVariableKind::Definition: {
+      auto scope_result = DeserializeNonScopeVariable(serialized_binast, offset);
+      offset = scope_result.new_offset;
+      return {scope_result.value, offset};
+    }
+    case ScopeVariableKind::Reference: {
+      auto scope_result = DeserializeVariableReference(serialized_binast, offset);
+      offset = scope_result.new_offset;
+      return {scope_result.value, offset};
+    }
+    default: {
+      UNREACHABLE();
+    }
+  }
+}
 
 BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeVariableMap(ByteArray serialized_binast, int offset, Scope* scope) {
   auto total_local_variables = DeserializeUint32(serialized_binast, offset);
   offset = total_local_variables.new_offset;
 
-  DCHECK(variables_by_scope_.count(scope) == 0);
-  variables_by_scope_.insert({scope, std::unordered_map<uint32_t, Variable*>()});
-  std::unordered_map<uint32_t, Variable*>& scope_vars_by_id = variables_by_scope_[scope];
-
   for (uint32_t i = 0; i < total_local_variables.value; ++i) {
     auto new_variable = DeserializeLocalVariable(serialized_binast, offset, scope);
-    scope_vars_by_id.insert({scope_vars_by_id.size() + 1, new_variable.value});
+    variables_by_id_.insert({variables_by_id_.size() + 1, new_variable.value});
     offset = new_variable.new_offset;
   }
 
@@ -329,7 +393,7 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
 
   for (uint32_t i = 0; i < total_nonlocal_variables.value; ++i) {
     auto new_variable = DeserializeNonLocalVariable(serialized_binast, offset, scope);
-    scope_vars_by_id.insert({scope_vars_by_id.size() + 1, new_variable.value});
+    variables_by_id_.insert({variables_by_id_.size() + 1, new_variable.value});
     offset = new_variable.new_offset;
   }
 
@@ -343,7 +407,7 @@ BinAstDeserializer::DeserializeResult<Declaration*> BinAstDeserializer::Deserial
   auto decl_type = DeserializeUint8(serialized_binast, offset);
   offset = decl_type.new_offset;
 
-  auto variable = DeserializeScopeVariableReference(serialized_binast, offset, scope);
+  auto variable = DeserializeVariableReference(serialized_binast, offset);
   offset = variable.new_offset;
 
   Declaration* decl = zone()->New<Declaration>(start_pos.value, static_cast<Declaration::DeclType>(decl_type.value));
@@ -370,7 +434,7 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   scope->num_parameters_ = num_parameters_result.value;
 
   for (int i = 0; i < num_parameters_result.value; ++i) {
-    auto param_result = DeserializeScopeVariableReference(serialized_binast, offset, scope);
+    auto param_result = DeserializeVariableReference(serialized_binast, offset);
     offset = param_result.new_offset;
     scope->params_.Add(param_result.value, zone());
   }
@@ -614,6 +678,66 @@ BinAstDeserializer::DeserializeResult<Property*> BinAstDeserializer::Deserialize
   offset = key.new_offset;
 
   Property* result = parser_->factory()->NewProperty(static_cast<Expression*>(obj.value), static_cast<Expression*>(key.value), position);
+  result->bit_field_ = bit_field;
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<ExpressionStatement*> BinAstDeserializer::DeserializeExpressionStatement(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto expression = DeserializeAstNode(serialized_binast, offset);
+  offset = expression.new_offset;
+
+  ExpressionStatement* result = parser_->factory()->NewExpressionStatement(static_cast<Expression*>(expression.value), offset);
+  result->bit_field_ = bit_field;
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<VariableProxy*> BinAstDeserializer::DeserializeVariableProxy(ByteArray serialized_binast, int offset) {
+  auto position = DeserializeInt32(serialized_binast, offset);
+  offset = position.new_offset;
+
+  auto bit_field = DeserializeUint32(serialized_binast, offset);
+  offset = bit_field.new_offset;
+
+  bool is_resolved = VariableProxy::IsResolvedField::decode(bit_field.value);
+
+  VariableProxy* result;
+  if (is_resolved) {
+    // The resolved Variable should either be a reference (i.e. currently visible in scope) or should be a 
+    // NonScope Variable definition (i.e. it's a Variable that is outside the current Scope boundaries, 
+    // e.g. inside an eval).
+    auto variable = DeserializeNonScopeVariableOrReference(serialized_binast, offset);
+    offset = variable.new_offset;
+    result = parser_->factory()->NewVariableProxy(variable.value, position.value);
+  } else {
+    auto raw_name = DeserializeRawStringReference(serialized_binast, offset);
+    offset = raw_name.new_offset;
+    // We use NORMAL_VARIABLE as a placeholder here.
+    result = parser_->factory()->NewVariableProxy(raw_name.value, VariableKind::NORMAL_VARIABLE, position.value);
+  }
+  result->bit_field_ = bit_field.value;
+
+  auto next_unresolved_position = DeserializeInt32(serialized_binast, offset);
+  offset = next_unresolved_position.new_offset;
+
+  if (next_unresolved_position.value == -1) {
+    result->next_unresolved_ = nullptr;
+  } else {
+    result->next_unresolved_ = static_cast<VariableProxy*>(reinterpret_cast<void*>(next_unresolved_position.value));
+  }
+
+  DCHECK(variable_proxies_by_position_.count(position.value) == 0);
+  variable_proxies_by_position_[position.value] = result;
+
+  printf("\n  Deserialized a VariableProxy for Variable '%.*s'\n", result->raw_name()->byte_length(), result->raw_name()->raw_data());
+
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<VariableProxyExpression*> BinAstDeserializer::DeserializeVariableProxyExpression(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto variable_proxy = DeserializeVariableProxy(serialized_binast, offset);
+  offset = variable_proxy.new_offset;
+
+  VariableProxyExpression* result = parser_->factory()->NewVariableProxyExpression(variable_proxy.value);
   result->bit_field_ = bit_field;
   return {result, offset};
 }
