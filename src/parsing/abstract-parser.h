@@ -198,6 +198,7 @@ class AbstractParser
 
  private:
   friend class ParserBase<Impl>;
+  friend Impl;
   friend struct ParserFormalParameters;
   friend class i::ExpressionScope<ParserTypes<Impl>>;
   friend class i::VariableDeclarationParsingScope<ParserTypes<Impl>>;

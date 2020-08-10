@@ -20,6 +20,9 @@ namespace internal {
 template <typename T>
 class PodArray;
 
+template <typename Impl>
+class AbstractParser;
+
 class Parser;
 class PreParser;
 class PreparseData;
@@ -176,7 +179,8 @@ class V8_EXPORT_PRIVATE PreparseDataBuilder : public ZoneObject,
 
   // Saves the information needed for allocating the Scope's (and its
   // subscopes') variables.
-  void SaveScopeAllocationData(DeclarationScope* scope, Parser* parser);
+  template <typename Impl>
+  void SaveScopeAllocationData(DeclarationScope* scope, AbstractParser<Impl>* parser);
 
   // In some cases, PreParser cannot produce the same Scope structure as
   // Parser. If it happens, we're unable to produce the data that would enable
@@ -242,6 +246,9 @@ class V8_EXPORT_PRIVATE PreparseDataBuilder : public ZoneObject,
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(PreparseDataBuilder);
+
+ private:
+  void SaveScopeAllocationDataImpl(DeclarationScope* scope);
 };
 
 class ProducedPreparseData : public ZoneObject {
@@ -305,6 +312,19 @@ class ConsumedPreparseData {
  private:
   DISALLOW_COPY_AND_ASSIGN(ConsumedPreparseData);
 };
+
+template <typename Impl>
+void PreparseDataBuilder::SaveScopeAllocationData(
+    DeclarationScope* scope, AbstractParser<Impl>* parser) {
+  if (!has_data_) return;
+  DCHECK(HasInnerFunctions());
+
+  byte_data_.Start(parser->preparse_data_buffer());
+
+  SaveScopeAllocationDataImpl(scope);
+
+  byte_data_.Finalize(parser->factory()->zone());
+}
 
 }  // namespace internal
 }  // namespace v8
