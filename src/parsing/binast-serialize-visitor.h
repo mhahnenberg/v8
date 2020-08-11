@@ -48,11 +48,14 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   virtual void VisitArrayLiteral(ArrayLiteral *array_literal) override;
 
  private:
-  void SerializeUint32(uint32_t value);
+  void SerializeUint8(uint8_t value);
   void SerializeUint16(uint16_t value);
   void SerializeUint16Flags(const std::list<bool>& flags);
+  void SerializeUint32(uint32_t value);
+  void SerializeUint64(uint64_t value);
   void SerializeInt32(int32_t value);
-  void SerializeUint8(uint8_t value);
+  void SerializeDouble(double value);
+  void SerializeCString(const char* str);
   void SerializeRawString(const AstRawString* s);
   void SerializeConsString(const AstConsString* cons_string);
   void SerializeRawStringReference(const AstRawString* s);
@@ -74,6 +77,19 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   std::unordered_map<Variable*, uint32_t> variable_ids_;
   std::unordered_map<VariableProxy*, int> var_proxy_ids;
 };
+
+// TODO(binast): Maybe templatize these to reduce duplication?
+inline void BinAstSerializeVisitor::SerializeUint64(uint64_t value) {
+    for (size_t i = 0; i < sizeof(uint64_t) / sizeof(uint8_t); ++i) {
+    size_t shift = sizeof(uint8_t) * 8 * i;
+    uint64_t mask = 0xff << shift;
+    uint64_t masked_value = value & mask;
+    uint64_t final_value = masked_value >> shift;
+    DCHECK(final_value <= 0xff);
+    uint8_t truncated_final_value = final_value;
+    byte_data_.push_back(truncated_final_value);
+  }
+}
 
 inline void BinAstSerializeVisitor::SerializeUint32(uint32_t value) {
   for (size_t i = 0; i < sizeof(uint32_t) / sizeof(uint8_t); ++i) {
@@ -130,6 +146,26 @@ inline void BinAstSerializeVisitor::SerializeInt32(int32_t value) {
     DCHECK(final_value <= 0xff);
     uint8_t truncated_final_value = final_value;
     byte_data_.push_back(truncated_final_value);
+  }
+}
+
+inline void BinAstSerializeVisitor::SerializeDouble(double value) {
+  union {
+    double d;
+    uint64_t ui;
+  } converter;
+  converter.d = value;
+  SerializeUint64(converter.ui);
+}
+
+// Note: Assumes the provided char string is null-terminated
+inline void BinAstSerializeVisitor::SerializeCString(const char* str) {
+  for (int i = 0;; i++) {
+    char c = str[i];
+    if (c == 0) {
+      break;
+    }
+    SerializeUint8(c);
   }
 }
 
@@ -426,8 +462,6 @@ inline void BinAstSerializeVisitor::SerializeVariableProxy(VariableProxy* proxy)
   if (lookup_result == var_proxy_ids.end()) {
     var_proxy_ids[proxy] = proxy->position();
   }
-
-  printf("\n  Serialized a VariableProxy for Variable '%.*s'\n", proxy->raw_name()->byte_length(), proxy->raw_name()->raw_data());
 }
 
 inline void ToDoBinAst() {
@@ -471,7 +505,36 @@ inline void BinAstSerializeVisitor::VisitExpressionStatement(ExpressionStatement
 
 inline void BinAstSerializeVisitor::VisitLiteral(Literal* literal) {
   SerializeAstNodeHeader(literal);
-  ToDoBinAst();
+  switch(literal->type()) {
+    case Literal::kSmi: {
+      SerializeInt32(literal->smi_);
+      break;
+    }
+    case Literal::kHeapNumber: {
+      SerializeDouble(literal->number_);
+      break;
+    }
+    case Literal::kBigInt: {
+      SerializeCString(literal->bigint_.c_str());
+      break;
+    }
+    case Literal::kString: {
+      SerializeRawStringReference(literal->string_);
+      break;
+    }
+    case Literal::kBoolean: {
+      SerializeUint8(literal->boolean_);
+      break;
+    }
+    case Literal::kUndefined:
+    case Literal::kNull:
+    case Literal::kTheHole: {
+      break;
+    }
+    default: {
+      UNREACHABLE();
+    }
+  }
 }
 
 inline void BinAstSerializeVisitor::VisitEmptyStatement(EmptyStatement* empty_statement) {
