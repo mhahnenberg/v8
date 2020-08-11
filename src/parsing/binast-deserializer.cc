@@ -23,6 +23,18 @@ Zone* BinAstDeserializer::zone() {
   return parser_->zone();
 }
 
+// TODO(binast): Use templates to de-dupe some of these functions.
+BinAstDeserializer::DeserializeResult<uint64_t> BinAstDeserializer::DeserializeUint64(ByteArray bytes, int offset) {
+  uint64_t result = 0;
+  for (int i = 0; i < 8; ++i) {
+    size_t shift = sizeof(uint8_t) * 8 * i;
+    uint64_t unshifted_value = bytes.get(offset + i);
+    uint64_t shifted_value = unshifted_value << shift;
+    result |= shifted_value;
+  }
+  return {result, offset + sizeof(uint64_t)};
+}
+
 BinAstDeserializer::DeserializeResult<uint32_t> BinAstDeserializer::DeserializeUint32(ByteArray bytes, int offset) {
   uint32_t result = 0;
   for (int i = 0; i < 4; ++i) {
@@ -70,6 +82,35 @@ BinAstDeserializer::DeserializeResult<int32_t> BinAstDeserializer::DeserializeIn
     result |= shifted_value;
   }
   return {result, offset + sizeof(int32_t)};
+}
+
+BinAstDeserializer::DeserializeResult<double> BinAstDeserializer::DeserializeDouble(ByteArray bytes, int offset) {
+  union {
+    double d;
+    uint64_t ui;
+  } converter;
+
+  auto result = DeserializeUint64(bytes, offset);
+  offset = result.new_offset;
+  converter.ui = result.value;
+  return {converter.d, offset};
+}
+
+BinAstDeserializer::DeserializeResult<const char*> BinAstDeserializer::DeserializeCString(ByteArray bytes, int offset) {
+  std::vector<char> characters;
+  for (int i = 0; ; ++i) {
+    auto next_char = DeserializeUint8(bytes, offset);
+    offset = next_char.new_offset;
+    char c = next_char.value;
+    characters.push_back(c);
+    if (c == 0) {
+      break;
+    }
+  }
+  char* result = zone()->NewArray<char>(characters.size());
+  DCHECK(characters.size() > 0);
+  memcpy(result, &characters[0], characters.size());
+  return {result, offset};
 }
 
 BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserializer::DeserializeRawString(ByteArray serialized_ast, int offset) {
@@ -201,9 +242,12 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
     auto result = DeserializeVariableProxyExpression(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
+  case AstNode::kLiteral: {
+    auto result = DeserializeLiteral(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
   case AstNode::kBlock:
   case AstNode::kIfStatement:
-  case AstNode::kLiteral:
   case AstNode::kEmptyStatement:
   case AstNode::kAssignment:
   case AstNode::kForStatement:
@@ -732,8 +776,6 @@ BinAstDeserializer::DeserializeResult<VariableProxy*> BinAstDeserializer::Deseri
   DCHECK(variable_proxies_by_position_.count(position.value) == 0);
   variable_proxies_by_position_[position.value] = result;
 
-  printf("\n  Deserialized a VariableProxy for Variable '%.*s'\n", result->raw_name()->byte_length(), result->raw_name()->raw_data());
-
   return {result, offset};
 }
 
@@ -743,6 +785,62 @@ BinAstDeserializer::DeserializeResult<VariableProxyExpression*> BinAstDeserializ
 
   VariableProxyExpression* result = parser_->factory()->NewVariableProxyExpression(variable_proxy.value);
   result->bit_field_ = bit_field;
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<Literal*> BinAstDeserializer::DeserializeLiteral(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  Literal::Type type = Literal::TypeField::decode(bit_field);
+
+  Literal* result;
+  switch (type) {
+    case Literal::kSmi: {
+      auto smi = DeserializeInt32(serialized_binast, offset);
+      offset = smi.new_offset;
+      result = parser_->factory()->NewSmiLiteral(smi.value, position);
+      break;
+    }
+    case Literal::kHeapNumber: {
+      auto number = DeserializeDouble(serialized_binast, offset);
+      offset = number.new_offset;
+      result = parser_->factory()->NewNumberLiteral(number.value, position);
+      break;
+    }
+    case Literal::kBigInt: {
+      auto bigint_str = DeserializeCString(serialized_binast, offset);
+      offset = bigint_str.new_offset;
+      result = parser_->factory()->NewBigIntLiteral(AstBigInt(bigint_str.value), position);
+      break;
+    }
+    case Literal::kString: {
+      auto string = DeserializeRawStringReference(serialized_binast, offset);
+      offset = string.new_offset;
+      result = parser_->factory()->NewStringLiteral(string.value, position);
+      break;
+    }
+    case Literal::kBoolean: {
+      auto boolean = DeserializeUint8(serialized_binast, position);
+      offset = boolean.new_offset;
+      result = parser_->factory()->NewBooleanLiteral(boolean.value, position);
+      break;
+    }
+    case Literal::kUndefined: {
+      result = parser_->factory()->NewUndefinedLiteral(position);
+      break;
+    }
+    case Literal::kNull: {
+      result = parser_->factory()->NewNullLiteral(position);
+      break;
+    }
+    case Literal::kTheHole: {
+      result = parser_->factory()->NewTheHoleLiteral();
+      break;
+    }
+    default: {
+      UNREACHABLE();
+    }
+  }
+  DCHECK(result->bit_field_ == bit_field);
+
   return {result, offset};
 }
 

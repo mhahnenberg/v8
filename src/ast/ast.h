@@ -1156,6 +1156,8 @@ class Literal final : public Expression {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstSerializeVisitor;
+  friend class BinAstDeserializer;
   friend Zone;
 
   using TypeField = Expression::NextBitField<Type, 4>;

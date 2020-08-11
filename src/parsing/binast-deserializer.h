@@ -41,12 +41,16 @@ class BinAstDeserializer {
   };
 
   Zone* zone();
+
+  DeserializeResult<uint64_t> DeserializeUint64(ByteArray bytes, int offset);
   DeserializeResult<uint32_t> DeserializeUint32(ByteArray bytes, int offset);
   DeserializeResult<uint16_t> DeserializeUint16(ByteArray bytes, int offset);
   DeserializeResult<uint8_t> DeserializeUint8(ByteArray bytes, int offset);
   DeserializeResult<int32_t> DeserializeInt32(ByteArray bytes, int offset);
   DeserializeResult<std::array<bool, 16>> DeserializeUint16Flags(ByteArray bytes, int offset);
+  DeserializeResult<double> DeserializeDouble(ByteArray bytes, int offset);
 
+  DeserializeResult<const char*> DeserializeCString(ByteArray bytes, int offset);
   DeserializeResult<const AstRawString*> DeserializeRawString(ByteArray bytes, int offset);
   DeserializeResult<std::nullptr_t> DeserializeStringTable(ByteArray bytes, int offset);
   DeserializeResult<const AstRawString*> DeserializeRawStringReference(ByteArray bytes, int offset);
@@ -73,6 +77,7 @@ class BinAstDeserializer {
   DeserializeResult<ExpressionStatement*> DeserializeExpressionStatement(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<VariableProxy*> DeserializeVariableProxy(ByteArray serialized_binast, int offset);
   DeserializeResult<VariableProxyExpression*> DeserializeVariableProxyExpression(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<Literal*> DeserializeLiteral(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<std::nullptr_t> DeserializeNodeStub(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
 
   void LinkUnresolvedVariableProxies();
