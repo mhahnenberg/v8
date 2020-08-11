@@ -67,6 +67,8 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeDeclaration(Scope* scope, Declaration* decl);
   void SerializeScopeDeclarations(Scope* scope);
   void SerializeScopeParameters(DeclarationScope* scope);
+  void SerializeCommonScopeFields(Scope* scope);
+  void SerializeScope(Scope* scope);
   void SerializeDeclarationScope(DeclarationScope* scope);
   void SerializeAstNodeHeader(AstNode* node);
   void SerializeVariableProxy(VariableProxy* proxy);
@@ -362,10 +364,7 @@ inline void BinAstSerializeVisitor::SerializeVariableOrReference(Variable* varia
   }
 }
 
-inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* scope) {
-  ScopeType scope_type = scope->scope_type();
-  SerializeUint8(scope_type);
-  SerializeUint8(scope->function_kind());
+inline void BinAstSerializeVisitor::SerializeCommonScopeFields(Scope* scope) {
   SerializeScopeVariableMap(scope);
   SerializeScopeDeclarations(scope);
 #ifdef DEBUG
@@ -393,6 +392,13 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
     scope->is_repl_mode_scope_,
     scope->deserialized_scope_uses_external_cache_,
   });
+}
+
+inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* scope) {
+  SerializeUint8(scope->scope_type());
+  DCHECK(scope->scope_type() == FUNCTION_SCOPE);
+  SerializeUint8(scope->function_kind());
+  SerializeCommonScopeFields(scope);
   // DeclarationScope-specific flags
   SerializeUint16Flags({
     scope->has_simple_parameters_,
@@ -422,6 +428,15 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
 
   // TODO(binast): rare_data_ (needed for > ES5.1 feature support)
   DCHECK(scope->rare_data_ == nullptr);
+}
+
+inline void BinAstSerializeVisitor::SerializeScope(Scope* scope) {
+  ScopeType scope_type = scope->scope_type();
+  SerializeUint8(scope_type);
+  DCHECK(scope_type != FUNCTION_SCOPE);
+  DCHECK(scope_type != SCRIPT_SCOPE);
+  DCHECK(scope_type != MODULE_SCOPE);
+  SerializeCommonScopeFields(scope);
 }
 
 inline void BinAstSerializeVisitor::SerializeAstNodeHeader(AstNode* node) {
@@ -490,12 +505,23 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
 
 inline void BinAstSerializeVisitor::VisitBlock(Block* block) {
   SerializeAstNodeHeader(block);
-  ToDoBinAst();
+  SerializeInt32(block->statements()->length());
+  for (Statement* statement : *block->statements()) {
+    VisitNode(statement);
+  }
+  if (block->scope()) {
+    SerializeUint8(1);
+    SerializeScope(block->scope());
+  } else {
+    SerializeUint8(0);
+  }
 }
 
 inline void BinAstSerializeVisitor::VisitIfStatement(IfStatement* if_statement) {
   SerializeAstNodeHeader(if_statement);
-  ToDoBinAst();
+  VisitNode(if_statement->condition());
+  VisitNode(if_statement->then_statement());
+  VisitNode(if_statement->else_statement());
 }
 
 inline void BinAstSerializeVisitor::VisitExpressionStatement(ExpressionStatement* statement) {
@@ -569,7 +595,11 @@ inline void BinAstSerializeVisitor::VisitCountOperation(CountOperation* operatio
 
 inline void BinAstSerializeVisitor::VisitCall(Call* call) {
   SerializeAstNodeHeader(call);
-  ToDoBinAst();
+  VisitNode(call->expression());
+  SerializeInt32(call->arguments()->length());
+  for (Expression* arg : *call->arguments()) {
+    VisitNode(arg);
+  }
 }
 
 inline void BinAstSerializeVisitor::VisitProperty(Property* property) {

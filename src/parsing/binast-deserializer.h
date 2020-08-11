@@ -67,6 +67,8 @@ class BinAstDeserializer {
   DeserializeResult<Declaration*> DeserializeDeclaration(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<std::nullptr_t> DeserializeScopeDeclarations(ByteArray serialized_binast, int offset, Scope* scope);
   DeserializeResult<std::nullptr_t> DeserializeScopeParameters(ByteArray serialized_binast, int offset, DeclarationScope* scope);
+  DeserializeResult<std::nullptr_t> DeserializeCommonScopeFields(ByteArray serialized_binast, int offset, Scope* scope);
+  DeserializeResult<Scope*> DeserializeScope(ByteArray serialized_binast, int offset);
   DeserializeResult<DeclarationScope*> DeserializeDeclarationScope(ByteArray serialized_binast, int offset);
 
   DeserializeResult<AstNode*> DeserializeAstNode(ByteArray serialized_ast, int offset);
@@ -78,6 +80,9 @@ class BinAstDeserializer {
   DeserializeResult<VariableProxy*> DeserializeVariableProxy(ByteArray serialized_binast, int offset);
   DeserializeResult<VariableProxyExpression*> DeserializeVariableProxyExpression(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<Literal*> DeserializeLiteral(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<Call*> DeserializeCall(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<IfStatement*> DeserializeIfStatement(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<Block*> DeserializeBlock(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<std::nullptr_t> DeserializeNodeStub(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
 
   void LinkUnresolvedVariableProxies();
