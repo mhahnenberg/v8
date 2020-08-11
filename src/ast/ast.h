@@ -1640,6 +1640,8 @@ class VariableProxy final : public ZoneObject {
  private:
   friend class AstNodeFactory;
   friend class BinAstNodeFactory;
+  friend class BinAstSerializeVisitor;
+  friend class BinAstDeserializer;
 
   VariableProxy(Variable* var, int start_position);
 
@@ -1729,6 +1731,7 @@ class VariableProxyExpression final : public Expression {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstSerializeVisitor;
 
   VariableProxyExpression(VariableProxy* proxy)
       : Expression(proxy->position(), kVariableProxyExpression),
