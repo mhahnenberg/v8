@@ -1484,7 +1484,7 @@ DEFINE_BOOL(log_maps, false, "Log map creation")
 DEFINE_BOOL(log_maps_details, true, "Also log map details")
 DEFINE_IMPLICATION(log_maps, log_code)
 
-// parser.cc
+// abstract-parser.h
 DEFINE_BOOL(allow_natives_syntax, false, "allow natives syntax")
 DEFINE_BOOL(allow_natives_for_differential_fuzzing, false,
             "allow only natives explicitly allowlisted for differential "
