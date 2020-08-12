@@ -24,6 +24,7 @@ public:
   virtual void VisitCompareOperation(CompareOperation* compare) = 0;
   virtual void VisitCountOperation(CountOperation* operation) = 0;
   virtual void VisitCall(Call* call) = 0;
+  virtual void VisitCallNew(CallNew* call) = 0;
   virtual void VisitProperty(Property* property) = 0;
   virtual void VisitReturnStatement(ReturnStatement* return_statement) = 0;
   virtual void VisitBinaryOperation(BinaryOperation* binary_op) = 0;
@@ -90,6 +91,11 @@ public:
 
       case AstNode::kCall: {
         VisitCall(static_cast<Call*>(node));
+        break;
+      }
+
+      case AstNode::kCallNew: {
+        VisitCallNew(static_cast<CallNew*>(node));
         break;
       }
 

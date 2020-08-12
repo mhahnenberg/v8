@@ -12,13 +12,8 @@
 namespace v8 {
 namespace internal {
 
-class AstNode;
-class BinaryOperation;
 class ByteArray;
 class Declaration;
-class ExpressionStatement;
-class FunctionLiteral;
-class ReturnStatement;
 class ParseInfo;
 class Property;
 class AstConsString;
@@ -81,8 +76,11 @@ class BinAstDeserializer {
   DeserializeResult<VariableProxyExpression*> DeserializeVariableProxyExpression(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<Literal*> DeserializeLiteral(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<Call*> DeserializeCall(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<CallNew*> DeserializeCallNew(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<IfStatement*> DeserializeIfStatement(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<Block*> DeserializeBlock(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<Assignment*> DeserializeAssignment(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<CompareOperation*> DeserializeCompareOperation(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<std::nullptr_t> DeserializeNodeStub(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
 
   void LinkUnresolvedVariableProxies();
