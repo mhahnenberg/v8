@@ -34,6 +34,9 @@ class Statement;
 class StringSet;
 class VariableProxy;
 
+template <typename Impl>
+class AbstractParser;
+
 using UnresolvedList =
     base::ThreadedList<VariableProxy, VariableProxy::UnresolvedNext>;
 
@@ -665,7 +668,8 @@ class V8_EXPORT_PRIVATE Scope : public NON_EXPORTED_BASE(ZoneObject) {
 
   // Walk the scope chain to find DeclarationScopes; call
   // SavePreparseDataForDeclarationScope for each.
-  void SavePreparseData(Parser* parser);
+  template <typename Impl>
+  void SavePreparseData(AbstractParser<Impl>* parser);
 
   // Create a non-local variable with a given name.
   // These variables are looked up dynamically at runtime.
@@ -1152,8 +1156,41 @@ class V8_EXPORT_PRIVATE DeclarationScope : public Scope {
   // this records variables which cannot be resolved inside the Scope (we don't
   // yet know what they will resolve to since the outer Scopes are incomplete)
   // and recreates them with the correct Zone with ast_node_factory.
-  void AnalyzePartially(Parser* parser, AstNodeFactory* ast_node_factory,
-                        bool maybe_in_arrowhead);
+  template <typename Impl>
+  void AnalyzePartially(AbstractParser<Impl>* parser,
+                        AstNodeFactory* ast_node_factory,
+                        bool maybe_in_arrowhead) {
+    DCHECK(!force_eager_compilation_);
+    UnresolvedList new_unresolved_list;
+    if (!IsArrowFunction(function_kind_) &&
+        (!outer_scope_->is_script_scope() || maybe_in_arrowhead ||
+         (preparse_data_builder_ != nullptr &&
+          preparse_data_builder_->HasInnerFunctions()))) {
+      // Try to resolve unresolved variables for this Scope and migrate those
+      // which cannot be resolved inside. It doesn't make sense to try to
+      // resolve them in the outer Scopes here, because they are incomplete.
+      Scope::AnalyzePartially(this, ast_node_factory, &new_unresolved_list,
+                              maybe_in_arrowhead);
+
+      // Migrate function_ to the right Zone.
+      if (function_ != nullptr) {
+        function_ = ast_node_factory->CopyVariable(function_);
+      }
+
+      SavePreparseData(parser);
+    }
+
+#ifdef DEBUG
+    if (FLAG_print_scopes) {
+      PrintF("Inner function scope:\n");
+      Print();
+    }
+#endif
+
+    ResetAfterPreparsing(ast_node_factory->ast_value_factory(), false);
+
+    unresolved_list_ = std::move(new_unresolved_list);
+  }
 
   // Allocate ScopeInfos for top scope and any inner scopes that need them.
   // Does nothing if ScopeInfo is already allocated.
@@ -1204,7 +1241,8 @@ class V8_EXPORT_PRIVATE DeclarationScope : public Scope {
   // Save data describing the context allocation of the variables in this scope
   // and its subscopes (except scopes at the laziness boundary). The data is
   // saved in produced_preparse_data_.
-  void SavePreparseDataForDeclarationScope(Parser* parser);
+  template <typename Impl>
+  void SavePreparseDataForDeclarationScope(AbstractParser<Impl>* parser);
 
   void set_preparse_data_builder(PreparseDataBuilder* preparse_data_builder) {
     preparse_data_builder_ = preparse_data_builder;
@@ -1542,6 +1580,43 @@ class V8_EXPORT_PRIVATE ClassScope : public Scope {
   // preparsed data.
   bool should_save_class_variable_index_ = false;
 };
+
+template <typename Impl>
+void Scope::SavePreparseData(AbstractParser<Impl>* parser) {
+  this->ForEach([parser](Scope* scope) {
+    if (scope->IsSkippableFunctionScope()) {
+      scope->AsDeclarationScope()->SavePreparseDataForDeclarationScope(parser);
+    }
+    return Iteration::kDescend;
+  });
+}
+
+template <typename Impl>
+void DeclarationScope::SavePreparseDataForDeclarationScope(
+    AbstractParser<Impl>* parser) {
+  if (preparse_data_builder_ == nullptr) return;
+  preparse_data_builder_->SaveScopeAllocationData(this, parser);
+}
+
+template <typename FunctionType>
+void Scope::ForEach(FunctionType callback) {
+  Scope* scope = this;
+  while (true) {
+    Iteration iteration = callback(scope);
+    // Try to descend into inner scopes first.
+    if ((iteration == Iteration::kDescend) && scope->inner_scope_ != nullptr) {
+      scope = scope->inner_scope_;
+    } else {
+      // Find the next outer scope with a sibling.
+      while (scope->sibling_ == nullptr) {
+        if (scope == this) return;
+        scope = scope->outer_scope_;
+      }
+      if (scope == this) return;
+      scope = scope->sibling_;
+    }
+  }
+}
 
 // Iterate over the private name scope chain. The iteration proceeds from the
 // innermost private name scope outwards.

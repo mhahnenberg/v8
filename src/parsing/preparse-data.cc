@@ -311,13 +311,7 @@ bool PreparseDataBuilder::SaveDataForSkippableFunction(
   return has_data;
 }
 
-void PreparseDataBuilder::SaveScopeAllocationData(DeclarationScope* scope,
-                                                  Parser* parser) {
-  if (!has_data_) return;
-  DCHECK(HasInnerFunctions());
-
-  byte_data_.Start(parser->preparse_data_buffer());
-
+void PreparseDataBuilder::SaveScopeAllocationDataImpl(DeclarationScope* scope) {
 #ifdef DEBUG
   // Reserve Uint32 for scope_data_start debug info.
   byte_data_.Reserve(kUint32Size);
@@ -334,22 +328,21 @@ void PreparseDataBuilder::SaveScopeAllocationData(DeclarationScope* scope,
   // Don't save incomplete scope information when bailed out.
   if (!bailed_out_) {
 #ifdef DEBUG
-  // function data items, kSkippableMinFunctionDataSize each.
-  CHECK_GE(byte_data_.length(), kPlaceholderSize);
-  CHECK_LE(byte_data_.length(), std::numeric_limits<uint32_t>::max());
+    // function data items, kSkippableMinFunctionDataSize each.
+    CHECK_GE(byte_data_.length(), kPlaceholderSize);
+    CHECK_LE(byte_data_.length(), std::numeric_limits<uint32_t>::max());
 
-  byte_data_.SaveCurrentSizeAtFirstUint32();
-  // For a data integrity check, write a value between data about skipped
-  // inner funcs and data about variables.
-  byte_data_.Reserve(kUint32Size * 3);
-  byte_data_.WriteUint32(kMagicValue);
-  byte_data_.WriteUint32(scope->start_position());
-  byte_data_.WriteUint32(scope->end_position());
+    byte_data_.SaveCurrentSizeAtFirstUint32();
+    // For a data integrity check, write a value between data about skipped
+    // inner funcs and data about variables.
+    byte_data_.Reserve(kUint32Size * 3);
+    byte_data_.WriteUint32(kMagicValue);
+    byte_data_.WriteUint32(scope->start_position());
+    byte_data_.WriteUint32(scope->end_position());
 #endif
 
-  if (ScopeNeedsData(scope)) SaveDataForScope(scope);
+    if (ScopeNeedsData(scope)) SaveDataForScope(scope);
   }
-  byte_data_.Finalize(parser->factory()->zone());
 }
 
 void PreparseDataBuilder::SaveDataForScope(Scope* scope) {

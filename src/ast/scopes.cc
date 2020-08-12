@@ -1491,26 +1491,6 @@ bool WasLazilyParsed(Scope* scope) {
 
 }  // namespace
 
-template <typename FunctionType>
-void Scope::ForEach(FunctionType callback) {
-  Scope* scope = this;
-  while (true) {
-    Iteration iteration = callback(scope);
-    // Try to descend into inner scopes first.
-    if ((iteration == Iteration::kDescend) && scope->inner_scope_ != nullptr) {
-      scope = scope->inner_scope_;
-    } else {
-      // Find the next outer scope with a sibling.
-      while (scope->sibling_ == nullptr) {
-        if (scope == this) return;
-        scope = scope->outer_scope_;
-      }
-      if (scope == this) return;
-      scope = scope->sibling_;
-    }
-  }
-}
-
 bool Scope::IsOuterScopeOf(Scope* other) const {
   Scope* scope = other;
   while (scope) {
@@ -1649,55 +1629,6 @@ bool Scope::IsSkippableFunctionScope() {
   DeclarationScope* declaration_scope = AsDeclarationScope();
   return !declaration_scope->is_arrow_scope() &&
          declaration_scope->preparse_data_builder() != nullptr;
-}
-
-void Scope::SavePreparseData(Parser* parser) {
-  this->ForEach([parser](Scope* scope) {
-    if (scope->IsSkippableFunctionScope()) {
-      scope->AsDeclarationScope()->SavePreparseDataForDeclarationScope(parser);
-    }
-    return Iteration::kDescend;
-  });
-}
-
-void DeclarationScope::SavePreparseDataForDeclarationScope(Parser* parser) {
-  if (preparse_data_builder_ == nullptr) return;
-  preparse_data_builder_->SaveScopeAllocationData(this, parser);
-}
-
-void DeclarationScope::AnalyzePartially(Parser* parser,
-                                        AstNodeFactory* ast_node_factory,
-                                        bool maybe_in_arrowhead) {
-  DCHECK(!force_eager_compilation_);
-  UnresolvedList new_unresolved_list;
-  if (!IsArrowFunction(function_kind_) &&
-      (!outer_scope_->is_script_scope() || maybe_in_arrowhead ||
-       (preparse_data_builder_ != nullptr &&
-        preparse_data_builder_->HasInnerFunctions()))) {
-    // Try to resolve unresolved variables for this Scope and migrate those
-    // which cannot be resolved inside. It doesn't make sense to try to resolve
-    // them in the outer Scopes here, because they are incomplete.
-    Scope::AnalyzePartially(this, ast_node_factory, &new_unresolved_list,
-                            maybe_in_arrowhead);
-
-    // Migrate function_ to the right Zone.
-    if (function_ != nullptr) {
-      function_ = ast_node_factory->CopyVariable(function_);
-    }
-
-    SavePreparseData(parser);
-  }
-
-#ifdef DEBUG
-  if (FLAG_print_scopes) {
-    PrintF("Inner function scope:\n");
-    Print();
-  }
-#endif
-
-  ResetAfterPreparsing(ast_node_factory->ast_value_factory(), false);
-
-  unresolved_list_ = std::move(new_unresolved_list);
 }
 
 void DeclarationScope::RewriteReplGlobalVariables() {

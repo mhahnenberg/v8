@@ -13,24 +13,7 @@ namespace v8 {
 namespace internal {
 
 BinAstParser::BinAstParser(ParseInfo* info)
-  : ParserBase<BinAstParser>(
-    info->zone(), &scanner_, info->stack_limit(), static_cast<v8::Extension*>(nullptr),
-    info->GetOrCreateAstValueFactory(), info->pending_error_handler(),
-    info->runtime_call_stats(), info->logger(), info->flags(), /* parsing_on_main_thread */false),
-  info_(info),
-  scanner_(info->character_stream(), flags()),
-  parameters_end_pos_(info->parameters_end_pos())
-{
-}
-
-void BinAstParser::InitializeEmptyScopeChain(ParseInfo* info) {
-  DCHECK_NULL(original_scope_);
-  DCHECK_NULL(info->script_scope());
-  DeclarationScope* script_scope =
-      NewScriptScope(flags().is_repl_mode() ? REPLMode::kYes : REPLMode::kNo);
-  info->set_script_scope(script_scope);
-  original_scope_ = script_scope;
-}
+    : AbstractParser<BinAstParser>(info) {}
 
 void BinAstParser::ParseProgram(ParseInfo* info)
 {
@@ -254,45 +237,6 @@ void BinAstParser::DeclareFunctionNameVar(const AstRawString* function_name,
   }
 }
 
-void BinAstParserFormalParameters::ValidateDuplicate(BinAstParser* parser) const {
-  if (has_duplicate()) {
-    parser->ReportMessageAt(duplicate_loc, MessageTemplate::kParamDupe);
-  }
-}
-void BinAstParserFormalParameters::ValidateStrictMode(BinAstParser* parser) const {
-  if (strict_error_loc.IsValid()) {
-    parser->ReportMessageAt(strict_error_loc, strict_error_message);
-  }
-}
-
-Expression* BinAstParser::ExpressionFromLiteral(Token::Value token, int pos) {
-  switch (token) {
-    case Token::NULL_LITERAL:
-      return factory()->NewNullLiteral(pos);
-    case Token::TRUE_LITERAL:
-      return factory()->NewBooleanLiteral(true, pos);
-    case Token::FALSE_LITERAL:
-      return factory()->NewBooleanLiteral(false, pos);
-    case Token::SMI: {
-      uint32_t value = scanner()->smi_value();
-      return factory()->NewSmiLiteral(value, pos);
-    }
-    case Token::NUMBER: {
-      double value = scanner()->DoubleValue();
-      return factory()->NewNumberLiteral(value, pos);
-    }
-    case Token::BIGINT:
-      return factory()->NewBigIntLiteral(
-          AstBigInt(scanner()->CurrentLiteralAsCString(zone())), pos);
-    case Token::STRING: {
-      return factory()->NewStringLiteral(GetSymbol(), pos);
-    }
-    default:
-      DCHECK(false);
-  }
-  return FailureExpression();
-}
-
 Statement* BinAstParser::DeclareFunction(const AstRawString* variable_name,
                                    FunctionLiteral* function, VariableMode mode,
                                    VariableKind kind, int beg_pos, int end_pos,
@@ -346,7 +290,7 @@ void BinAstParser::ParseFunction(
     DCHECK_EQ(function_name, ast_value_factory()->empty_string());
   }
 
-  BinAstParserFormalParameters formals(function_scope);
+  ParserFormalParameters formals(function_scope);
 
   {
     ParameterDeclarationParsingScope formals_scope(this);
@@ -669,67 +613,6 @@ void BinAstParser::ParseOnBackground(ParseInfo* info, int start_position,
   MaybeResetCharacterStream(info, result);
   // MaybeProcessSourceRanges(info, result, stack_limit_);
   PostProcessParseResult(info, result);
-}
-
-void BinAstParser::ReportUnexpectedTokenAt(Scanner::Location location,
-                                     Token::Value token,
-                                     MessageTemplate message) {
-  const char* arg = nullptr;
-  switch (token) {
-    case Token::EOS:
-      base::OS::DebugBreak();
-      message = MessageTemplate::kUnexpectedEOS;
-      break;
-    case Token::SMI:
-    case Token::NUMBER:
-    case Token::BIGINT:
-      message = MessageTemplate::kUnexpectedTokenNumber;
-      break;
-    case Token::STRING:
-      message = MessageTemplate::kUnexpectedTokenString;
-      break;
-    case Token::PRIVATE_NAME:
-    case Token::IDENTIFIER:
-      message = MessageTemplate::kUnexpectedTokenIdentifier;
-      break;
-    case Token::AWAIT:
-    case Token::ENUM:
-      message = MessageTemplate::kUnexpectedReserved;
-      break;
-    case Token::LET:
-    case Token::STATIC:
-    case Token::YIELD:
-    case Token::FUTURE_STRICT_RESERVED_WORD:
-      message = is_strict(language_mode())
-                    ? MessageTemplate::kUnexpectedStrictReserved
-                    : MessageTemplate::kUnexpectedTokenIdentifier;
-      break;
-    case Token::TEMPLATE_SPAN:
-    case Token::TEMPLATE_TAIL:
-      message = MessageTemplate::kUnexpectedTemplateString;
-      break;
-    case Token::ESCAPED_STRICT_RESERVED_WORD:
-    case Token::ESCAPED_KEYWORD:
-      message = MessageTemplate::kInvalidEscapedReservedWord;
-      break;
-    case Token::ILLEGAL:
-      if (scanner()->has_error()) {
-        message = scanner()->error();
-        location = scanner()->error_location();
-      } else {
-        message = MessageTemplate::kInvalidOrUnexpectedToken;
-      }
-      break;
-    case Token::REGEXP_LITERAL:
-      message = MessageTemplate::kUnexpectedTokenRegExp;
-      break;
-    default:
-      const char* name = Token::String(token);
-      DCHECK_NOT_NULL(name);
-      arg = name;
-      break;
-  }
-  ReportMessageAt(location, message, arg);
 }
     
 }  // namespace internal
