@@ -12,8 +12,6 @@
 namespace v8 {
 namespace internal {
 
-// #define OBJECT_OFFSETOF(class, field) (reinterpret_cast<ptrdiff_t>(&(reinterpret_cast<class*>(0x4000)->field)) - 0x4000)
-
 BinAstDeserializer::BinAstDeserializer(Parser* parser)
   : parser_(parser) {
 
@@ -256,6 +254,10 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
     auto result = DeserializeCall(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
+  case AstNode::kCallNew: {
+    auto result = DeserializeCallNew(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
   case AstNode::kIfStatement: {
     auto result = DeserializeIfStatement(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
@@ -264,10 +266,16 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
     auto result = DeserializeBlock(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
+  case AstNode::kAssignment: {
+    auto result = DeserializeAssignment(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
+  case AstNode::kCompareOperation: {
+    auto result = DeserializeCompareOperation(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
   case AstNode::kEmptyStatement:
-  case AstNode::kAssignment:
   case AstNode::kForStatement:
-  case AstNode::kCompareOperation:
   case AstNode::kCountOperation:
   case AstNode::kObjectLiteral:
   case AstNode::kArrayLiteral: {
@@ -587,6 +595,7 @@ BinAstDeserializer::DeserializeResult<Scope*> BinAstDeserializer::DeserializeSco
     case EVAL_SCOPE:
     case CATCH_SCOPE:
     case WITH_SCOPE: {
+      printf("scope_type.value = %d\n", scope_type.value);
       // TODO(binast): Implement
       DCHECK(false);
       break;
@@ -919,7 +928,31 @@ BinAstDeserializer::DeserializeResult<Call*> BinAstDeserializer::DeserializeCall
     params.Add(static_cast<Expression*>(param.value));
   }
 
-  Call* result = parser_->factory()->NewCall(static_cast<Expression*>(expression.value), params, position);
+  bool has_spread = CallBase::SpreadPositionField::decode(bit_field) != CallBase::kNoSpread;
+
+  Call* result = parser_->factory()->NewCall(static_cast<Expression*>(expression.value), params, position, has_spread);
+  result->bit_field_ = bit_field;
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<CallNew*> BinAstDeserializer::DeserializeCallNew(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto expression = DeserializeAstNode(serialized_binast, offset);
+  offset = expression.new_offset;
+
+  auto params_count = DeserializeInt32(serialized_binast, offset);
+  offset = params_count.new_offset;
+
+  std::vector<void*> pointer_buffer;
+  ScopedPtrList<Expression> params(&pointer_buffer);
+  for (int i = 0; i < params_count.value; ++i) {
+    auto param = DeserializeAstNode(serialized_binast, offset);
+    offset = param.new_offset;
+    params.Add(static_cast<Expression*>(param.value));
+  }
+
+  bool has_spread = CallBase::SpreadPositionField::decode(bit_field) != CallBase::kNoSpread;
+
+  CallNew* result = parser_->factory()->NewCallNew(static_cast<Expression*>(expression.value), params, position, has_spread);
   result->bit_field_ = bit_field;
   return {result, offset};
 }
@@ -967,6 +1000,32 @@ BinAstDeserializer::DeserializeResult<Block*> BinAstDeserializer::DeserializeBlo
   block->set_scope(scope);
 
   return {nullptr, offset};
+}
+
+BinAstDeserializer::DeserializeResult<Assignment*> BinAstDeserializer::DeserializeAssignment(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto target = DeserializeAstNode(serialized_binast, offset);
+  offset = target.new_offset;
+
+  auto value = DeserializeAstNode(serialized_binast, offset);
+  offset = value.new_offset;
+
+  Token::Value op = Assignment::TokenField::decode(bit_field);
+  Assignment* result = parser_->factory()->NewAssignment(op, static_cast<Expression*>(target.value), static_cast<Expression*>(value.value), position);
+  DCHECK(result->bit_field_ == bit_field);
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<CompareOperation*> BinAstDeserializer::DeserializeCompareOperation(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto left = DeserializeAstNode(serialized_binast, offset);
+  offset = left.new_offset;
+
+  auto right = DeserializeAstNode(serialized_binast, offset);
+  offset = right.new_offset;
+
+  Token::Value op = CompareOperation::OperatorField::decode(bit_field);
+  CompareOperation* result = parser_->factory()->NewCompareOperation(op, static_cast<Expression*>(left.value), static_cast<Expression*>(right.value), position);
+  DCHECK(result->bit_field_ == bit_field);
+  return {result, offset};
 }
 
 // This is just a placeholder while we implement the various nodes that we'll support.

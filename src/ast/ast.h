@@ -1854,6 +1854,8 @@ class CallBase : public Expression {
   }
 
  protected:
+  friend class BinAstDeserializer;
+
   CallBase(Zone* zone, NodeType type, Expression* expression,
            const ScopedPtrList<Expression>& arguments, int pos, bool has_spread)
       : Expression(pos, type),
@@ -2144,6 +2146,7 @@ class CompareOperation final : public Expression {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstDeserializer;
   friend Zone;
 
   CompareOperation(Token::Value op, Expression* left, Expression* right,
@@ -2225,6 +2228,7 @@ class Assignment : public Expression {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstDeserializer;
   friend Zone;
 
   using TokenField = Expression::NextBitField<Token::Value, 7>;
