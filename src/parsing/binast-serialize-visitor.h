@@ -41,6 +41,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   virtual void VisitCompareOperation(CompareOperation* compare) override;
   virtual void VisitCountOperation(CountOperation* operation) override;
   virtual void VisitCall(Call* call) override;
+  virtual void VisitCallNew(CallNew* call) override;
   virtual void VisitProperty(Property* property) override;
   virtual void VisitReturnStatement(ReturnStatement* return_statement) override;
   virtual void VisitBinaryOperation(BinaryOperation* binary_op) override;
@@ -576,7 +577,9 @@ inline void BinAstSerializeVisitor::VisitEmptyStatement(EmptyStatement* empty_st
 
 inline void BinAstSerializeVisitor::VisitAssignment(Assignment* assignment) {
   SerializeAstNodeHeader(assignment);
-  ToDoBinAst();
+  DCHECK(assignment->node_type() == AstNode::kAssignment);
+  VisitNode(assignment->target());
+  VisitNode(assignment->value());
 }
 
 inline void BinAstSerializeVisitor::VisitVariableProxyExpression(VariableProxyExpression* var_proxy_expr) {
@@ -591,7 +594,8 @@ inline void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statemen
 
 inline void BinAstSerializeVisitor::VisitCompareOperation(CompareOperation* compare) {
   SerializeAstNodeHeader(compare);
-  ToDoBinAst();
+  VisitNode(compare->left());
+  VisitNode(compare->right());
 }
 
 inline void BinAstSerializeVisitor::VisitCountOperation(CountOperation* operation) {
@@ -600,6 +604,15 @@ inline void BinAstSerializeVisitor::VisitCountOperation(CountOperation* operatio
 }
 
 inline void BinAstSerializeVisitor::VisitCall(Call* call) {
+  SerializeAstNodeHeader(call);
+  VisitNode(call->expression());
+  SerializeInt32(call->arguments()->length());
+  for (Expression* arg : *call->arguments()) {
+    VisitNode(arg);
+  }
+}
+
+inline void BinAstSerializeVisitor::VisitCallNew(CallNew* call) {
   SerializeAstNodeHeader(call);
   VisitNode(call->expression());
   SerializeInt32(call->arguments()->length());
