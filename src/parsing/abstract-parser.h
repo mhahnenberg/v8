@@ -122,15 +122,16 @@ struct ParserFormalParameters : FormalParametersBase {
 };
 
 template <typename ImplT>
-struct ParserTypes<AbstractParser<ImplT>> {
-  using Base = ParserBase<AbstractParser<ImplT>>;
-  using Impl = AbstractParser<ImplT>;
+struct AbstractParserTypes {
+  using Base = ParserBase<ImplT>;
+  using Impl = ImplT;
 
   // Return types for traversing functions.
   using Block = v8::internal::Block*;
   using BreakableStatement = v8::internal::BreakableStatement*;
   using ClassLiteralProperty = ClassLiteral::Property*;
   using ClassPropertyList = ZonePtrList<ClassLiteral::Property>*;
+  using ClassStaticElementList = ZonePtrList<ClassLiteral::StaticElement>*;
   using Expression = v8::internal::Expression*;
   using ExpressionList = ScopedPtrList<v8::internal::Expression>;
   using FormalParameters = ParserFormalParameters;
@@ -148,7 +149,7 @@ struct ParserTypes<AbstractParser<ImplT>> {
   using Factory = AstNodeFactory;
 
   // Other implementation-specific functions.
-  using FuncNameInferrer = v8::internal::FuncNameInferrer<ParserTypes<AbstractParser<ImplT>>>;
+  using FuncNameInferrer = v8::internal::FuncNameInferrer<ParserTypes<ImplT>>;
   using SourceRange = v8::internal::SourceRange;
   using SourceRangeScope = v8::internal::SourceRangeScope;
   using AstValueFactory = v8::internal::AstValueFactory;
@@ -199,6 +200,7 @@ class AbstractParser
 
  private:
   friend class ParserBase<Impl>;
+  friend Impl;
   friend struct ParserFormalParameters;
   friend class i::ExpressionScope<ParserTypes<Impl>>;
   friend class i::VariableDeclarationParsingScope<ParserTypes<Impl>>;

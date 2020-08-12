@@ -180,6 +180,9 @@ class V8_NODISCARD SourceRangeScope final {
 template <typename Impl>
 struct ParserTypes;
 
+template <typename Impl>
+class AbstractParser;
+
 enum class ParsePropertyKind : uint8_t {
   kAccessorGetter,
   kAccessorSetter,
@@ -308,6 +311,7 @@ class ParserBase {
   friend class v8::internal::ExpressionScope<ParserTypes<Impl>>;
   friend class v8::internal::ExpressionParsingScope<ParserTypes<Impl>>;
   friend class v8::internal::ArrowHeadParsingScope<ParserTypes<Impl>>;
+  friend class AbstractParser<Impl>;
   friend class BinAstDeserializer;
 
   enum VariableDeclarationContext {
