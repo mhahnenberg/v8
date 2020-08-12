@@ -22,44 +22,8 @@ class ParseInfo;
 class BinAstParser;
 
 template <>
-struct ParserTypes<BinAstParser> {
-  using Base = ParserBase<BinAstParser>;
-  using Impl = BinAstParser;
-
-  // Return types for traversing functions.
-  using Block = v8::internal::Block*;
-  using BreakableStatement = v8::internal::BreakableStatement*;
-
-  // TODO(binast): Add support for classes
-  using ClassLiteralProperty = /* TODO(binast) */ v8::internal::ClassLiteralProperty*;
-  using ClassPropertyList = /* TODO(binast) */ZonePtrList<v8::internal::ClassLiteralProperty>*;
-
-  using Expression = v8::internal::Expression*;
-  using ExpressionList = ScopedPtrList<v8::internal::Expression>;
-  using FormalParameters = ParserFormalParameters;
-  using ForStatement = v8::internal::ForStatement*;
-  using FunctionLiteral = v8::internal::FunctionLiteral*;
-  using Identifier = const AstRawString*;
-  using IterationStatement = v8::internal::IterationStatement*;
-  using ObjectLiteralProperty = ObjectLiteral::Property*;
-  using ObjectPropertyList = ScopedPtrList<v8::internal::ObjectLiteralProperty>;
-  using Statement = v8::internal::Statement*;
-  using StatementList = ScopedPtrList<v8::internal::Statement>;
-
-  // TODO(binast): Add support for suspend
-  using Suspend = /* TODO(binast) */int;
-
-  // For constructing objects returned by the traversing functions.
-  using Factory = AstNodeFactory;
-
-  // Other implementation-specific tasks.
-  using FuncNameInferrer = v8::internal::FuncNameInferrer<ParserTypes<BinAstParser>>;
-  using SourceRange = v8::internal::SourceRange;
-  using SourceRangeScope = v8::internal::SourceRangeScope;
-  using AstValueFactory = AstValueFactory;
-  using AstRawString = AstRawString;
+struct ParserTypes<BinAstParser> : AbstractParserTypes<BinAstParser> {
 };
-
 
 class BinAstParser : public AbstractParser<BinAstParser> {
  public:

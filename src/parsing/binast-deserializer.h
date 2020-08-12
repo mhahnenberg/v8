@@ -7,6 +7,7 @@
 
 #include <unordered_map>
 #include "src/handles/handles.h"
+#include "src/ast/ast.h"
 
 namespace v8 {
 namespace internal {
