@@ -208,8 +208,13 @@ void BinAstParser::PostProcessParseResult(ParseInfo* info, FunctionLiteral* lite
 {
   if (literal == nullptr) return;
 
+  ZoneBinAstParseData* zone_binast_parse_data = ZoneBinAstParseDataBuilder::Serialize(zone(), ast_value_factory(), literal);
+  ProducedBinAstParseData* produced_binast_parse_data = ProducedBinAstParseData::For(zone_binast_parse_data, zone());
+  literal->set_produced_binast_parse_data(produced_binast_parse_data);
+
   info->set_literal(literal);
   info->set_language_mode(literal->language_mode());
+
   // if (info->flags().is_eval()) {
   //   info->set_allow_eval_cache(allow_eval_cache());
   // }
@@ -575,9 +580,6 @@ FunctionLiteral* BinAstParser::ParseFunctionLiteral(
     fni_.AddFunction(function_literal);
   }
 
-  ZoneBinAstParseData* zone_binast_parse_data = ZoneBinAstParseDataBuilder::Serialize(zone(), ast_value_factory(), function_literal);
-  ProducedBinAstParseData* produced_binast_parse_data = ProducedBinAstParseData::For(zone_binast_parse_data, zone());
-  function_literal->set_produced_binast_parse_data(produced_binast_parse_data);
   return function_literal;
 }
 
