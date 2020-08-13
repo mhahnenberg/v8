@@ -1682,7 +1682,7 @@ void AbstractParser<Impl>::ParseProgram(
   FunctionLiteral* result = impl()->DoParseProgram(isolate, info);
   MaybeResetCharacterStream(info, result);
   MaybeProcessSourceRanges(info, result, impl()->stack_limit_);
-  PostProcessParseResult(isolate, info, result);
+  impl()->PostProcessParseResult(isolate, info, result);
 
   HandleSourceURLComments(isolate, script);
 
@@ -1847,7 +1847,6 @@ void AbstractParser<Impl>::PostProcessParseResult(Isolate* isolate,
 
   // We cannot internalize on a background thread; a foreground task will take
   // care of calling AstValueFactory::Internalize just before compilation.
-  DCHECK_EQ(isolate != nullptr, impl()->parsing_on_main_thread_);
   if (isolate) info->ast_value_factory()->Internalize(isolate);
 
   {
@@ -2059,7 +2058,7 @@ void AbstractParser<Impl>::ParseFunction(
     Handle<String> inferred_name(shared_info->inferred_name(), isolate);
     result->set_inferred_name(inferred_name);
   }
-  PostProcessParseResult(isolate, info, result);
+  impl()->PostProcessParseResult(isolate, info, result);
 
   if (V8_UNLIKELY(FLAG_log_function_events) && result != nullptr) {
     double ms = timer.Elapsed().InMillisecondsF();
@@ -2079,7 +2078,6 @@ template <typename Impl>
 FunctionLiteral* AbstractParser<Impl>::DoParseFunction(
     Isolate* isolate, ParseInfo* info, int start_position, int end_position,
     int function_literal_id, const AstRawString* raw_name) {
-  DCHECK_EQ(impl()->parsing_on_main_thread_, isolate != nullptr);
   DCHECK_NOT_NULL(raw_name);
   DCHECK_NULL(impl()->scope_);
 
@@ -2195,7 +2193,7 @@ FunctionLiteral* AbstractParser<Impl>::DoParseFunction(
           info->is_wrapped_as_function()
               ? PrepareWrappedArguments(isolate, info, impl()->zone())
               : nullptr;
-      result = ParseFunctionLiteral(
+      result = impl()->ParseFunctionLiteral(
           raw_name, Scanner::Location::invalid(), kSkipFunctionNameCheck, kind,
           kNoSourcePosition, impl()->flags().function_syntax_kind(),
           info->language_mode(), arguments_for_wrapped_function);
@@ -4534,15 +4532,15 @@ void AbstractParser<Impl>::ParseOnBackground(ParseInfo* info,
     DCHECK_EQ(start_position, 0);
     DCHECK_EQ(end_position, 0);
     DCHECK_EQ(function_literal_id, kFunctionLiteralIdTopLevel);
-    result = DoParseProgram(/* isolate = */ nullptr, info);
+    result = impl()->DoParseProgram(/* isolate = */ nullptr, info);
   } else {
-    result = DoParseFunction(/* isolate = */ nullptr, info, start_position,
+    result = impl()->DoParseFunction(/* isolate = */ nullptr, info, start_position,
                              end_position, function_literal_id,
                              info->function_name());
   }
   MaybeResetCharacterStream(info, result);
   MaybeProcessSourceRanges(info, result, impl()->stack_limit_);
-  PostProcessParseResult(/* isolate = */ nullptr, info, result);
+  impl()->PostProcessParseResult(/* isolate = */ nullptr, info, result);
 }
 
 template <typename Impl>

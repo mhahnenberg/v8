@@ -21,15 +21,15 @@ void BinAstParser::ParseProgram(ParseInfo* info)
 
   scanner_.Initialize();
 
-  result = DoParseProgram(info);
+  result = DoParseProgram(nullptr, info);
 
   // TODO(binast): Not sure if we need these...
   MaybeResetCharacterStream(info, result);
   // MaybeProcessSourceRanges(info, result, stack_limit_);
-  PostProcessParseResult(info, result);
+  PostProcessParseResult(nullptr, info, result);
 }
 
-FunctionLiteral* BinAstParser::DoParseProgram(ParseInfo* info)
+FunctionLiteral* BinAstParser::DoParseProgram(Isolate* isolate, ParseInfo* info)
 {
   // TODO(binast): START
   // Need to figure out exactly how to setup scope stuff.
@@ -89,10 +89,7 @@ FunctionLiteral* BinAstParser::DoParseProgram(ParseInfo* info)
       // pre-existing bindings should be made writable, enumerable and
       // nonconfigurable if possible, whereas this code will leave attributes
       // unchanged if the property already exists.
-
-      // TODO
-      // InsertSloppyBlockFunctionVarBindings(scope);
-      DCHECK(false);
+      InsertSloppyBlockFunctionVarBindings(scope);
     }
     // Internalize the ast strings in the case of eval so we can check for
     // conflicting var declarations with outer scope-info-backed scopes.
@@ -132,79 +129,7 @@ FunctionLiteral* BinAstParser::DoParseProgram(ParseInfo* info)
   return result;
 }
 
-FunctionLiteral* BinAstParser::DoParseFunction(ParseInfo* info,
-                                         int start_position, int end_position,
-                                         int function_literal_id,
-                                         const AstRawString* raw_name) {
-  DCHECK_NOT_NULL(raw_name);
-  DCHECK_NULL(scope_);
-
-  DCHECK(ast_value_factory());
-  fni_.PushEnclosingName(raw_name);
-
-  ResetFunctionLiteralId();
-  DCHECK_LT(0, function_literal_id);
-  SkipFunctionLiterals(function_literal_id - 1);
-
-  ParsingModeScope parsing_mode(this, PARSE_EAGERLY);
-
-  // Place holder for the result.
-  FunctionLiteral* result = nullptr;
-
-  {
-    // Parse the function literal.
-    Scope* outer = original_scope_;
-    DeclarationScope* outer_function = outer->GetClosureScope();
-    DCHECK(outer);
-    FunctionState function_state(&function_state_, &scope_, outer_function);
-    BlockState block_state(&scope_, outer);
-    DCHECK(is_sloppy(outer->language_mode()) ||
-           is_strict(info->language_mode()));
-    FunctionKind kind = flags().function_kind();
-    DCHECK_IMPLIES(IsConciseMethod(kind) || IsAccessorFunction(kind),
-                   flags().function_syntax_kind() ==
-                       FunctionSyntaxKind::kAccessorOrMethod);
-
-    if (IsArrowFunction(kind)) {
-      // TODO(binast): add support for arrow functions
-      DCHECK(false);
-    } else if (IsDefaultConstructor(kind)) {
-      // TODO(binast)
-      DCHECK(false);
-      // DCHECK_EQ(scope(), outer);
-      // result = DefaultConstructor(raw_name, IsDerivedConstructor(kind),
-      //                             start_position, end_position);
-    } else {
-      // TODO(binast)
-      DCHECK(!info->is_wrapped_as_function());
-      ZonePtrList<const AstRawString>* arguments_for_wrapped_function = nullptr;
-      // ZonePtrList<const AstRawString>* arguments_for_wrapped_function =
-      //     info->is_wrapped_as_function()
-      //         ? PrepareWrappedArguments(isolate, info, zone())
-      //         : nullptr;
-      result = ParseFunctionLiteral(
-          raw_name, Scanner::Location::invalid(), kSkipFunctionNameCheck, kind,
-          kNoSourcePosition, flags().function_syntax_kind(),
-          info->language_mode(), arguments_for_wrapped_function);
-    }
-
-    if (has_error()) return nullptr;
-    result->set_requires_instance_members_initializer(
-        flags().requires_instance_members_initializer());
-    result->set_class_scope_has_private_brand(
-        flags().class_scope_has_private_brand());
-    result->set_has_static_private_methods_or_accessors(
-        flags().has_static_private_methods_or_accessors());
-    if (flags().is_oneshot_iife()) {
-      result->mark_as_oneshot_iife();
-    }
-  }
-
-  DCHECK_IMPLIES(result, function_literal_id == result->function_literal_id());
-  return result;
-}
-
-void BinAstParser::PostProcessParseResult(ParseInfo* info, FunctionLiteral* literal)
+void BinAstParser::PostProcessParseResult(Isolate* isolate, ParseInfo* info, FunctionLiteral* literal)
 {
   if (literal == nullptr) return;
 
@@ -230,129 +155,6 @@ void BinAstParser::PostProcessParseResult(ParseInfo* info, FunctionLiteral* lite
   //     return;
   //   }
   // }
-}
-
-void BinAstParser::DeclareFunctionNameVar(const AstRawString* function_name,
-                                    FunctionSyntaxKind function_syntax_kind,
-                                    DeclarationScope* function_scope) {
-  if (function_syntax_kind == FunctionSyntaxKind::kNamedExpression &&
-      function_scope->LookupLocal(function_name) == nullptr) {
-    DCHECK_EQ(function_scope, scope());
-    function_scope->DeclareFunctionVar(function_name);
-  }
-}
-
-Statement* BinAstParser::DeclareFunction(const AstRawString* variable_name,
-                                   FunctionLiteral* function, VariableMode mode,
-                                   VariableKind kind, int beg_pos, int end_pos,
-                                   ZonePtrList<const AstRawString>* names) {
-  Declaration* declaration =
-      factory()->NewFunctionDeclaration(function, beg_pos);
-  bool was_added;
-  Declare(declaration, variable_name, kind, mode, kCreatedInitialized, scope(),
-          &was_added, beg_pos);
-  if (info()->flags().coverage_enabled()) {
-    // Force the function to be allocated when collecting source coverage, so
-    // that even dead functions get source coverage data.
-    declaration->var()->set_is_used();
-  }
-  if (names) names->Add(variable_name, zone());
-  if (kind == SLOPPY_BLOCK_FUNCTION_VARIABLE) {
-    // Token::Value init = loop_nesting_depth() > 0 ? Token::ASSIGN : Token::INIT;
-    // SloppyBlockFunctionStatement* statement =
-    //     factory()->NewSloppyBlockFunctionStatement(end_pos, declaration->var(),
-    //                                                init);
-    // GetDeclarationScope()->DeclareSloppyBlockFunction(statement);
-    // return statement;
-    // TODO(binast)
-    DCHECK(false);
-  }
-  return factory()->EmptyStatement();
-}
-
-void BinAstParser::ParseFunction(
-    ScopedPtrList<Statement>* body, const AstRawString* function_name, int pos,
-    FunctionKind kind, FunctionSyntaxKind function_syntax_kind,
-    DeclarationScope* function_scope, int* num_parameters, int* function_length,
-    bool* has_duplicate_parameters, int* expected_property_count,
-    int* suspend_count,
-    ZonePtrList<const AstRawString>* arguments_for_wrapped_function) {
-  FunctionParsingScope function_parsing_scope(this);
-  // TODO(binast): Figure out lazy parsing
-  // ParsingModeScope mode(this, allow_lazy_ ? PARSE_LAZILY : PARSE_EAGERLY);
-  ParsingModeScope mode(this, PARSE_EAGERLY);
-
-  FunctionState function_state(&function_state_, &scope_, function_scope);
-
-  bool is_wrapped = function_syntax_kind == FunctionSyntaxKind::kWrapped;
-
-  int expected_parameters_end_pos = parameters_end_pos_;
-  if (expected_parameters_end_pos != kNoSourcePosition) {
-    // This is the first function encountered in a CreateDynamicFunction eval.
-    parameters_end_pos_ = kNoSourcePosition;
-    // The function name should have been ignored, giving us the empty string
-    // here.
-    DCHECK_EQ(function_name, ast_value_factory()->empty_string());
-  }
-
-  ParserFormalParameters formals(function_scope);
-
-  {
-    ParameterDeclarationParsingScope formals_scope(this);
-    if (is_wrapped) {
-      // For a function implicitly wrapped in function header and footer, the
-      // function arguments are provided separately to the source, and are
-      // declared directly here.
-      for (const AstRawString* arg : *arguments_for_wrapped_function) {
-        const bool is_rest = false;
-        Expression* argument = ExpressionFromIdentifier(arg, kNoSourcePosition);
-        AddFormalParameter(&formals, argument, NullExpression(),
-                           kNoSourcePosition, is_rest);
-      }
-      DCHECK_EQ(arguments_for_wrapped_function->length(),
-                formals.num_parameters());
-      DeclareFormalParameters(&formals);
-    } else {
-      // For a regular function, the function arguments are parsed from source.
-      DCHECK_NULL(arguments_for_wrapped_function);
-      ParseFormalParameterList(&formals);
-      if (expected_parameters_end_pos != kNoSourcePosition) {
-        // Check for '(' or ')' shenanigans in the parameter string for dynamic
-        // functions.
-        int position = peek_position();
-        if (position < expected_parameters_end_pos) {
-          ReportMessageAt(Scanner::Location(position, position + 1),
-                          MessageTemplate::kArgStringTerminatesParametersEarly);
-          return;
-        } else if (position > expected_parameters_end_pos) {
-          ReportMessageAt(Scanner::Location(expected_parameters_end_pos - 2,
-                                            expected_parameters_end_pos),
-                          MessageTemplate::kUnexpectedEndOfArgString);
-          return;
-        }
-      }
-      Expect(Token::RPAREN);
-      int formals_end_position = scanner()->location().end_pos;
-
-      CheckArityRestrictions(formals.arity, kind, formals.has_rest,
-                             function_scope->start_position(),
-                             formals_end_position);
-      Expect(Token::LBRACE);
-    }
-    formals.duplicate_loc = formals_scope.duplicate_location();
-  }
-
-  *num_parameters = formals.num_parameters();
-  *function_length = formals.function_length;
-
-  AcceptINScope scope(this, true);
-  ParseFunctionBody(body, function_name, pos, formals, kind,
-                    function_syntax_kind, FunctionBodyType::kBlock);
-
-  *has_duplicate_parameters = formals.has_duplicate();
-
-  *expected_property_count = function_state.expected_property_count();
-  *suspend_count = function_state.suspend_count();
 }
 
 FunctionLiteral* BinAstParser::ParseFunctionLiteral(
@@ -581,40 +383,6 @@ FunctionLiteral* BinAstParser::ParseFunctionLiteral(
   }
 
   return function_literal;
-}
-
-void BinAstParser::ParseOnBackground(ParseInfo* info, int start_position,
-                                     int end_position, int function_literal_id) {
-  RuntimeCallTimerScope runtimeTimer(
-      runtime_call_stats_, RuntimeCallCounterId::kParseBackgroundProgram);
-  parsing_on_main_thread_ = false;
-
-  DCHECK_NULL(info->literal());
-  FunctionLiteral* result = nullptr;
-
-  scanner_.Initialize();
-
-  DCHECK(original_scope_);
-
-  // When streaming, we don't know the length of the source until we have parsed
-  // it. The raw data can be UTF-8, so we wouldn't know the source length until
-  // we have decoded it anyway even if we knew the raw data length (which we
-  // don't). We work around this by storing all the scopes which need their end
-  // position set at the end of the script (the top scope and possible eval
-  // scopes) and set their end position after we know the script length.
-  if (flags().is_toplevel()) {
-    DCHECK_EQ(start_position, 0);
-    DCHECK_EQ(end_position, 0);
-    DCHECK_EQ(function_literal_id, kFunctionLiteralIdTopLevel);
-    result = DoParseProgram(info);
-  } else {
-    result = DoParseFunction(info, start_position,
-                             end_position, function_literal_id,
-                             info->function_name());
-  }
-  MaybeResetCharacterStream(info, result);
-  // MaybeProcessSourceRanges(info, result, stack_limit_);
-  PostProcessParseResult(info, result);
 }
     
 }  // namespace internal
