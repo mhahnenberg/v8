@@ -2111,6 +2111,7 @@ class CompareOperation final : public Expression {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstDeserializer;
 
   CompareOperation(Token::Value op, Expression* left, Expression* right,
                    int pos)
@@ -2189,6 +2190,7 @@ class Assignment : public Expression {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstDeserializer;
 
   using TokenField = Expression::NextBitField<Token::Value, 7>;
   using LookupHoistingModeField = TokenField::Next<bool, 1>;
