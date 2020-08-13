@@ -12,9 +12,9 @@
 namespace v8 {
 namespace internal {
 
-BinAstDeserializer::BinAstDeserializer(Parser* parser)
-  : parser_(parser) {
-
+BinAstDeserializer::BinAstDeserializer(Parser* parser, Scope* outer_scope)
+  : parser_(parser)
+{
 }
 
 Zone* BinAstDeserializer::zone() {
@@ -182,26 +182,6 @@ BinAstDeserializer::DeserializeResult<AstConsString*> BinAstDeserializer::Deseri
   return {cons_string, offset};
 }
 
-void BinAstDeserializer::LinkUnresolvedVariableProxies() {
-  for (auto it = variable_proxies_by_position_.begin(); it != variable_proxies_by_position_.end(); ++it) {
-    VariableProxy* var_proxy = it->second;
-    if (var_proxy->next_unresolved_ == nullptr) {
-      continue;
-    }
-
-    int next_unresolved_position = (int)(std::intptr_t)var_proxy->next_unresolved_;
-    auto lookup_result = variable_proxies_by_position_.find(next_unresolved_position);
-    // TODO(binast): Enable this assert. We currently can't guarantee this since we don't support visiting all node types
-    // and therefore can't guarantee that we'll visit every VariableProxy.
-    // DCHECK(lookup_result != variable_proxies_by_position_.end());
-    if (lookup_result == variable_proxies_by_position_.end()) {
-      var_proxy->next_unresolved_ = nullptr;
-    } else {
-      var_proxy->next_unresolved_ = lookup_result->second;
-    }
-  }
-}
-
 AstNode* BinAstDeserializer::DeserializeAst(ByteArray serialized_ast) {
   int offset = 0;
   auto string_table_result = DeserializeStringTable(serialized_ast, offset);
@@ -209,7 +189,6 @@ AstNode* BinAstDeserializer::DeserializeAst(ByteArray serialized_ast) {
   auto result = DeserializeAstNode(serialized_ast, offset);
   // Check that we consumed all the bytes that were serialized.
   DCHECK(result.new_offset == serialized_ast.length());
-  LinkUnresolvedVariableProxies();
   return result.value;
 }
 
@@ -274,7 +253,10 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
     auto result = DeserializeCompareOperation(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
-  case AstNode::kEmptyStatement:
+  case AstNode::kEmptyStatement: {
+    auto result = DeserializeEmptyStatement(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
   case AstNode::kForStatement:
   case AstNode::kCountOperation:
   case AstNode::kObjectLiteral:
@@ -514,18 +496,9 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
 }
 
 BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeCommonScopeFields(ByteArray serialized_binast, int offset, Scope* scope) {
-  // TODO(binast): How to represent/store these scope relationships?
-  // Idea: We could store an ID with each scope when serializing it and then build a table of scopes as we deserialize and then link all the scopes in the tree together (similar to raw string references)
-  // outer_scope_
-  // inner_scope_
-  // sibling_
-
-  // variables_
   auto variable_map_result = DeserializeScopeVariableMap(serialized_binast, offset, scope);
   offset = variable_map_result.new_offset;
-  // locals_
   // unresolved_list_
-  // decls_
   auto declarations_result = DeserializeScopeDeclarations(serialized_binast, offset, scope);
   offset = declarations_result.new_offset;
 
@@ -743,11 +716,16 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   auto num_statements = DeserializeInt32(serialized_binast, offset);
   offset = num_statements.new_offset;
 
-  for (int i = 0; i < num_statements.value; ++i) {
-    auto statement = DeserializeAstNode(serialized_binast, offset);
-    offset = statement.new_offset;
-    DCHECK(statement.value == nullptr || statement.value->AsStatement() != nullptr);
-    body.Add(static_cast<Statement*>(statement.value));
+  {
+    Parser::FunctionState function_state(&parser_->function_state_, &parser_->scope_, scope.value);
+
+    for (int i = 0; i < num_statements.value; ++i) {
+      auto statement = DeserializeAstNode(serialized_binast, offset);
+      offset = statement.new_offset;
+      DCHECK(statement.value != nullptr);
+      DCHECK(statement.value->AsStatement() != nullptr);
+      body.Add(static_cast<Statement*>(statement.value));
+    }
   }
 
   FunctionLiteral* result = parser_->factory()->NewFunctionLiteral(
@@ -830,21 +808,10 @@ BinAstDeserializer::DeserializeResult<VariableProxy*> BinAstDeserializer::Deseri
     offset = raw_name.new_offset;
     // We use NORMAL_VARIABLE as a placeholder here.
     result = parser_->factory()->NewVariableProxy(raw_name.value, VariableKind::NORMAL_VARIABLE, position.value);
+
+    parser_->scope()->AddUnresolved(result);
   }
   result->bit_field_ = bit_field.value;
-
-  auto next_unresolved_position = DeserializeInt32(serialized_binast, offset);
-  offset = next_unresolved_position.new_offset;
-
-  if (next_unresolved_position.value == -1) {
-    result->next_unresolved_ = nullptr;
-  } else {
-    result->next_unresolved_ = static_cast<VariableProxy*>(reinterpret_cast<void*>(next_unresolved_position.value));
-  }
-
-  DCHECK(variable_proxies_by_position_.count(position.value) == 0);
-  variable_proxies_by_position_[position.value] = result;
-
   return {result, offset};
 }
 
@@ -973,17 +940,6 @@ BinAstDeserializer::DeserializeResult<IfStatement*> BinAstDeserializer::Deserial
 }
 
 BinAstDeserializer::DeserializeResult<Block*> BinAstDeserializer::DeserializeBlock(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
-  auto statement_count = DeserializeInt32(serialized_binast, offset);
-  offset = statement_count.new_offset;
-
-  std::vector<void*> pointer_buffer;
-  ScopedPtrList<Statement> statements(&pointer_buffer);
-  for (int i = 0; i < statement_count.value; ++i) {
-    auto statement = DeserializeAstNode(serialized_binast, offset);
-    offset = statement.new_offset;
-    statements.Add(static_cast<Statement*>(statement.value));
-  }
-
   auto has_scope = DeserializeUint8(serialized_binast, offset);
   offset = has_scope.new_offset;
 
@@ -994,12 +950,32 @@ BinAstDeserializer::DeserializeResult<Block*> BinAstDeserializer::DeserializeBlo
     scope = scope_result.value;
   }
 
-  bool ignore_completion_value = false; // Just a filler value.
-  Block* block = parser_->factory()->NewBlock(ignore_completion_value, statements);
-  block->bit_field_ = bit_field;
-  block->set_scope(scope);
+  auto statement_count = DeserializeInt32(serialized_binast, offset);
+  offset = statement_count.new_offset;
 
-  return {nullptr, offset};
+  std::vector<void*> pointer_buffer;
+  ScopedPtrList<Statement> statements(&pointer_buffer);
+  if (scope != nullptr) {
+    Parser::BlockState block_state(&parser_->scope_, scope);
+    for (int i = 0; i < statement_count.value; ++i) {
+      auto statement = DeserializeAstNode(serialized_binast, offset);
+      offset = statement.new_offset;
+      statements.Add(static_cast<Statement*>(statement.value));
+    }
+  } else {
+    for (int i = 0; i < statement_count.value; ++i) {
+      auto statement = DeserializeAstNode(serialized_binast, offset);
+      offset = statement.new_offset;
+      statements.Add(static_cast<Statement*>(statement.value));
+    }
+  }
+
+  bool ignore_completion_value = false; // Just a filler value.
+  Block* result = parser_->factory()->NewBlock(ignore_completion_value, statements);
+  result->bit_field_ = bit_field;
+  result->set_scope(scope);
+
+  return {result, offset};
 }
 
 BinAstDeserializer::DeserializeResult<Assignment*> BinAstDeserializer::DeserializeAssignment(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
@@ -1028,8 +1004,14 @@ BinAstDeserializer::DeserializeResult<CompareOperation*> BinAstDeserializer::Des
   return {result, offset};
 }
 
+BinAstDeserializer::DeserializeResult<EmptyStatement*> BinAstDeserializer::DeserializeEmptyStatement(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  EmptyStatement* result = parser_->factory()->EmptyStatement();
+  return {result, offset};
+}
+
 // This is just a placeholder while we implement the various nodes that we'll support.
 BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeNodeStub(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  UNREACHABLE();
   return {nullptr, offset};
 }
 

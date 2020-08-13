@@ -453,31 +453,6 @@ inline void BinAstSerializeVisitor::SerializeVariableProxy(VariableProxy* proxy)
   } else {
     SerializeRawStringReference(proxy->raw_name());
   }
-
-  // We need to be able to reproduce this chain of unresolved variable proxies,
-  // so we store all encountered VariableProxy objects in a map with their start
-  // positions, which should be unique per variable. We can then use this information
-  // during deserialization to link all of the VariableProxy objects.
-  if (proxy->next_unresolved_ == nullptr) {
-    // There is no next unresolved proxy, so store -1 which is an impossible start position.
-    SerializeInt32(-1);
-  } else {
-    // There is a next unresolved proxy, so look it up and add it if necessary.
-    int next_unresolved_position;
-    auto lookup_result = var_proxy_ids.find(proxy->next_unresolved_);
-    if (lookup_result == var_proxy_ids.end()) {
-      next_unresolved_position = proxy->next_unresolved_->position();
-      var_proxy_ids[proxy->next_unresolved_] = next_unresolved_position;
-    } else {
-      next_unresolved_position = lookup_result->second;
-    }
-    SerializeInt32(next_unresolved_position);
-  }
-  // Also insert ourself into the VariableProxy map if necessary.
-  auto lookup_result = var_proxy_ids.find(proxy);
-  if (lookup_result == var_proxy_ids.end()) {
-    var_proxy_ids[proxy] = proxy->position();
-  }
 }
 
 inline void ToDoBinAst() {
@@ -506,15 +481,15 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
 
 inline void BinAstSerializeVisitor::VisitBlock(Block* block) {
   SerializeAstNodeHeader(block);
-  SerializeInt32(block->statements()->length());
-  for (Statement* statement : *block->statements()) {
-    VisitNode(statement);
-  }
   if (block->scope()) {
     SerializeUint8(1);
     SerializeScope(block->scope());
   } else {
     SerializeUint8(0);
+  }
+  SerializeInt32(block->statements()->length());
+  for (Statement* statement : *block->statements()) {
+    VisitNode(statement);
   }
 }
 
@@ -566,7 +541,6 @@ inline void BinAstSerializeVisitor::VisitLiteral(Literal* literal) {
 
 inline void BinAstSerializeVisitor::VisitEmptyStatement(EmptyStatement* empty_statement) {
   SerializeAstNodeHeader(empty_statement);
-  ToDoBinAst();
 }
 
 inline void BinAstSerializeVisitor::VisitAssignment(Assignment* assignment) {

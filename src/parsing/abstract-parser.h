@@ -2025,7 +2025,7 @@ void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* info,
   info->set_function_name(impl()->ast_value_factory()->GetString(name));
   scanner_.Initialize();
 
-  FunctionLiteral* result;
+  FunctionLiteral* result = nullptr;
   if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData())) {
     auto start = std::chrono::high_resolution_clock::now();
     Handle<BinAstParseData> binast_parse_data =
@@ -2042,9 +2042,8 @@ void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* info,
       typename ParserBase<Impl>::FunctionState function_state(
           &impl()->function_state_, &impl()->scope_, outer_function);
       typename ParserBase<Impl>::BlockState block_state(&impl()->scope_, outer);
-      BinAstDeserializer deserializer(impl());
-      AstNode* ast_node =
-          deserializer.DeserializeAst(binast_parse_data->serialized_ast());
+      BinAstDeserializer deserializer(impl(), outer);
+      AstNode* ast_node = deserializer.DeserializeAst(binast_parse_data->serialized_ast());
       literal = ast_node->AsFunctionLiteral();
       DCHECK(literal != nullptr);
     }
@@ -2059,9 +2058,10 @@ void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* info,
     }
     printf("' in %lld us: %p\n", microseconds, literal);
     // TODO(binast): Store the literal on the ParseInfo
+    result = literal;
   }
 
-  if (V8_UNLIKELY(shared_info->private_name_lookup_skips_outer_class() &&
+  if (V8_UNLIKELY(result == nullptr && shared_info->private_name_lookup_skips_outer_class() &&
                   impl()->original_scope_->is_class_scope())) {
     // If the function skips the outer class and the outer scope is a class, the
     // function is in heritage position. Otherwise the function scope's skip bit
@@ -2070,7 +2070,7 @@ void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* info,
         impl()->original_scope_->AsClassScope());
     result = DoParseFunction(isolate, info, start_position, end_position,
                              function_literal_id, info->function_name());
-  } else {
+  } else if (result == nullptr) {
     result = DoParseFunction(isolate, info, start_position, end_position,
                              function_literal_id, info->function_name());
   }
