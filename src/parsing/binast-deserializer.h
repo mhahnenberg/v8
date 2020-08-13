@@ -24,7 +24,7 @@ class VariableProxyExpression;
 
 class BinAstDeserializer {
  public:
-  BinAstDeserializer(Parser* parser);
+  BinAstDeserializer(Parser* parser, Scope* outer_scope);
 
   AstNode* DeserializeAst(ByteArray serialized_ast);
 
@@ -81,14 +81,12 @@ class BinAstDeserializer {
   DeserializeResult<Block*> DeserializeBlock(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<Assignment*> DeserializeAssignment(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<CompareOperation*> DeserializeCompareOperation(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<EmptyStatement*> DeserializeEmptyStatement(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<std::nullptr_t> DeserializeNodeStub(ByteArray serialized_binast, uint32_t bit_field, int32_t position, int offset);
-
-  void LinkUnresolvedVariableProxies();
 
   Parser* parser_;
   std::unordered_map<uint32_t, const AstRawString*> string_table_;
   std::unordered_map<uint32_t, Variable*> variables_by_id_;
-  std::unordered_map<uint32_t, VariableProxy*> variable_proxies_by_position_;
 };
 
 }  // namespace internal
