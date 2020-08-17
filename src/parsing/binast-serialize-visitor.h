@@ -220,6 +220,7 @@ inline void BinAstSerializeVisitor::SerializeConsString(const AstConsString* con
 
 inline void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* function_name) {
   uint32_t num_entries = ast_value_factory_->string_table_.occupancy();
+  uint32_t num_constant_entries = ast_value_factory_->string_constants_->string_table()->occupancy();
   // We serialize the outer function raw_name too.
   // TODO(binast): Do we need to?
   if (function_name != nullptr) {
@@ -229,12 +230,24 @@ inline void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* fu
       }
     }
   }
-  SerializeUint32(num_entries);
+  SerializeUint32(num_entries - num_constant_entries);
   uint32_t current_index = 1;
+  // Insert non-constant strings
   for (AstRawStringMap::Entry* entry = ast_value_factory_->string_table_.Start(); entry != nullptr; entry = ast_value_factory_->string_table_.Next(entry)) {
     const AstRawString* s = reinterpret_cast<const AstRawString*>(entry->key);
+    // We don't want to serialize string constants that are shared between Isolates
+    AstRawStringMap::Entry* string_const_entry = ast_value_factory_->string_constants_->string_table()->Lookup(entry->key, entry->key->Hash());
+    if (string_const_entry != nullptr) {
+      continue;
+    }
     SerializeRawString(s);
     string_table_indices_.insert({s, current_index});
+    current_index += 1;
+  }
+
+  // Only insert constant strings into the table (i.e. don't serialize their contents)
+  for (AstRawStringMap::Entry* entry = ast_value_factory_->string_constants_->string_table()->Start(); entry != nullptr; entry = ast_value_factory_->string_constants_->string_table()->Next(entry)) {
+    string_table_indices_.insert({entry->key, current_index});
     current_index += 1;
   }
 
