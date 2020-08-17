@@ -140,12 +140,19 @@ BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserializer::D
 }
 
 BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeStringTable(ByteArray serialized_ast, int offset) {
-  auto num_entries = DeserializeUint32(serialized_ast, offset);
-  offset = num_entries.new_offset;
-  for (uint32_t i = 0; i < num_entries.value; ++i) {
+  auto num_non_constant_entries = DeserializeUint32(serialized_ast, offset);
+  offset = num_non_constant_entries.new_offset;
+
+  for (uint32_t i = 0; i < num_non_constant_entries.value; ++i) {
     auto string = DeserializeRawString(serialized_ast, offset);
     offset = string.new_offset;
   }
+
+  for (base::HashMap::Entry* entry = parser_->ast_value_factory()->string_constants_->string_table()->Start(); entry != nullptr; entry = parser_->ast_value_factory()->string_constants_->string_table()->Next(entry)) {
+    const AstRawString* s = reinterpret_cast<const AstRawString*>(entry->key);
+    string_table_.insert({string_table_.size() + 1, s});
+  }
+
   return {nullptr, offset};
 }
 

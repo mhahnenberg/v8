@@ -2,6 +2,43 @@
 
 var double = function(x) { return x * 2; }
 function triple(x) { return x * 3; }
+function deep() {
+  return function() {
+    return function() {
+    return function() {
+    return function() {
+    return function() {
+    return function() {
+    return function() {
+    return function() {
+    return function() {
+    return function() {
+    return function() {
+    return function() {
+    return function() {
+    return function() {
+    return function() {
+    return function() {
+    return function() {
+      return 42;
+    };
+    };
+    };
+    };
+    };
+    };
+    };
+    };
+    };
+    };
+    };
+    };
+    };
+    };
+    };
+    };
+  };
+}
 
 var oldSetTimeout = setTimeout;
 var timerCallbacks = [];
@@ -51,6 +88,7 @@ setTimeout(function testCallback2() {
   console.log("running callback");
   console.log(double(42));
   console.log(triple(24));
+  console.log(deep()()()()()()()()()()()()()()()()()());
 }, 5000);
 
 tickRunLoop();
