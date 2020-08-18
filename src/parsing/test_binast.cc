@@ -8,7 +8,7 @@
 #include "src/ast/prettyprinter.h"
 
 static const char* test_scripts[] = {
-  // TODO(binast): (sloppy mode) "42",
+  "42",
   "'use strict';\n42",
   "'use strict';\n'foo'",
   "'use strict';\nif (true) { 'foo'; }",
@@ -20,6 +20,7 @@ static const char* test_scripts[] = {
   "'use strict';\nvar obj = {foo: 'bar', bar: 1, baz: function(x) { return x; }};",
   "'use strict';\nvar obj = {}; obj.foo = 'bar';",
   "'use strict';\nvar arr = [];",
+  "'use strict';\nconst square = (x) => x * x;",
 };
 
 static const size_t num_test_scripts = sizeof(test_scripts) / sizeof(char*);
