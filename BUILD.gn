@@ -5183,40 +5183,6 @@ if (current_toolchain == v8_snapshot_toolchain) {
   }
 }
 
-v8_executable("test_binast") {
-    visibility = [ ":*" ]  # Only targets in this file can depend on this.
-
-    sources = [
-      "src/snapshot/embedded/embedded-empty.cc",
-      # "src/snapshot/embedded/embedded-file-writer.cc",
-      # "src/snapshot/embedded/embedded-file-writer.h",
-      # "src/snapshot/embedded/platform-embedded-file-writer-aix.cc",
-      # "src/snapshot/embedded/platform-embedded-file-writer-aix.h",
-      # "src/snapshot/embedded/platform-embedded-file-writer-base.cc",
-      # "src/snapshot/embedded/platform-embedded-file-writer-base.h",
-      # "src/snapshot/embedded/platform-embedded-file-writer-generic.cc",
-      # "src/snapshot/embedded/platform-embedded-file-writer-generic.h",
-      # "src/snapshot/embedded/platform-embedded-file-writer-mac.cc",
-      # "src/snapshot/embedded/platform-embedded-file-writer-mac.h",
-      # "src/snapshot/embedded/platform-embedded-file-writer-win.cc",
-      # "src/snapshot/embedded/platform-embedded-file-writer-win.h",
-      "src/parsing/test_binast.cc",
-      # "src/snapshot/snapshot-empty.cc",
-      "src/snapshot/snapshot-empty.cc",
-    ]
-
-    configs = [ ":internal_config" ]
-
-    deps = [
-      ":v8_base",
-      ":v8_init",
-      ":v8_libbase",
-      ":v8_libplatform",
-      ":v8_maybe_icu",
-      ":v8_tracing",
-    ]
-}
-
 if (current_toolchain == v8_snapshot_toolchain) {
   v8_executable("torque") {
     visibility = [ ":*" ]  # Only targets in this file can depend on this.
