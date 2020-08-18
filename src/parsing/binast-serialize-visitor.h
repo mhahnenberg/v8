@@ -24,13 +24,14 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
  public:
   BinAstSerializeVisitor(AstValueFactory* ast_value_factory)
     : BinAstVisitor(),
-      ast_value_factory_(ast_value_factory) {
+      ast_value_factory_(ast_value_factory),
+      encountered_unhandled_node_(false) {
   }
+
   uint8_t* serialized_bytes() const { return compressed_byte_data_.get(); }
   size_t serialized_bytes_length() const { return compressed_byte_data_length_; }
 
-
-  void SerializeAst(AstNode* root);
+  bool SerializeAst(AstNode* root);
 
   virtual void VisitFunctionLiteral(FunctionLiteral* function_literal) override;
   virtual void VisitBlock(Block* block) override;
@@ -77,6 +78,8 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeAstNodeHeader(AstNode* node);
   void SerializeVariableProxy(VariableProxy* proxy);
 
+  void ToDoBinAst(AstNode* node);
+
   AstValueFactory* ast_value_factory_;
   std::unordered_map<const AstRawString*, uint32_t> string_table_indices_;
   std::vector<uint8_t> byte_data_;
@@ -84,6 +87,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   size_t compressed_byte_data_length_;
   std::unordered_map<Variable*, uint32_t> variable_ids_;
   std::unordered_map<VariableProxy*, int> var_proxy_ids;
+  bool encountered_unhandled_node_;
 };
 
 // TODO(binast): Maybe templatize these to reduce duplication?
@@ -272,7 +276,7 @@ inline void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* fu
   DCHECK(current_index == num_entries + 1);
 }
 
-inline void BinAstSerializeVisitor::SerializeAst(AstNode* root) {
+inline bool BinAstSerializeVisitor::SerializeAst(AstNode* root) {
   static std::mutex class_lock ;
   std::lock_guard<std::mutex> lock( class_lock ) ;
   auto start = std::chrono::high_resolution_clock::now();
@@ -280,6 +284,11 @@ inline void BinAstSerializeVisitor::SerializeAst(AstNode* root) {
   DCHECK(literal != nullptr);
   SerializeStringTable(literal->raw_name());
   VisitNode(root);
+
+  if (encountered_unhandled_node_) {
+    return false;
+  }
+
   compressed_byte_data_ = std::make_unique<byte[]>(byte_data_.size() + sizeof(size_t));
   size_t compressed_data_size = byte_data_.size();
   int compress_result = compress2(compressed_byte_data_.get() + sizeof(size_t), &compressed_data_size, &byte_data_[0], byte_data_.size(), /* level */9);
@@ -288,6 +297,7 @@ inline void BinAstSerializeVisitor::SerializeAst(AstNode* root) {
     *reinterpret_cast<size_t*>(compressed_byte_data_.get()) = byte_data_.size();
   } else {
     printf("\nError compressing serialized AST: %s\n", zError(compress_result));
+    return false;
   }
 
   auto elapsed = std::chrono::high_resolution_clock::now() - start;
@@ -297,6 +307,7 @@ inline void BinAstSerializeVisitor::SerializeAst(AstNode* root) {
     printf("%.*s", s->byte_length(), s->raw_data());
   }
   printf("' in %lld us\n", microseconds);
+  return true;
 }
 
 inline void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
@@ -487,9 +498,11 @@ inline void BinAstSerializeVisitor::SerializeVariableProxy(VariableProxy* proxy)
   }
 }
 
-inline void ToDoBinAst() {
+inline void BinAstSerializeVisitor::ToDoBinAst(AstNode* node) {
   // TODO(binast): Delete this function when it's no longer needed.
   // UNREACHABLE();
+  printf("BinAstSerializeVisitor encountered unhandled node type: %s\n", node->node_type_name());
+  encountered_unhandled_node_ = true;
 }
 
 inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
@@ -593,7 +606,7 @@ inline void BinAstSerializeVisitor::VisitVariableProxyExpression(VariableProxyEx
 
 inline void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statement) {
   SerializeAstNodeHeader(for_statement);
-  ToDoBinAst();
+  ToDoBinAst(for_statement);
 }
 
 inline void BinAstSerializeVisitor::VisitCompareOperation(CompareOperation* compare) {
@@ -604,7 +617,7 @@ inline void BinAstSerializeVisitor::VisitCompareOperation(CompareOperation* comp
 
 inline void BinAstSerializeVisitor::VisitCountOperation(CountOperation* operation) {
   SerializeAstNodeHeader(operation);
-  ToDoBinAst();
+  ToDoBinAst(operation);
 }
 
 inline void BinAstSerializeVisitor::VisitCall(Call* call) {
@@ -645,12 +658,12 @@ inline void BinAstSerializeVisitor::VisitBinaryOperation(BinaryOperation* binary
 
 inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_literal) {
   SerializeAstNodeHeader(object_literal);
-  ToDoBinAst();
+  ToDoBinAst(object_literal);
 }
 
 inline void BinAstSerializeVisitor::VisitArrayLiteral(ArrayLiteral* array_literal) {
   SerializeAstNodeHeader(array_literal);
-  ToDoBinAst();
+  ToDoBinAst(array_literal);
 }
 
 }  // namespace internal
