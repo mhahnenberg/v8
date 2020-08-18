@@ -2070,8 +2070,19 @@ void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* info,
     result = DoParseFunction(isolate, info, start_position, end_position,
                              function_literal_id, info->function_name());
   } else if (result == nullptr) {
+    auto start = std::chrono::high_resolution_clock::now();
     result = DoParseFunction(isolate, info, start_position, end_position,
                              function_literal_id, info->function_name());
+    auto elapsed = std::chrono::high_resolution_clock::now() - start;
+    long long microseconds =
+        std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+    printf("Parsed function literal for '");
+    if (result->has_shared_name()) {
+      for (const AstRawString* s : result->raw_name()->ToRawStrings()) {
+        printf("%.*s", s->byte_length(), s->raw_data());
+      }
+    }
+    printf("' in %lld us: %p\n", microseconds, result);
   }
   MaybeResetCharacterStream(info, result);
   MaybeProcessSourceRanges(info, result, impl()->stack_limit_);
