@@ -7,6 +7,7 @@
 
 #include "src/parsing/binast-visitor.h"
 #include "src/ast/scopes.h"
+#include "third_party/zlib/zlib.h"
 
 namespace v8 {
 namespace internal {
@@ -25,7 +26,9 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
     : BinAstVisitor(),
       ast_value_factory_(ast_value_factory) {
   }
-  std::vector<uint8_t>& serialized_bytes() { return byte_data_; }
+  uint8_t* serialized_bytes() const { return compressed_byte_data_.get(); }
+  size_t serialized_bytes_length() const { return compressed_byte_data_length_; }
+
 
   void SerializeAst(AstNode* root);
 
@@ -77,6 +80,8 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   AstValueFactory* ast_value_factory_;
   std::unordered_map<const AstRawString*, uint32_t> string_table_indices_;
   std::vector<uint8_t> byte_data_;
+  std::unique_ptr<uint8_t[]> compressed_byte_data_;
+  size_t compressed_byte_data_length_;
   std::unordered_map<Variable*, uint32_t> variable_ids_;
   std::unordered_map<VariableProxy*, int> var_proxy_ids;
 };
@@ -270,6 +275,15 @@ inline void BinAstSerializeVisitor::SerializeAst(AstNode* root) {
   DCHECK(literal != nullptr);
   SerializeStringTable(literal->raw_name());
   VisitNode(root);
+  compressed_byte_data_ = std::make_unique<byte[]>(byte_data_.size() + sizeof(size_t));
+  size_t compressed_data_size = byte_data_.size();
+  int compress_result = compress2(compressed_byte_data_.get() + sizeof(size_t), &compressed_data_size, &byte_data_[0], byte_data_.size(), /* level */9);
+  if (compress_result == Z_OK) {
+    compressed_byte_data_length_ = compressed_data_size + sizeof(size_t);
+    *reinterpret_cast<size_t*>(compressed_byte_data_.get()) = byte_data_.size();
+  } else {
+    printf("\nError compressing serialized AST: %s\n", zError(compress_result));
+  }
 
   auto elapsed = std::chrono::high_resolution_clock::now() - start;
   long long microseconds = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
