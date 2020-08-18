@@ -2526,7 +2526,8 @@ class FunctionLiteral final : public Expression {
         scope_(scope),
         body_(body.ToConstVector(), zone),
         raw_inferred_name_(ast_value_factory->empty_cons_string()),
-        produced_preparse_data_(produced_preparse_data) {
+        produced_preparse_data_(produced_preparse_data),
+        produced_binast_parse_data_(nullptr) {
     bit_field_ |= FunctionSyntaxKindBits::encode(function_syntax_kind) |
                   Pretenure::encode(false) |
                   HasDuplicateParameters::encode(has_duplicate_parameters ==
