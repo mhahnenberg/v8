@@ -208,9 +208,12 @@ void BinAstParser::PostProcessParseResult(ParseInfo* info, FunctionLiteral* lite
 {
   if (literal == nullptr) return;
 
+  // Try to serialize the result for use during de-lazification.
   ZoneBinAstParseData* zone_binast_parse_data = ZoneBinAstParseDataBuilder::Serialize(zone(), ast_value_factory(), literal);
-  ProducedBinAstParseData* produced_binast_parse_data = ProducedBinAstParseData::For(zone_binast_parse_data, zone());
-  literal->set_produced_binast_parse_data(produced_binast_parse_data);
+  if (zone_binast_parse_data != nullptr) {
+    ProducedBinAstParseData* produced_binast_parse_data = ProducedBinAstParseData::For(zone_binast_parse_data, zone());
+    literal->set_produced_binast_parse_data(produced_binast_parse_data);
+  }
 
   info->set_literal(literal);
   info->set_language_mode(literal->language_mode());

@@ -1364,12 +1364,11 @@ void BackgroundBinAstParseTask::Run() {
 }
 
 bool BackgroundBinAstParseTask::Finalize(Isolate* isolate, Handle<SharedFunctionInfo> function) {
-  // TODO(binast): Remove this logging.
-  // const AstRawString* inferred_name = info()->function_name();
-  // printf("Finalizing '%.*s'!\n", inferred_name->byte_length(), inferred_name->raw_data());
   HandleScope scope(isolate);
-  // TODO(binast): Write implementation of ProducedBinAstParseData that actually performs some kind of serialization,
-  // and create an instance of that class during the BinAstParser's run.
+  // We gave up during serialization, so the task successfully completed but there's no result so just return.
+  if (info()->literal()->produced_binast_parse_data() == nullptr) {
+    return true;
+  }
   Handle<BinAstParseData> binast_parse_data = info()->literal()->produced_binast_parse_data()->Serialize(isolate);
   Handle<UncompiledData> data = isolate->factory()->NewUncompiledDataWithBinAstParseData(
         info()->literal()->GetInferredName(isolate),
@@ -1377,7 +1376,6 @@ bool BackgroundBinAstParseTask::Finalize(Isolate* isolate, Handle<SharedFunction
         info()->literal()->end_position(),
         binast_parse_data);
   function->set_uncompiled_data(*data);
-  // printf("Done!\n");
   return true;
 }
 

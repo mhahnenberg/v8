@@ -39,6 +39,13 @@ function deep() {
     };
   };
 }
+function sum(n) {
+  var result = 0;
+  for (var i = 0; i < n; ++i) {
+    result += i;
+  }
+  return result;
+}
 
 var oldSetTimeout = setTimeout;
 var timerCallbacks = [];
@@ -89,6 +96,7 @@ setTimeout(function testCallback2() {
   console.log(double(42));
   console.log(triple(24));
   console.log(deep()()()()()()()()()()()()()()()()()());
+  console.log(sum(10));
 }, 5000);
 
 tickRunLoop();
