@@ -80,7 +80,7 @@ ProducedBinAstParseData* ProducedBinAstParseData::For(ZoneBinAstParseData* data,
 ZoneBinAstParseData* ZoneBinAstParseDataBuilder::Serialize(Zone* zone, AstValueFactory* ast_value_factory, FunctionLiteral* function_literal) {
   BinAstSerializeVisitor visitor(ast_value_factory);
   visitor.SerializeAst(function_literal);
-  Vector<uint8_t> vector_byte_data(&visitor.serialized_bytes()[0], visitor.serialized_bytes().size());
+  Vector<uint8_t> vector_byte_data(visitor.serialized_bytes(), visitor.serialized_bytes_length());
   ZoneBinAstParseData* result = new (zone) ZoneBinAstParseData(zone, &vector_byte_data);
   return result;
 }
