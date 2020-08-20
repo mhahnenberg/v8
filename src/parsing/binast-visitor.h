@@ -30,7 +30,7 @@ public:
   virtual void VisitBinaryOperation(BinaryOperation* binary_op) = 0;
   virtual void VisitObjectLiteral(ObjectLiteral* object_literal) = 0;
   virtual void VisitArrayLiteral(ArrayLiteral* array_literal) = 0;
-
+  virtual void VisitCompoundAssignment(CompoundAssignment* compound_assignment) = 0;
 
   void VisitNode(AstNode* node) {
     switch (node->node_type()) {
@@ -121,6 +121,11 @@ public:
 
       case AstNode::kArrayLiteral: {
         VisitArrayLiteral(static_cast<ArrayLiteral*>(node));
+        break;
+      }
+
+      case AstNode::kCompoundAssignment: {
+        VisitCompoundAssignment(static_cast<CompoundAssignment*>(node));
         break;
       }
 
