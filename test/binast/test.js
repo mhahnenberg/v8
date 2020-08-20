@@ -3,23 +3,23 @@
 var double = function(x) { return x * 2; }
 function triple(x) { return x * 3; }
 function deep() {
-  return function() {
-    return function() {
-    return function() {
-    return function() {
-    return function() {
-    return function() {
-    return function() {
-    return function() {
-    return function() {
-    return function() {
-    return function() {
-    return function() {
-    return function() {
-    return function() {
-    return function() {
-    return function() {
-    return function() {
+  return function level0() {
+    return function level1() {
+    return function level2() {
+    return function level3() {
+    return function level4() {
+    return function level5() {
+    return function level6() {
+    return function level7() {
+    return function level8() {
+    return function level9() {
+    return function level10() {
+    return function level11() {
+    return function level12() {
+    return function level13() {
+    return function level14() {
+    return function level15() {
+    return function level16() {
       return 42;
     };
     };
@@ -57,7 +57,7 @@ function newSetTimeout(func, delayMs) {
   newCallback.deadline = deadline;
   timerCallbacks.push(newCallback);
   // Reverse sort so back of the array has the nearest timer callbacks
-  timerCallbacks.sort(function(e1, e2) {
+  timerCallbacks.sort(function sortFunction(e1, e2) {
     return e2.deadline - e1.deadline;
   });
 };
