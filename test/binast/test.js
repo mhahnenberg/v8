@@ -46,6 +46,24 @@ function sum(n) {
   }
   return result;
 }
+function sumWhile(n) {
+  var result = 0;
+  var i = 0;
+  while (i < n) {
+    result += i;
+    i += 1;
+  }
+  return result;
+}
+function sumDoWhile(n) {
+  var result = 0;
+  var i = 0;
+  do {
+    result += i;
+    i += 1;
+  } while (i < n);
+  return result;
+}
 
 var oldSetTimeout = setTimeout;
 var timerCallbacks = [];
@@ -97,6 +115,8 @@ setTimeout(function testCallback2() {
   console.log(triple(24));
   console.log(deep()()()()()()()()()()()()()()()()()());
   console.log(sum(10));
+  console.log(sumWhile(10));
+  console.log(sumDoWhile(10));
 }, 5000);
 
 tickRunLoop();

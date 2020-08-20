@@ -127,6 +127,14 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
     auto result = DeserializeCompoundAssignment(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
+  case AstNode::kWhileStatement: {
+    auto result = DeserializeWhileStatement(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
+  case AstNode::kDoWhileStatement: {
+    auto result = DeserializeDoWhileStatement(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
   case AstNode::kObjectLiteral:
   case AstNode::kArrayLiteral: {
     auto result = DeserializeNodeStub(serialized_binast, bit_field.value, position.value, offset);
@@ -671,6 +679,32 @@ BinAstDeserializer::DeserializeResult<ForStatement*> BinAstDeserializer::Deseria
 
   ForStatement* result = parser_->factory()->NewForStatement(position);
   result->Initialize(static_cast<Statement*>(init.value), static_cast<Expression*>(cond.value), static_cast<Statement*>(next.value), static_cast<Statement*>(body.value));
+  DCHECK(result->bit_field_ == bit_field);
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<WhileStatement*> BinAstDeserializer::DeserializeWhileStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto cond = DeserializeAstNode(serialized_binast, offset);
+  offset = cond.new_offset;
+
+  auto body = DeserializeAstNode(serialized_binast, offset);
+  offset = body.new_offset;
+
+  WhileStatement* result = parser_->factory()->NewWhileStatement(position);
+  result->Initialize(static_cast<Expression*>(cond.value), static_cast<Statement*>(body.value));
+  DCHECK(result->bit_field_ == bit_field);
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<DoWhileStatement*> BinAstDeserializer::DeserializeDoWhileStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto cond = DeserializeAstNode(serialized_binast, offset);
+  offset = cond.new_offset;
+
+  auto body = DeserializeAstNode(serialized_binast, offset);
+  offset = body.new_offset;
+
+  DoWhileStatement* result = parser_->factory()->NewDoWhileStatement(position);
+  result->Initialize(static_cast<Expression*>(cond.value), static_cast<Statement*>(body.value));
   DCHECK(result->bit_field_ == bit_field);
   return {result, offset};
 }

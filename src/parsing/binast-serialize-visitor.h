@@ -53,6 +53,8 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   virtual void VisitAssignment(Assignment* assignment) override;
   virtual void VisitVariableProxyExpression(VariableProxyExpression* var_proxy) override;
   virtual void VisitForStatement(ForStatement* for_statement) override;
+  virtual void VisitWhileStatement(WhileStatement* while_statement) override;
+  virtual void VisitDoWhileStatement(DoWhileStatement* do_while_statement) override;
   virtual void VisitCompareOperation(CompareOperation* compare) override;
   virtual void VisitCountOperation(CountOperation* operation) override;
   virtual void VisitCall(Call* call) override;
@@ -627,6 +629,18 @@ inline void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statemen
   VisitNode(for_statement->cond());
   VisitNode(for_statement->next());
   VisitNode(for_statement->body());
+}
+
+inline void BinAstSerializeVisitor::VisitWhileStatement(WhileStatement* while_statement) {
+  SerializeAstNodeHeader(while_statement);
+  VisitNode(while_statement->cond());
+  VisitNode(while_statement->body());
+}
+
+inline void BinAstSerializeVisitor::VisitDoWhileStatement(DoWhileStatement* do_while_statement) {
+  SerializeAstNodeHeader(do_while_statement);
+  VisitNode(do_while_statement->cond());
+  VisitNode(do_while_statement->body());
 }
 
 inline void BinAstSerializeVisitor::VisitCompareOperation(CompareOperation* compare) {
