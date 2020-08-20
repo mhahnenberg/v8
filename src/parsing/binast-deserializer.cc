@@ -115,8 +115,18 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
     auto result = DeserializeEmptyStatement(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
-  case AstNode::kForStatement:
-  case AstNode::kCountOperation:
+  case AstNode::kForStatement: {
+    auto result = DeserializeForStatement(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
+  case AstNode::kCountOperation: {
+    auto result = DeserializeCountOperation(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
+  case AstNode::kCompoundAssignment: {
+    auto result = DeserializeCompoundAssignment(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
   case AstNode::kObjectLiteral:
   case AstNode::kArrayLiteral: {
     auto result = DeserializeNodeStub(serialized_binast, bit_field.value, position.value, offset);
@@ -644,6 +654,54 @@ BinAstDeserializer::DeserializeResult<CompareOperation*> BinAstDeserializer::Des
 BinAstDeserializer::DeserializeResult<EmptyStatement*> BinAstDeserializer::DeserializeEmptyStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
   EmptyStatement* result = parser_->factory()->EmptyStatement();
   return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<ForStatement*> BinAstDeserializer::DeserializeForStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto init = DeserializeAstNode(serialized_binast, offset);
+  offset = init.new_offset;
+
+  auto cond = DeserializeAstNode(serialized_binast, offset);
+  offset = cond.new_offset;
+
+  auto next = DeserializeAstNode(serialized_binast, offset);
+  offset = next.new_offset;
+
+  auto body = DeserializeAstNode(serialized_binast, offset);
+  offset = body.new_offset;
+
+  ForStatement* result = parser_->factory()->NewForStatement(position);
+  result->Initialize(static_cast<Statement*>(init.value), static_cast<Expression*>(cond.value), static_cast<Statement*>(next.value), static_cast<Statement*>(body.value));
+  DCHECK(result->bit_field_ == bit_field);
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<CountOperation*> BinAstDeserializer::DeserializeCountOperation(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto expression = DeserializeAstNode(serialized_binast, offset);
+  offset = expression.new_offset;
+
+  Token::Value op = CountOperation::TokenField::decode(bit_field);
+  bool is_prefix = CountOperation::IsPrefixField::decode(bit_field);
+
+  CountOperation* result = parser_->factory()->NewCountOperation(op, is_prefix, static_cast<Expression*>(expression.value), position);
+  DCHECK(result->bit_field_ == bit_field);
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<CompoundAssignment*> BinAstDeserializer::DeserializeCompoundAssignment(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto target = DeserializeAstNode(serialized_binast, offset);
+  offset = target.new_offset;
+
+  auto value = DeserializeAstNode(serialized_binast, offset);
+  offset = value.new_offset;
+
+  auto binary_operation = DeserializeAstNode(serialized_binast, offset);
+  offset = binary_operation.new_offset;
+
+  Token::Value op = Assignment::TokenField::decode(bit_field);
+
+  Assignment* result = parser_->factory()->NewAssignment(op, static_cast<Expression*>(target.value), static_cast<Expression*>(value.value), position);
+  DCHECK(result->IsCompoundAssignment());
+  return {result->AsCompoundAssignment(), offset};
 }
 
 // This is just a placeholder while we implement the various nodes that we'll support.

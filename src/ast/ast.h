@@ -2085,6 +2085,7 @@ class CountOperation final : public Expression {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstDeserializer;
 
   CountOperation(Token::Value op, bool is_prefix, Expression* expr, int pos)
       : Expression(pos, kCountOperation), expression_(expr) {

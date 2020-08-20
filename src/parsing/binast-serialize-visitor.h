@@ -62,6 +62,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   virtual void VisitBinaryOperation(BinaryOperation* binary_op) override;
   virtual void VisitObjectLiteral(ObjectLiteral* binary_op) override;
   virtual void VisitArrayLiteral(ArrayLiteral *array_literal) override;
+  virtual void VisitCompoundAssignment(CompoundAssignment* compound_assignment) override;
 
  private:
   friend class BinAstDeserializer;
@@ -516,8 +517,8 @@ inline void BinAstSerializeVisitor::SerializeVariableProxy(VariableProxy* proxy)
 
 inline void BinAstSerializeVisitor::ToDoBinAst(AstNode* node) {
   // TODO(binast): Delete this function when it's no longer needed.
-  // UNREACHABLE();
   printf("BinAstSerializeVisitor encountered unhandled node type: %s\n", node->node_type_name());
+  // UNREACHABLE();
   encountered_unhandled_node_ = true;
 }
 
@@ -622,7 +623,10 @@ inline void BinAstSerializeVisitor::VisitVariableProxyExpression(VariableProxyEx
 
 inline void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statement) {
   SerializeAstNodeHeader(for_statement);
-  ToDoBinAst(for_statement);
+  VisitNode(for_statement->init());
+  VisitNode(for_statement->cond());
+  VisitNode(for_statement->next());
+  VisitNode(for_statement->body());
 }
 
 inline void BinAstSerializeVisitor::VisitCompareOperation(CompareOperation* compare) {
@@ -633,7 +637,7 @@ inline void BinAstSerializeVisitor::VisitCompareOperation(CompareOperation* comp
 
 inline void BinAstSerializeVisitor::VisitCountOperation(CountOperation* operation) {
   SerializeAstNodeHeader(operation);
-  ToDoBinAst(operation);
+  VisitNode(operation->expression());
 }
 
 inline void BinAstSerializeVisitor::VisitCall(Call* call) {
@@ -680,6 +684,13 @@ inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_lit
 inline void BinAstSerializeVisitor::VisitArrayLiteral(ArrayLiteral* array_literal) {
   SerializeAstNodeHeader(array_literal);
   ToDoBinAst(array_literal);
+}
+
+inline void BinAstSerializeVisitor::VisitCompoundAssignment(CompoundAssignment* compound_assignment) {
+  SerializeAstNodeHeader(compound_assignment);
+  VisitNode(compound_assignment->target());
+  VisitNode(compound_assignment->value());
+  VisitNode(compound_assignment->binary_operation());
 }
 
 }  // namespace internal
