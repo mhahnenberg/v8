@@ -2049,15 +2049,15 @@ void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* info,
     auto elapsed = std::chrono::high_resolution_clock::now() - start;
     long long microseconds =
         std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-    printf("Deserialized function literal for '");
+    printf("\nDeserialized function literal for '");
     if (literal->has_shared_name()) {
       for (const AstRawString* s : literal->raw_name()->ToRawStrings()) {
         printf("%.*s", s->byte_length(), s->raw_data());
       }
     }
-    printf("' in %lld us: %p\n", microseconds, literal);
+    printf("' in %lld us\n", microseconds);
     // TODO(binast): Store the literal on the ParseInfo
-    result = literal;
+    // result = literal;
   }
 
   if (V8_UNLIKELY(result == nullptr && shared_info->private_name_lookup_skips_outer_class() &&
@@ -2082,7 +2082,7 @@ void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* info,
         printf("%.*s", s->byte_length(), s->raw_data());
       }
     }
-    printf("' in %lld us: %p\n", microseconds, result);
+    printf("' in %lld us\n", microseconds);
   }
   MaybeResetCharacterStream(info, result);
   MaybeProcessSourceRanges(info, result, impl()->stack_limit_);
