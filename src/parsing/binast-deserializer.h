@@ -33,6 +33,7 @@ class BinAstDeserializer {
   };
 
   Zone* zone();
+  static bool UseCompression() { return false; }
 
   DeserializeResult<uint64_t> DeserializeUint64(uint8_t* bytes, int offset);
   DeserializeResult<uint32_t> DeserializeUint32(uint8_t* bytes, int offset);
