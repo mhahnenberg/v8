@@ -18,7 +18,6 @@ enum ScopeVariableKind : uint8_t {
   Definition = 2,
 };
 
-// TODO(binast)
 // Serializes binAST format into a linear sequence of bytes.
 class BinAstSerializeVisitor final : public BinAstVisitor {
  public:
@@ -28,8 +27,20 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
       encountered_unhandled_node_(false) {
   }
 
-  uint8_t* serialized_bytes() const { return compressed_byte_data_.get(); }
-  size_t serialized_bytes_length() const { return compressed_byte_data_length_; }
+  uint8_t* serialized_bytes() const {
+    if (UseCompression()) {
+      return compressed_byte_data_.get();
+    } else {
+      return const_cast<uint8_t*>(&byte_data_[0]);
+    }
+  }
+  size_t serialized_bytes_length() const {
+    if (UseCompression()) {
+      return compressed_byte_data_length_;
+    } else {
+      return byte_data_.size();
+    }
+  }
 
   bool SerializeAst(AstNode* root);
 
@@ -53,6 +64,9 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   virtual void VisitArrayLiteral(ArrayLiteral *array_literal) override;
 
  private:
+  friend class BinAstDeserializer;
+  static bool UseCompression() { return false; }
+
   void SerializeUint8(uint8_t value);
   void SerializeUint16(uint16_t value);
   void SerializeUint16Flags(const std::list<bool>& flags);
@@ -83,11 +97,12 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   AstValueFactory* ast_value_factory_;
   std::unordered_map<const AstRawString*, uint32_t> string_table_indices_;
   std::vector<uint8_t> byte_data_;
-  std::unique_ptr<uint8_t[]> compressed_byte_data_;
-  size_t compressed_byte_data_length_;
   std::unordered_map<Variable*, uint32_t> variable_ids_;
   std::unordered_map<VariableProxy*, int> var_proxy_ids;
   bool encountered_unhandled_node_;
+
+  std::unique_ptr<uint8_t[]> compressed_byte_data_;
+  size_t compressed_byte_data_length_;
 };
 
 // TODO(binast): Maybe templatize these to reduce duplication?
@@ -217,6 +232,7 @@ inline void BinAstSerializeVisitor::SerializeConsString(const AstConsString* con
   for (const AstRawString* string : strings) {
     DCHECK(string != nullptr);
     DCHECK(string_table_indices_.count(string) == 1);
+    (void)string;
     length += 1;
   }
 
@@ -284,15 +300,17 @@ inline bool BinAstSerializeVisitor::SerializeAst(AstNode* root) {
     return false;
   }
 
-  compressed_byte_data_ = std::make_unique<byte[]>(byte_data_.size() + sizeof(size_t));
-  size_t compressed_data_size = byte_data_.size();
-  int compress_result = compress2(compressed_byte_data_.get() + sizeof(size_t), &compressed_data_size, &byte_data_[0], byte_data_.size(), /* level */9);
-  if (compress_result == Z_OK) {
-    compressed_byte_data_length_ = compressed_data_size + sizeof(size_t);
-    *reinterpret_cast<size_t*>(compressed_byte_data_.get()) = byte_data_.size();
-  } else {
-    printf("\nError compressing serialized AST: %s\n", zError(compress_result));
-    return false;
+  if (UseCompression()) {
+    compressed_byte_data_ = std::make_unique<byte[]>(byte_data_.size() + sizeof(size_t));
+    size_t compressed_data_size = byte_data_.size();
+    int compress_result = compress2(compressed_byte_data_.get() + sizeof(size_t), &compressed_data_size, &byte_data_[0], byte_data_.size(), /* level */6);
+    if (compress_result == Z_OK) {
+      compressed_byte_data_length_ = compressed_data_size + sizeof(size_t);
+      *reinterpret_cast<size_t*>(compressed_byte_data_.get()) = byte_data_.size();
+    } else {
+      printf("\nError compressing serialized AST: %s\n", zError(compress_result));
+      return false;
+    }
   }
 
   auto elapsed = std::chrono::high_resolution_clock::now() - start;
