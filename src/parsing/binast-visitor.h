@@ -21,6 +21,8 @@ public:
   virtual void VisitAssignment(Assignment* assignment) = 0;
   virtual void VisitVariableProxyExpression(VariableProxyExpression* var_proxy) = 0;
   virtual void VisitForStatement(ForStatement* for_statement) = 0;
+  virtual void VisitWhileStatement(WhileStatement* while_statement) = 0;
+  virtual void VisitDoWhileStatement(DoWhileStatement* do_while_statement) = 0;
   virtual void VisitCompareOperation(CompareOperation* compare) = 0;
   virtual void VisitCountOperation(CountOperation* operation) = 0;
   virtual void VisitCall(Call* call) = 0;
@@ -76,6 +78,16 @@ public:
 
       case AstNode::kForStatement: {
         VisitForStatement(static_cast<ForStatement*>(node));
+        break;
+      }
+
+      case AstNode::kWhileStatement: {
+        VisitWhileStatement(static_cast<WhileStatement*>(node));
+        break;
+      }
+
+      case AstNode::kDoWhileStatement: {
+        VisitDoWhileStatement(static_cast<DoWhileStatement*>(node));
         break;
       }
 
