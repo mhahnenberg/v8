@@ -2119,6 +2119,7 @@ class CountOperation final : public Expression {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstDeserializer;
   friend Zone;
 
   CountOperation(Token::Value op, bool is_prefix, Expression* expr, int pos)
