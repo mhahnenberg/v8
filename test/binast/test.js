@@ -39,10 +39,17 @@ function deep() {
     };
   };
 }
-function sum(n) {
+function sumFor(n) {
   var result = 0;
   for (var i = 0; i < n; ++i) {
     result += i;
+  }
+  return result;
+}
+function sumForIn(arr) {
+  var result = 0;
+  for (var i in arr) {
+    result += arr[i];
   }
   return result;
 }
@@ -114,7 +121,8 @@ setTimeout(function testCallback2() {
   console.log(double(42));
   console.log(triple(24));
   console.log(deep()()()()()()()()()()()()()()()()()());
-  console.log(sum(10));
+  console.log(sumFor(10));
+  console.log(sumForIn([1,2,3,4,5,6,7,8,9,10]));
   console.log(sumWhile(10));
   console.log(sumDoWhile(10));
 }, 5000);

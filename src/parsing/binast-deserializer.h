@@ -84,6 +84,7 @@ class BinAstDeserializer {
   DeserializeResult<CompareOperation*> DeserializeCompareOperation(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<EmptyStatement*> DeserializeEmptyStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<ForStatement*> DeserializeForStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<ForInStatement*> DeserializeForInStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<WhileStatement*> DeserializeWhileStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<DoWhileStatement*> DeserializeDoWhileStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<CountOperation*> DeserializeCountOperation(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);

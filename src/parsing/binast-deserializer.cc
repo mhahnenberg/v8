@@ -119,6 +119,10 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
     auto result = DeserializeForStatement(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
+  case AstNode::kForInStatement: {
+    auto result = DeserializeForInStatement(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
   case AstNode::kCountOperation: {
     auto result = DeserializeCountOperation(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
@@ -685,6 +689,23 @@ BinAstDeserializer::DeserializeResult<ForStatement*> BinAstDeserializer::Deseria
   result->Initialize(static_cast<Statement*>(init.value), static_cast<Expression*>(cond.value), static_cast<Statement*>(next.value), static_cast<Statement*>(body.value));
   DCHECK(result->bit_field_ == bit_field);
   return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<ForInStatement*> BinAstDeserializer::DeserializeForInStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto each = DeserializeAstNode(serialized_binast, offset);
+  offset = each.new_offset;
+
+  auto subject = DeserializeAstNode(serialized_binast, offset);
+  offset = subject.new_offset;
+
+  auto body = DeserializeAstNode(serialized_binast, offset);
+  offset = body.new_offset;
+
+  ForEachStatement* result = parser_->factory()->NewForEachStatement(ForEachStatement::ENUMERATE, position);
+  result->Initialize(static_cast<Expression*>(each.value), static_cast<Expression*>(subject.value), static_cast<Statement*>(body.value));
+  DCHECK(result->bit_field_ == bit_field);
+  DCHECK(result->IsForInStatement());
+  return {static_cast<ForInStatement*>(result), offset};
 }
 
 BinAstDeserializer::DeserializeResult<WhileStatement*> BinAstDeserializer::DeserializeWhileStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
