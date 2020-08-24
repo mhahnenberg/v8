@@ -39,6 +39,25 @@ inline BinAstDeserializer::DeserializeResult<uint32_t> BinAstDeserializer::Deser
   return {result, offset + sizeof(uint32_t)};
 }
 
+inline BinAstDeserializer::DeserializeResult<uint32_t> BinAstDeserializer::DeserializeVarUint32(uint8_t* bytes, int offset) {
+  int i = 0;
+  uint32_t result = 0;
+  while (true) {
+    DCHECK(i < 4);
+    uint32_t current_byte = bytes[offset + i];
+    uint32_t raw_byte_value = current_byte & 0x7f;
+    uint32_t shifted_byte_value = raw_byte_value << (7 * i);
+    result |= shifted_byte_value;
+
+    bool has_next_byte = current_byte & 0x80;
+    if (!has_next_byte) {
+      break;
+    }
+    i += 1;
+  }
+  return {result, offset + i + 1};
+}
+
 inline BinAstDeserializer::DeserializeResult<uint16_t> BinAstDeserializer::DeserializeUint16(uint8_t* bytes, int offset) {
   uint16_t result = 0;
   for (int i = 0; i < 2; ++i) {
@@ -151,7 +170,7 @@ inline BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer:
 }
 
 inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserializer::DeserializeRawStringReference(uint8_t* serialized_ast, int offset) {
-  auto string_table_index = DeserializeUint32(serialized_ast, offset);
+  auto string_table_index = DeserializeVarUint32(serialized_ast, offset);
   offset = string_table_index.new_offset;
   if (string_table_index.value == 0) {
     return {nullptr, offset};
@@ -240,7 +259,7 @@ inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Dese
 }
 
 inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeVariableReference(uint8_t* serialized_binast, int offset) {
-  auto variable_reference = DeserializeUint32(serialized_binast, offset);
+  auto variable_reference = DeserializeVarUint32(serialized_binast, offset);
   offset = variable_reference.new_offset;
 
   if (variable_reference.value == 0) {
