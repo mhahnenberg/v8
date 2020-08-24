@@ -53,6 +53,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   virtual void VisitAssignment(Assignment* assignment) override;
   virtual void VisitVariableProxyExpression(VariableProxyExpression* var_proxy) override;
   virtual void VisitForStatement(ForStatement* for_statement) override;
+  virtual void VisitForInStatement(ForInStatement* for_in_statement) override;
   virtual void VisitWhileStatement(WhileStatement* while_statement) override;
   virtual void VisitDoWhileStatement(DoWhileStatement* do_while_statement) override;
   virtual void VisitCompareOperation(CompareOperation* compare) override;
@@ -356,8 +357,12 @@ inline void BinAstSerializeVisitor::SerializeVariableReference(Variable* variabl
 inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
   // Serialize locals first.
   std::unordered_set<const AstRawString*> locals;
+  std::unordered_set<const AstRawString*> temporaries;
   for (Variable* variable : scope->locals_) {
     locals.insert(variable->raw_name());
+    if (variable->mode() == VariableMode::kTemporary) {
+      temporaries.insert(variable->raw_name());
+    }
   }
 
   DCHECK(locals.size() < UINT32_MAX);
@@ -365,11 +370,14 @@ inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
   SerializeUint32(total_local_vars);
   for (Variable* variable : scope->locals_) {
     SerializeVariable(variable);
-
   }
 
   // Now serialize any remaining variables we missed
-  uint32_t total_nonlocal_vars = scope->num_var() - total_local_vars;
+  DCHECK(temporaries.size() < UINT32_MAX);
+  uint32_t total_non_temporary_locals = total_local_vars - static_cast<uint32_t>(temporaries.size());
+  DCHECK(static_cast<uint32_t>(scope->num_var()) >= total_non_temporary_locals);
+  // Temporaries are only stored in locals_ (and not variables_), so don't include them in the non-local vars count.
+  uint32_t total_nonlocal_vars = scope->num_var() - total_non_temporary_locals;
   uint32_t serialized_nonlocal_vars = 0;
   SerializeUint32(total_nonlocal_vars);
   for (VariableMap::Entry* entry = scope->variables_.Start(); entry != nullptr; entry = scope->variables_.Next(entry)) {
@@ -629,6 +637,13 @@ inline void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statemen
   VisitNode(for_statement->cond());
   VisitNode(for_statement->next());
   VisitNode(for_statement->body());
+}
+
+inline void BinAstSerializeVisitor::VisitForInStatement(ForInStatement* for_in_statement) {
+  SerializeAstNodeHeader(for_in_statement);
+  VisitNode(for_in_statement->each());
+  VisitNode(for_in_statement->subject());
+  VisitNode(for_in_statement->body());
 }
 
 inline void BinAstSerializeVisitor::VisitWhileStatement(WhileStatement* while_statement) {
