@@ -75,6 +75,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeUint16(uint16_t value);
   void SerializeUint16Flags(const std::list<bool>& flags);
   void SerializeUint32(uint32_t value);
+  void SerializeVarUint32(uint32_t value);
   void SerializeUint64(uint64_t value);
   void SerializeInt32(int32_t value);
   void SerializeDouble(double value);
@@ -200,6 +201,20 @@ inline void BinAstSerializeVisitor::SerializeCString(const char* str) {
   }
 }
 
+inline void BinAstSerializeVisitor::SerializeVarUint32(uint32_t value) {
+  while (true) {
+    uint8_t mask = 0x7f;
+    uint8_t current_byte = value & mask;
+    value >>= 7;
+    if (value == 0) {
+      SerializeUint8(current_byte);
+      break;
+    }
+    current_byte |= 0x80;
+    SerializeUint8(current_byte);
+  }
+}
+
 inline void BinAstSerializeVisitor::SerializeRawString(const AstRawString* s) {
   DCHECK(s != nullptr);
   DCHECK(string_table_indices_.count(s) == 0);
@@ -222,7 +237,7 @@ inline void BinAstSerializeVisitor::SerializeRawStringReference(const AstRawStri
   auto lookup_result = string_table_indices_.find(s);
   DCHECK(lookup_result != string_table_indices_.end());
   uint32_t string_table_index = lookup_result->second;
-  SerializeUint32(string_table_index);
+  SerializeVarUint32(string_table_index);
 }
 
 inline void BinAstSerializeVisitor::SerializeConsString(const AstConsString* cons_string) {
@@ -345,13 +360,13 @@ inline void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
 
 inline void BinAstSerializeVisitor::SerializeVariableReference(Variable* variable) {
   if (variable == nullptr) {
-    SerializeUint32(0);
+    SerializeVarUint32(0);
     return;
   }
   auto var_id_result = variable_ids_.find(variable);
   DCHECK(var_id_result != variable_ids_.end());
   uint32_t var_id = var_id_result->second;
-  SerializeUint32(var_id);
+  SerializeVarUint32(var_id);
 }
 
 inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
