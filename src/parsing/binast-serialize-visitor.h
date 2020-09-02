@@ -62,10 +62,20 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   virtual void VisitCallNew(CallNew* call) override;
   virtual void VisitProperty(Property* property) override;
   virtual void VisitReturnStatement(ReturnStatement* return_statement) override;
+  virtual void VisitUnaryOperation(UnaryOperation* unary_op) override;
   virtual void VisitBinaryOperation(BinaryOperation* binary_op) override;
+  virtual void VisitNaryOperation(NaryOperation* nary_op) override;
+
   virtual void VisitObjectLiteral(ObjectLiteral* binary_op) override;
-  virtual void VisitArrayLiteral(ArrayLiteral *array_literal) override;
-  virtual void VisitCompoundAssignment(CompoundAssignment* compound_assignment) override;
+  virtual void VisitArrayLiteral(ArrayLiteral* array_literal) override;
+  virtual void VisitCompoundAssignment(
+      CompoundAssignment* compound_assignment) override;
+  virtual void VisitConditional(Conditional* conditional) override;
+  virtual void VisitTryCatchStatement(
+      TryCatchStatement* try_catch_statement) override;
+  virtual void VisitThrow(Throw* throw_statement) override;
+  virtual void VisitThisExpression(ThisExpression* this_expression) override;
+  virtual void VisitRegExpLiteral(RegExpLiteral* reg_exp_literal) override;
 
  private:
   friend class BinAstDeserializer;
@@ -699,10 +709,20 @@ inline void BinAstSerializeVisitor::VisitReturnStatement(ReturnStatement* return
   VisitNode(return_statement->expression());
 }
 
+inline void BinAstSerializeVisitor::VisitUnaryOperation(UnaryOperation* unary_op) {
+  SerializeAstNodeHeader(unary_op);
+  ToDoBinAst(unary_op);
+}
+
 inline void BinAstSerializeVisitor::VisitBinaryOperation(BinaryOperation* binary_op) {
   SerializeAstNodeHeader(binary_op);
   VisitNode(binary_op->left());
   VisitNode(binary_op->right());
+}
+
+inline void BinAstSerializeVisitor::VisitNaryOperation(NaryOperation* nary_op) {
+  SerializeAstNodeHeader(nary_op);
+  ToDoBinAst(nary_op);
 }
 
 inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_literal) {
@@ -720,6 +740,34 @@ inline void BinAstSerializeVisitor::VisitCompoundAssignment(CompoundAssignment* 
   VisitNode(compound_assignment->target());
   VisitNode(compound_assignment->value());
   VisitNode(compound_assignment->binary_operation());
+}
+
+inline void BinAstSerializeVisitor::VisitConditional(Conditional* conditional) {
+  SerializeAstNodeHeader(conditional);
+  ToDoBinAst(conditional);
+}
+
+inline void BinAstSerializeVisitor::VisitTryCatchStatement(
+    TryCatchStatement* try_catch_statement) {
+  SerializeAstNodeHeader(try_catch_statement);
+  ToDoBinAst(try_catch_statement);
+}
+
+inline void BinAstSerializeVisitor::VisitThrow(Throw* throw_statement) {
+  SerializeAstNodeHeader(throw_statement);
+  ToDoBinAst(throw_statement);
+}
+
+inline void BinAstSerializeVisitor::VisitThisExpression(
+    ThisExpression* this_expression) {
+  SerializeAstNodeHeader(this_expression);
+  ToDoBinAst(this_expression);
+}
+
+inline void BinAstSerializeVisitor::VisitRegExpLiteral(
+    RegExpLiteral* reg_exp_literal) {
+  SerializeAstNodeHeader(reg_exp_literal);
+  ToDoBinAst(reg_exp_literal);
 }
 
 }  // namespace internal
