@@ -533,7 +533,16 @@ inline void BinAstSerializeVisitor::ToDoBinAst(AstNode* node) {
 }
 
 inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
+  size_t start = byte_data_.size();
+
   SerializeAstNodeHeader(function_literal);
+
+  SerializeUint32(static_cast<int>(start));
+
+  // make placeholder for length, save index so we can insert it later
+  auto length_index = byte_data_.size();
+  SerializeUint32(0);
+
   const AstConsString* name = function_literal->raw_name();
   SerializeConsString(name);
   SerializeDeclarationScope(function_literal->scope());
@@ -548,6 +557,18 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
   SerializeInt32(function_literal->body()->length());
   for (Statement* statement : *function_literal->body()) {
     VisitNode(statement);
+  }
+
+  // Calculate length and insert at length_index
+  auto length = byte_data_.size() - start;
+  for (size_t i = 0; i < sizeof(uint32_t) / sizeof(uint8_t); ++i) {
+    size_t shift = sizeof(uint8_t) * 8 * i;
+    uint32_t mask = 0xff << shift;
+    uint32_t masked_value = length & mask;
+    uint32_t final_value = masked_value >> shift;
+    DCHECK(final_value <= 0xff);
+    uint8_t truncated_final_value = final_value;
+    byte_data_[length_index + i] = truncated_final_value;
   }
 }
 
