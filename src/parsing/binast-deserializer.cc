@@ -140,7 +140,12 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
     return {result.value, result.new_offset};
   }
   case AstNode::kObjectLiteral:
-  case AstNode::kArrayLiteral: {
+  case AstNode::kArrayLiteral:
+  case AstNode::kUnaryOperation:
+  case AstNode::kNaryOperation:
+  case AstNode::kTryCatchStatement:
+  case AstNode::kSwitchStatement:
+  case AstNode::kThisExpression: {
     auto result = DeserializeNodeStub(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
