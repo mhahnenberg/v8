@@ -134,6 +134,8 @@ void BinAstParser::PostProcessParseResult(Isolate* isolate, ParseInfo* info, Fun
   if (literal == nullptr) return;
 
   // Try to serialize the result for use during de-lazification.
+  RuntimeCallTimerScope runtime_timer(impl()->runtime_call_stats_,
+                                      RuntimeCallCounterId::kSerializeBinAst);
   ZoneBinAstParseData* zone_binast_parse_data = ZoneBinAstParseDataBuilder::Serialize(zone(), ast_value_factory(), literal);
   if (zone_binast_parse_data != nullptr) {
     ProducedBinAstParseData* produced_binast_parse_data = ProducedBinAstParseData::For(zone_binast_parse_data, zone());

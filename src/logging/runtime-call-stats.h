@@ -406,6 +406,7 @@ class RuntimeCallTimer final {
   V(ConfigureInstance)                         \
   V(CreateApiFunction)                         \
   V(DeoptimizeCode)                            \
+  V(DeserializeBinAst)                         \
   V(DeserializeContext)                        \
   V(DeserializeIsolate)                        \
   V(FinalizationRegistryCleanupFromTask)       \
@@ -467,6 +468,7 @@ class RuntimeCallTimer final {
   V(PrototypeObject_DeleteProperty)            \
   V(ReconfigureToDataProperty)                 \
   V(UpdateProtector)                           \
+  V(SerializeBinAst)                           \
   V(StringLengthGetter)                        \
   V(TestCounter1)                              \
   V(TestCounter2)                              \
