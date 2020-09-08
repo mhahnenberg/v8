@@ -968,6 +968,7 @@ class RuntimeCallTimer final {
   V(CompileSerialize)                          \
   V(CompileWaitForDispatcher)                  \
   V(DeoptimizeCode)                            \
+  V(DeserializeBinAst)                         \
   V(DeserializeContext)                        \
   V(DeserializeIsolate)                        \
   V(FinalizationRegistryCleanupFromTask)       \
@@ -1022,6 +1023,7 @@ class RuntimeCallTimer final {
   V(PrototypeMap_TransitionToDataProperty)     \
   V(PrototypeObject_DeleteProperty)            \
   V(ReconfigureToDataProperty)                 \
+  V(SerializeBinAst)                           \
   V(StringLengthGetter)                        \
   V(TestCounter1)                              \
   V(TestCounter2)                              \
