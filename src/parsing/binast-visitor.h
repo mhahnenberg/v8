@@ -30,10 +30,17 @@ public:
   virtual void VisitCallNew(CallNew* call) = 0;
   virtual void VisitProperty(Property* property) = 0;
   virtual void VisitReturnStatement(ReturnStatement* return_statement) = 0;
+  virtual void VisitUnaryOperation(UnaryOperation* unary_op) = 0;
   virtual void VisitBinaryOperation(BinaryOperation* binary_op) = 0;
+  virtual void VisitNaryOperation(NaryOperation* nary_op) = 0;
   virtual void VisitObjectLiteral(ObjectLiteral* object_literal) = 0;
   virtual void VisitArrayLiteral(ArrayLiteral* array_literal) = 0;
   virtual void VisitCompoundAssignment(CompoundAssignment* compound_assignment) = 0;
+  virtual void VisitConditional(Conditional* conditional) = 0;
+  virtual void VisitTryCatchStatement(TryCatchStatement* try_catch_statement) = 0;
+  virtual void VisitThrow(Throw* throw_statement) = 0;
+  virtual void VisitThisExpression(ThisExpression* this_expression) = 0;
+  virtual void VisitRegExpLiteral(RegExpLiteral* reg_exp_literal) = 0;
 
   void VisitNode(AstNode* node) {
     switch (node->node_type()) {
@@ -127,11 +134,20 @@ public:
         break;
       }
 
+      case AstNode::kUnaryOperation: {
+        VisitUnaryOperation(static_cast<UnaryOperation*>(node));
+        break;
+      }
+
       case AstNode::kBinaryOperation: {
         VisitBinaryOperation(static_cast<BinaryOperation*>(node));
         break;
       }
 
+      case AstNode::kNaryOperation: {
+        VisitNaryOperation(static_cast<NaryOperation*>(node));
+        break;
+      }
       case AstNode::kObjectLiteral: {
         VisitObjectLiteral(static_cast<ObjectLiteral*>(node));
         break;
@@ -147,9 +163,33 @@ public:
         break;
       }
 
+      case AstNode::kConditional: {
+        VisitConditional(static_cast<Conditional*>(node));
+        break;
+      }
+
+      case AstNode::kTryCatchStatement: {
+        VisitTryCatchStatement(static_cast<TryCatchStatement*>(node));
+        break;
+      }
+
+      case AstNode::kThrow: {
+        VisitThrow(static_cast<Throw*>(node));
+        break;
+      }
+
+      case AstNode::kThisExpression: {
+        VisitThisExpression(static_cast<ThisExpression*>(node));
+        break;
+      }
+
+      case AstNode::kRegExpLiteral: {
+        VisitRegExpLiteral(static_cast<RegExpLiteral*>(node));
+        break;
+      }
+
       default: {
         printf("Unimplemented node type: %s\n", node->node_type_name());
-        DCHECK(false);
         break;
       }
     }
