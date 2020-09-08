@@ -37,6 +37,8 @@ class BinAstDeserializer {
 
   DeserializeResult<uint64_t> DeserializeUint64(uint8_t* bytes, int offset);
   DeserializeResult<uint32_t> DeserializeUint32(uint8_t* bytes, int offset);
+  DeserializeResult<uint32_t> DeserializeVarUint32(uint8_t* bytes, int offset);
+
   DeserializeResult<uint16_t> DeserializeUint16(uint8_t* bytes, int offset);
   DeserializeResult<uint8_t> DeserializeUint8(uint8_t* bytes, int offset);
   DeserializeResult<int32_t> DeserializeInt32(uint8_t* bytes, int offset);
