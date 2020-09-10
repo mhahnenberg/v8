@@ -60,6 +60,12 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
   AstNode::NodeType nodeType = AstNode::NodeTypeField::decode(bit_field.value);
   switch (nodeType) {
   case AstNode::kFunctionLiteral: {
+    auto start_offset = DeserializeUint32(serialized_binast, offset);
+    offset = start_offset.new_offset;
+
+    auto length = DeserializeUint32(serialized_binast, offset);
+    offset = length.new_offset;
+
     auto result = DeserializeFunctionLiteral(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
