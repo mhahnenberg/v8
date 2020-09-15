@@ -68,7 +68,7 @@ class BinAstDeserializer {
   DeserializeResult<Scope*> DeserializeScope(uint8_t* serialized_binast, int offset);
   DeserializeResult<DeclarationScope*> DeserializeDeclarationScope(uint8_t* serialized_binast, int offset);
 
-  DeserializeResult<AstNode*> DeserializeAstNode(uint8_t* serialized_ast, int offset);
+  DeserializeResult<AstNode*> DeserializeAstNode(uint8_t* serialized_ast, int offset, bool is_toplevel = false);
   DeserializeResult<FunctionLiteral*> DeserializeFunctionLiteral(uint8_t* serialized_ast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<ReturnStatement*> DeserializeReturnStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<BinaryOperation*> DeserializeBinaryOperation(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);

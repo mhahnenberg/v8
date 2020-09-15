@@ -121,6 +121,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
 
   std::unique_ptr<uint8_t[]> compressed_byte_data_;
   size_t compressed_byte_data_length_;
+  bool at_toplevel_ = true;
 };
 
 // TODO(binast): Maybe templatize these to reduce duplication?
@@ -614,16 +615,21 @@ inline void BinAstSerializeVisitor::ToDoBinAst(AstNode* node) {
 }
 
 inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
+  bool function_is_toplevel = at_toplevel_;
+
   size_t start = byte_data_.size();
 
   SerializeAstNodeHeader(function_literal);
 
-  DCHECK(start <= UINT32_MAX);
-  SerializeUint32(static_cast<uint32_t>(start));
+  base::Optional<size_t> length_index;
+  if (!function_is_toplevel) {
+    DCHECK(start <= UINT32_MAX);
+    SerializeUint32(static_cast<uint32_t>(start));
 
-  // make placeholder for length, save index so we can insert it later
-  auto length_index = byte_data_.size();
-  SerializeUint32(0);
+    // make placeholder for length, save index so we can insert it later
+    length_index.emplace(byte_data_.size());
+    SerializeUint32(0);
+  }
 
   const AstConsString* name = function_literal->raw_name();
   SerializeConsString(name);
@@ -638,14 +644,19 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
 
   SerializeInt32(function_literal->body()->length());
   for (Statement* statement : *function_literal->body()) {
+    if (at_toplevel_) {
+      at_toplevel_ = false;
+    }
     VisitNode(statement);
   }
 
-  // Calculate length and insert at length_index
-  auto length = byte_data_.size() - start;
-  auto offset = byte_data_.size() - length_index;
-  DCHECK(length <= UINT32_MAX);
-  SerializeUint32(static_cast<uint32_t>(length), offset);
+  if (!function_is_toplevel) {
+    // Calculate length and insert at length_index
+    auto length = byte_data_.size() - start;
+    auto offset = byte_data_.size() - length_index.value();
+    DCHECK(length <= UINT32_MAX);
+    SerializeUint32(static_cast<uint32_t>(length), offset);
+  }
 }
 
 inline void BinAstSerializeVisitor::VisitBlock(Block* block) {
