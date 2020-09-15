@@ -655,8 +655,9 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
   if (!function_is_toplevel) {
     // Calculate length and insert at length_index
     auto length = byte_data_.size() - start;
+    auto offset = byte_data_.size() - length_index.value();
     DCHECK(length <= UINT32_MAX);
-    SerializeUint32(static_cast<uint32_t>(length), length_index);
+    SerializeUint32(static_cast<uint32_t>(length), offset);
   }
 }
 
