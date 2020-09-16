@@ -141,8 +141,8 @@ inline void BinAstSerializeVisitor::SerializeUint64(uint64_t value) {
   }
 }
 
-inline void BinAstSerializeVisitor::SerializeUint32(uint32_t value, size_t offset) {
-  DCHECK(offset >= 0 && offset <= byte_data_.size());
+inline void BinAstSerializeVisitor::SerializeUint32(uint32_t value, size_t index) {
+  DCHECK(index >= 0 && index <= byte_data_.size());
   for (size_t i = 0; i < sizeof(uint32_t) / sizeof(uint8_t); ++i) {
     size_t shift = sizeof(uint8_t) * 8 * i;
     uint32_t mask = 0xff << shift;
@@ -151,10 +151,10 @@ inline void BinAstSerializeVisitor::SerializeUint32(uint32_t value, size_t offse
     DCHECK(final_value <= 0xff);
     uint8_t truncated_final_value = final_value;
 
-    if (offset == 0) {
+    if (index == 0) {
       byte_data_.push_back(truncated_final_value);
     } else {
-      byte_data_[byte_data_.size() - 1 - offset] = truncated_final_value;
+      byte_data_[index + i] = truncated_final_value;
     }
   }
 }
@@ -653,9 +653,8 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
   if (!function_is_toplevel) {
     // Calculate length and insert at length_index
     auto length = byte_data_.size() - start;
-    auto offset = byte_data_.size() - length_index.value();
     DCHECK(length <= UINT32_MAX);
-    SerializeUint32(static_cast<uint32_t>(length), offset);
+    SerializeUint32(static_cast<uint32_t>(length), length_index.value());
   }
 }
 
