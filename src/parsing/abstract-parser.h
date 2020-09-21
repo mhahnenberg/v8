@@ -2005,6 +2005,8 @@ void AbstractParser<Impl>::ParseFunction(
 
   FunctionLiteral* result = nullptr;
   if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData())) {
+    RuntimeCallTimerScope runtime_timer(impl()->runtime_call_stats_,
+                                      RuntimeCallCounterId::kDeserializeBinAst);
     auto start = std::chrono::high_resolution_clock::now();
     Handle<BinAstParseData> binast_parse_data =
         handle(shared_info->uncompiled_data_with_binast_parse_data()
@@ -2036,7 +2038,7 @@ void AbstractParser<Impl>::ParseFunction(
     }
     printf("' in %lld us\n", microseconds);
     // TODO(binast): Store the literal on the ParseInfo
-    // result = literal;
+    result = literal;
   }
 
   if (V8_UNLIKELY(result == nullptr && shared_info->private_name_lookup_skips_outer_class() &&
