@@ -76,6 +76,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   virtual void VisitThrow(Throw* throw_statement) override;
   virtual void VisitThisExpression(ThisExpression* this_expression) override;
   virtual void VisitRegExpLiteral(RegExpLiteral* reg_exp_literal) override;
+  virtual void VisitSwitchStatement(SwitchStatement* switch_statement) override;
 
  private:
   friend class BinAstDeserializer;
@@ -122,12 +123,16 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
 
 // TODO(binast): Maybe templatize these to reduce duplication?
 inline void BinAstSerializeVisitor::SerializeUint64(uint64_t value) {
-    for (size_t i = 0; i < sizeof(uint64_t) / sizeof(uint8_t); ++i) {
-    size_t shift = sizeof(uint8_t) * 8 * i;
-    uint64_t mask = 0xff << shift;
+  for (size_t i = 0; i < sizeof(uint64_t) / sizeof(uint8_t); ++i) {
+    size_t shift = 8 * i;
+    uint64_t mask = 0xff;
+    mask <<= shift;
     uint64_t masked_value = value & mask;
     uint64_t final_value = masked_value >> shift;
-    DCHECK(final_value <= 0xff);
+    if (final_value > 0xff) {
+      printf("ERROR: value not in range: %llu\n", final_value);
+      DCHECK(final_value <= 0xff);
+    }
     uint8_t truncated_final_value = final_value;
     byte_data_.push_back(truncated_final_value);
   }
@@ -245,7 +250,11 @@ inline void BinAstSerializeVisitor::SerializeRawString(const AstRawString* s) {
 
 inline void BinAstSerializeVisitor::SerializeRawStringReference(const AstRawString* s) {
   auto lookup_result = string_table_indices_.find(s);
-  DCHECK(lookup_result != string_table_indices_.end());
+  if (lookup_result == string_table_indices_.end()) {
+    printf("ERROR: Failed to find raw string reference for '%.*s'\n", s->byte_length(), s->raw_data());
+    DCHECK(false);
+  }
+  // DCHECK(lookup_result != string_table_indices_.end());
   uint32_t string_table_index = lookup_result->second;
   SerializeVarUint32(string_table_index);
 }
@@ -461,7 +470,12 @@ inline void BinAstSerializeVisitor::SerializeCommonScopeFields(Scope* scope) {
   SerializeScopeVariableMap(scope);
   SerializeScopeDeclarations(scope);
 #ifdef DEBUG
-  SerializeRawStringReference(scope->scope_name_);
+  if (scope->scope_name_ == nullptr) {
+    SerializeUint8(0);
+  } else {
+    SerializeUint8(1);
+    SerializeRawStringReference(scope->scope_name_);
+  }
   SerializeUint8(scope->already_resolved_);
   SerializeUint8(scope->needs_migration_);
 #endif
@@ -520,7 +534,10 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
   SerializeVariableOrReference(scope->arguments_);
 
   // TODO(binast): rare_data_ (needed for > ES5.1 feature support)
-  DCHECK(scope->rare_data_ == nullptr);
+  if (scope->rare_data_ == nullptr) {
+    printf("BinAstSerializeVisitor encountered unsupported rare data on DeclarationScope\n");
+    encountered_unhandled_node_ = true;
+  }
 }
 
 inline void BinAstSerializeVisitor::SerializeScope(Scope* scope) {
@@ -651,9 +668,29 @@ inline void BinAstSerializeVisitor::VisitVariableProxyExpression(VariableProxyEx
 
 inline void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statement) {
   SerializeAstNodeHeader(for_statement);
-  VisitNode(for_statement->init());
-  VisitNode(for_statement->cond());
-  VisitNode(for_statement->next());
+
+  // TODO(binast): are we guaranteed that we'll have all of these nodes?
+  if (for_statement->init()) {
+    SerializeUint8(1);
+    VisitNode(for_statement->init());
+  } else {
+    SerializeUint8(0);
+  }
+
+  if (for_statement->cond()) {
+    SerializeUint8(1);
+    VisitNode(for_statement->cond());
+  } else {
+    SerializeUint8(0);
+  }
+
+  if (for_statement->next()) {
+    SerializeUint8(1);
+    VisitNode(for_statement->next());
+  } else {
+    SerializeUint8(0);
+  }
+
   VisitNode(for_statement->body());
 }
 
@@ -719,7 +756,7 @@ inline void BinAstSerializeVisitor::VisitReturnStatement(ReturnStatement* return
 
 inline void BinAstSerializeVisitor::VisitUnaryOperation(UnaryOperation* unary_op) {
   SerializeAstNodeHeader(unary_op);
-  ToDoBinAst(unary_op);
+  VisitNode(unary_op->expression());
 }
 
 inline void BinAstSerializeVisitor::VisitBinaryOperation(BinaryOperation* binary_op) {
@@ -766,16 +803,20 @@ inline void BinAstSerializeVisitor::VisitThrow(Throw* throw_statement) {
   ToDoBinAst(throw_statement);
 }
 
-inline void BinAstSerializeVisitor::VisitThisExpression(
-    ThisExpression* this_expression) {
+inline void BinAstSerializeVisitor::VisitThisExpression(ThisExpression* this_expression) {
   SerializeAstNodeHeader(this_expression);
-  ToDoBinAst(this_expression);
 }
 
 inline void BinAstSerializeVisitor::VisitRegExpLiteral(
     RegExpLiteral* reg_exp_literal) {
   SerializeAstNodeHeader(reg_exp_literal);
   ToDoBinAst(reg_exp_literal);
+}
+
+inline void BinAstSerializeVisitor::VisitSwitchStatement(
+    SwitchStatement* switch_statement) {
+  SerializeAstNodeHeader(switch_statement);
+  ToDoBinAst(switch_statement);
 }
 
 }  // namespace internal
