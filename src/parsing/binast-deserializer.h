@@ -88,6 +88,8 @@ class BinAstDeserializer {
   DeserializeResult<DoWhileStatement*> DeserializeDoWhileStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<CountOperation*> DeserializeCountOperation(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<CompoundAssignment*> DeserializeCompoundAssignment(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<UnaryOperation*> DeserializeUnaryOperation(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<ThisExpression*> DeserializeThisExpression(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<std::nullptr_t> DeserializeNodeStub(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
 
   Parser* parser_;

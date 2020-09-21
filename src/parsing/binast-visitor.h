@@ -41,6 +41,7 @@ public:
   virtual void VisitThrow(Throw* throw_statement) = 0;
   virtual void VisitThisExpression(ThisExpression* this_expression) = 0;
   virtual void VisitRegExpLiteral(RegExpLiteral* reg_exp_literal) = 0;
+  virtual void VisitSwitchStatement(SwitchStatement* switch_statement) = 0;
 
   void VisitNode(AstNode* node) {
     switch (node->node_type()) {
@@ -185,6 +186,11 @@ public:
 
       case AstNode::kRegExpLiteral: {
         VisitRegExpLiteral(static_cast<RegExpLiteral*>(node));
+        break;
+      }
+
+      case AstNode::kSwitchStatement: {
+        VisitSwitchStatement(static_cast<SwitchStatement*>(node));
         break;
       }
 
