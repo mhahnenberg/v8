@@ -2007,6 +2007,7 @@ class UnaryOperation final : public Expression {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstDeserializer;
   friend Zone;
 
   UnaryOperation(Token::Value op, Expression* expression, int pos)

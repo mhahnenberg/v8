@@ -139,13 +139,19 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
     auto result = DeserializeDoWhileStatement(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
+  case AstNode::kThisExpression: {
+    auto result = DeserializeThisExpression(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
+  case AstNode::kUnaryOperation: {
+    auto result = DeserializeUnaryOperation(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
   case AstNode::kObjectLiteral:
   case AstNode::kArrayLiteral:
-  case AstNode::kUnaryOperation:
   case AstNode::kNaryOperation:
   case AstNode::kTryCatchStatement:
-  case AstNode::kSwitchStatement:
-  case AstNode::kThisExpression: {
+  case AstNode::kSwitchStatement: {
     auto result = DeserializeNodeStub(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
@@ -228,9 +234,14 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
 
   // scope_info_ TODO(binast): do we need this?
 #ifdef DEBUG
-  auto scope_name_result = DeserializeRawStringReference(serialized_binast, offset);
-  offset = scope_name_result.new_offset;
-  scope->SetScopeName(scope_name_result.value);
+  auto has_scope_name = DeserializeUint8(serialized_binast, offset);
+  offset = has_scope_name.new_offset;
+
+  if (has_scope_name.value) {
+    auto scope_name_result = DeserializeRawStringReference(serialized_binast, offset);
+    offset = scope_name_result.new_offset;
+    scope->SetScopeName(scope_name_result.value);
+  }
 
   auto already_resolved_result = DeserializeUint8(serialized_binast, offset);
   offset = already_resolved_result.new_offset;
@@ -678,20 +689,41 @@ BinAstDeserializer::DeserializeResult<EmptyStatement*> BinAstDeserializer::Deser
 }
 
 BinAstDeserializer::DeserializeResult<ForStatement*> BinAstDeserializer::DeserializeForStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
-  auto init = DeserializeAstNode(serialized_binast, offset);
-  offset = init.new_offset;
+  auto has_init = DeserializeUint8(serialized_binast, offset);
+  offset = has_init.new_offset;
 
-  auto cond = DeserializeAstNode(serialized_binast, offset);
-  offset = cond.new_offset;
+  Statement* init_node = nullptr;
+  if (has_init.value) {
+    auto init = DeserializeAstNode(serialized_binast, offset);
+    offset = init.new_offset;
+    init_node = static_cast<Statement*>(init.value);
+  }
 
-  auto next = DeserializeAstNode(serialized_binast, offset);
-  offset = next.new_offset;
+  auto has_cond = DeserializeUint8(serialized_binast, offset);
+  offset = has_cond.new_offset;
+
+  Expression* cond_node = nullptr;
+  if (has_cond.value) {
+    auto cond = DeserializeAstNode(serialized_binast, offset);
+    offset = cond.new_offset;
+    cond_node = static_cast<Expression*>(cond.value);
+  }
+
+  auto has_next = DeserializeUint8(serialized_binast, offset);
+  offset = has_next.new_offset;
+
+  Statement* next_node = nullptr;
+  if (has_next.value) {
+    auto next = DeserializeAstNode(serialized_binast, offset);
+    offset = next.new_offset;
+    next_node = static_cast<Statement*>(next.value);
+  }
 
   auto body = DeserializeAstNode(serialized_binast, offset);
   offset = body.new_offset;
 
   ForStatement* result = parser_->factory()->NewForStatement(position);
-  result->Initialize(static_cast<Statement*>(init.value), static_cast<Expression*>(cond.value), static_cast<Statement*>(next.value), static_cast<Statement*>(body.value));
+  result->Initialize(init_node, cond_node, next_node, static_cast<Statement*>(body.value));
   DCHECK(result->bit_field_ == bit_field);
   return {result, offset};
 }
@@ -766,6 +798,22 @@ BinAstDeserializer::DeserializeResult<CompoundAssignment*> BinAstDeserializer::D
   Assignment* result = parser_->factory()->NewAssignment(op, static_cast<Expression*>(target.value), static_cast<Expression*>(value.value), position);
   DCHECK(result->IsCompoundAssignment());
   return {result->AsCompoundAssignment(), offset};
+}
+
+BinAstDeserializer::DeserializeResult<UnaryOperation*> BinAstDeserializer::DeserializeUnaryOperation(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto expression = DeserializeAstNode(serialized_binast, offset);
+  offset = expression.new_offset;
+
+  Token::Value op = UnaryOperation::OperatorField::decode(bit_field);
+  UnaryOperation* result = parser_->factory()->NewUnaryOperation(op, static_cast<Expression*>(expression.value), position);
+  DCHECK(result->bit_field_ == bit_field);
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<ThisExpression*> BinAstDeserializer::DeserializeThisExpression(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  ThisExpression* result = parser_->factory()->ThisExpression();
+  DCHECK(result->bit_field_ == bit_field);
+  return {result, offset};
 }
 
 // This is just a placeholder while we implement the various nodes that we'll support.
