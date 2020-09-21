@@ -1976,6 +1976,7 @@ class UnaryOperation final : public Expression {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstDeserializer;
 
   UnaryOperation(Token::Value op, Expression* expression, int pos)
       : Expression(pos, kUnaryOperation), expression_(expression) {
