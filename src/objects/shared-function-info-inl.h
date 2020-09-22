@@ -85,6 +85,7 @@ TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithoutPreparseData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithPreparseData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithBinAstParseData)
+TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithInnerBinAstParseData)
 
 TQ_OBJECT_CONSTRUCTORS_IMPL(BinAstParseData)
 
@@ -609,6 +610,23 @@ void SharedFunctionInfo::set_uncompiled_data_with_binast_parse_data(
   set_function_data(uncompiled_data_with_binast_parse_data);
 }
 
+bool SharedFunctionInfo::HasUncompiledDataWithInnerBinAstParseData() const {
+  return function_data().IsUncompiledDataWithInnerBinAstParseData();
+}
+
+UncompiledDataWithInnerBinAstParseData
+SharedFunctionInfo::uncompiled_data_with_inner_bin_ast_parse_data() const {
+  DCHECK(HasUncompiledDataWithInnerBinAstParseData());
+  return UncompiledDataWithInnerBinAstParseData::cast(function_data());
+}
+
+void SharedFunctionInfo::set_uncompiled_data_with_inner_bin_ast_parse_data(
+    UncompiledDataWithInnerBinAstParseData uncompiled_data_with_inner_bin_ast_parse_data) {
+  DCHECK(function_data() == Smi::FromEnum(Builtins::kCompileLazy));
+  DCHECK(uncompiled_data_with_inner_bin_ast_parse_data.IsUncompiledDataWithInnerBinAstParseData());
+  set_function_data(uncompiled_data_with_inner_bin_ast_parse_data);
+}
+
 bool SharedFunctionInfo::HasUncompiledDataWithoutPreparseData() const {
   return function_data().IsUncompiledDataWithoutPreparseData();
 }
@@ -672,6 +690,34 @@ void SharedFunctionInfo::ClearBinAstParseData() {
   DCHECK(!HasUncompiledDataWithBinAstParseData());
 }
 
+void SharedFunctionInfo::ClearInnerBinAstParseData() {
+  DCHECK(HasUncompiledDataWithInnerBinAstParseData());
+  UncompiledDataWithInnerBinAstParseData data = uncompiled_data_with_inner_bin_ast_parse_data();
+
+  // Trim off the pre-parsed scope data from the uncompiled data by swapping the
+  // map, leaving only an uncompiled data without pre-parsed scope.
+  DisallowHeapAllocation no_gc;
+  Heap* heap = GetHeapFromWritableObject(data);
+
+  // Swap the map.
+  heap->NotifyObjectLayoutChange(data, no_gc);
+  STATIC_ASSERT(UncompiledDataWithoutPreparseData::kSize <
+                UncompiledDataWithInnerBinAstParseData::kSize);
+  STATIC_ASSERT(UncompiledDataWithoutPreparseData::kSize ==
+                UncompiledData::kHeaderSize);
+  data.synchronized_set_map(
+      GetReadOnlyRoots().uncompiled_data_without_preparse_data_map());
+
+  // Fill the remaining space with filler.
+  heap->CreateFillerObjectAt(
+      data.address() + UncompiledDataWithoutPreparseData::kSize,
+      UncompiledDataWithInnerBinAstParseData::kSize -
+          UncompiledDataWithoutPreparseData::kSize,
+      ClearRecordedSlots::kYes);
+
+  // Ensure that the clear was successful.
+  DCHECK(HasUncompiledDataWithoutPreparseData());
+}
 
 template <typename LocalIsolate>
 void UncompiledData::Init(LocalIsolate* isolate, String inferred_name,
@@ -710,6 +756,19 @@ void UncompiledDataWithBinAstParseData::Init(LocalIsolate* isolate,
   this->UncompiledData::Init(isolate, inferred_name, start_position,
                              end_position);
   set_binast_parse_data(binast_parse_data);
+}
+
+template <typename LocalIsolate>
+void UncompiledDataWithInnerBinAstParseData::Init(LocalIsolate* isolate,
+                                          String inferred_name,
+                                          int start_position, int end_position,
+                                          BinAstParseData binast_parse_data,
+                                          int32_t offset, int32_t length) {
+  this->UncompiledData::Init(isolate, inferred_name, start_position,
+                             end_position);
+  set_binast_parse_data(binast_parse_data);
+  set_data_offset(offset);
+  set_data_length(length);
 }
 
 bool SharedFunctionInfo::HasWasmExportedFunctionData() const {

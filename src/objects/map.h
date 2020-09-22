@@ -75,6 +75,7 @@ enum InstanceType : uint16_t;
   V(UncompiledDataWithoutPreparseData) \
   V(UncompiledDataWithPreparseData)    \
   V(UncompiledDataWithBinAstParseData) \
+  V(UncompiledDataWithInnerBinAstParseData)    \
   V(WasmCapiFunctionData)              \
   V(WasmIndirectFunctionTable)         \
   V(WasmInstanceObject)                \

@@ -4,6 +4,9 @@
 
 #include "src/interpreter/bytecode-generator.h"
 
+#include <cinttypes>
+
+
 #include "src/api/api-inl.h"
 #include "src/ast/ast-source-ranges.h"
 #include "src/ast/scopes.h"
@@ -1191,6 +1194,12 @@ void BytecodeGenerator::AllocateDeferredConstants(LocalIsolate* isolate,
     Handle<SharedFunctionInfo> shared_info =
         Compiler::GetSharedFunctionInfo(expr, script, isolate);
     if (shared_info.is_null()) return SetStackOverflow();
+
+    if (!expr->uncompiled_data_with_inner_bin_ast_parse_data().is_null()) {
+      shared_info->set_function_data(
+          *expr->uncompiled_data_with_inner_bin_ast_parse_data());
+    }
+
     builder()->SetDeferredConstantPoolEntry(literal.second, shared_info);
   }
 

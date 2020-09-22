@@ -326,6 +326,23 @@ FactoryBase<Impl>::NewUncompiledDataWithBinAstParseData(
 }
 
 template <typename Impl>
+Handle<UncompiledDataWithInnerBinAstParseData>
+FactoryBase<Impl>::NewUncompiledDataWithInnerBinAstParseData(
+    Handle<String> inferred_name, int32_t start_position, int32_t end_position,
+    Handle<BinAstParseData> binast_parse_data, int32_t offset, int32_t length) {
+  Handle<UncompiledDataWithInnerBinAstParseData> result = handle(
+      UncompiledDataWithInnerBinAstParseData::cast(NewWithImmortalMap(
+          impl()->read_only_roots().uncompiled_data_with_inner_bin_ast_parse_data_map(),
+          AllocationType::kOld)),
+      isolate());
+
+  result->Init(impl(), *inferred_name, start_position, end_position,
+               *binast_parse_data, offset, length);
+
+  return result;
+}
+
+template <typename Impl>
 Handle<SharedFunctionInfo> FactoryBase<Impl>::NewSharedFunctionInfo(
     MaybeHandle<String> maybe_name, MaybeHandle<HeapObject> maybe_function_data,
     int maybe_builtin_index, FunctionKind kind) {

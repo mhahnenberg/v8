@@ -2308,6 +2308,17 @@ void UncompiledDataWithBinAstParseData::UncompiledDataWithBinAstParseDataPrint(
   os << "\n";
 }
 
+void UncompiledDataWithInnerBinAstParseData::UncompiledDataWithInnerBinAstParseDataPrint(
+    std::ostream& os) {  // NOLINT
+  PrintHeader(os, "UncompiledDataWithInnerBinAstParseData");
+  os << "\n - start position: " << start_position();
+  os << "\n - end position: " << end_position();
+  os << "\n - preparse_data: " << Brief(binast_parse_data());
+  os << "\n - data offset: " << data_offset();
+  os << "\n - data length: " << data_length();
+  os << "\n";
+}
+
 void InterpreterData::InterpreterDataPrint(std::ostream& os) {  // NOLINT
   PrintHeader(os, "InterpreterData");
   os << "\n - bytecode_array: " << Brief(bytecode_array());

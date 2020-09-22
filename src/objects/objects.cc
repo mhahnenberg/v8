@@ -5118,6 +5118,10 @@ void SharedFunctionInfo::SetScript(ReadOnlyRoots roots,
     ClearBinAstParseData();
   }
 
+  if (reset_preparsed_scope_data && HasUncompiledDataWithInnerBinAstParseData()) {
+    ClearInnerBinAstParseData();
+  }
+
   // Add shared function info to new script's list. If a collection occurs,
   // the shared function info may be temporarily in two lists.
   // This is okay because the gc-time processing of these lists can tolerate

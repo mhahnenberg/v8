@@ -500,6 +500,9 @@ bool Heap::CreateInitialMaps() {
     ALLOCATE_MAP(UNCOMPILED_DATA_WITH_BIN_AST_PARSE_DATA_TYPE,
                  UncompiledDataWithBinAstParseData::kSize,
                  uncompiled_data_with_bin_ast_parse_data)
+    ALLOCATE_MAP(UNCOMPILED_DATA_WITH_INNER_BIN_AST_PARSE_DATA_TYPE,
+                 UncompiledDataWithInnerBinAstParseData::kSize,
+                 uncompiled_data_with_inner_bin_ast_parse_data)
     ALLOCATE_MAP(SHARED_FUNCTION_INFO_TYPE, SharedFunctionInfo::kAlignedSize,
                  shared_function_info)
     ALLOCATE_MAP(SOURCE_TEXT_MODULE_TYPE, SourceTextModule::kSize,

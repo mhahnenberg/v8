@@ -223,6 +223,7 @@ class ZoneForwardList;
   V(UncompiledData)                            \
   V(UncompiledDataWithPreparseData)            \
   V(UncompiledDataWithBinAstParseData)         \
+  V(UncompiledDataWithInnerBinAstParseData)            \
   V(UncompiledDataWithoutPreparseData)         \
   V(Undetectable)                              \
   V(UniqueName)                                \

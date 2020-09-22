@@ -227,8 +227,12 @@ enum class PrimitiveType { kBoolean, kNumber, kString, kSymbol };
     UncompiledDataWithoutPreparseDataMap)                                      \
   V(UncompiledDataWithPreparseDataMap, uncompiled_data_with_preparse_data_map, \
     UncompiledDataWithPreparseDataMap)                                         \
-  V(UncompiledDataWithBinAstParseDataMap, uncompiled_data_with_bin_ast_parse_data_map, \
+  V(UncompiledDataWithBinAstParseDataMap,                                      \
+    uncompiled_data_with_bin_ast_parse_data_map,                               \
     UncompiledDataWithBinAstParseDataMap)                                      \
+  V(UncompiledDataWithInnerBinAstParseDataMap,                                         \
+    uncompiled_data_with_inner_bin_ast_parse_data_map,                                   \
+    UncompiledDataWithInnerBinAstParseDataMap)    \
   V(undefined_to_string, undefined_to_string, UndefinedToString)               \
   V(UndefinedValue, undefined_value, Undefined)                                \
   V(uninitialized_symbol, uninitialized_symbol, UninitializedSymbol)           \
@@ -236,7 +240,6 @@ enum class PrimitiveType { kBoolean, kNumber, kString, kSymbol };
   V(WeakFixedArrayMap, weak_fixed_array_map, WeakFixedArrayMap)                \
   V(zero_string, zero_string, ZeroString)                                      \
   TORQUE_INTERNAL_MAP_CSA_LIST(V)
-
 #define HEAP_IMMOVABLE_OBJECT_LIST(V)   \
   HEAP_MUTABLE_IMMOVABLE_OBJECT_LIST(V) \
   HEAP_IMMUTABLE_IMMOVABLE_OBJECT_LIST(V)

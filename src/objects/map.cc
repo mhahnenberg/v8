@@ -271,6 +271,9 @@ VisitorId Map::GetVisitorId(Map map) {
     case UNCOMPILED_DATA_WITH_BIN_AST_PARSE_DATA_TYPE:
       return kVisitUncompiledDataWithBinAstParseData;
 
+    case UNCOMPILED_DATA_WITH_INNER_BIN_AST_PARSE_DATA_TYPE:
+      return kVisitUncompiledDataWithInnerBinAstParseData;
+
     case COVERAGE_INFO_TYPE:
       return kVisitCoverageInfo;
 
