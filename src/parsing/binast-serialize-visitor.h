@@ -86,7 +86,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeUint8(uint8_t value);
   void SerializeUint16(uint16_t value);
   void SerializeUint16Flags(const std::list<bool>& flags);
-  void SerializeUint32(uint32_t value, size_t offset = 0);
+  void SerializeUint32(uint32_t value, const base::Optional<size_t> index);
   void SerializeVarUint32(uint32_t value);
   void SerializeUint64(uint64_t value);
   void SerializeInt32(int32_t value);
@@ -141,8 +141,9 @@ inline void BinAstSerializeVisitor::SerializeUint64(uint64_t value) {
   }
 }
 
-inline void BinAstSerializeVisitor::SerializeUint32(uint32_t value, size_t index) {
-  DCHECK(index >= 0 && index <= byte_data_.size());
+inline void BinAstSerializeVisitor::SerializeUint32(
+    uint32_t value, const base::Optional<size_t> index = base::nullopt) {
+  // DCHECK(index >= 0 && index <= byte_data_.size());
   for (size_t i = 0; i < sizeof(uint32_t) / sizeof(uint8_t); ++i) {
     size_t shift = sizeof(uint8_t) * 8 * i;
     uint32_t mask = 0xff << shift;
@@ -151,10 +152,10 @@ inline void BinAstSerializeVisitor::SerializeUint32(uint32_t value, size_t index
     DCHECK(final_value <= 0xff);
     uint8_t truncated_final_value = final_value;
 
-    if (index == 0) {
+    if (!index.has_value()) {
       byte_data_.push_back(truncated_final_value);
     } else {
-      byte_data_[index + i] = truncated_final_value;
+      byte_data_[index.value() + i] = truncated_final_value;
     }
   }
 }
@@ -654,7 +655,7 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
     // Calculate length and insert at length_index
     auto length = byte_data_.size() - start;
     DCHECK(length <= UINT32_MAX);
-    SerializeUint32(static_cast<uint32_t>(length), length_index.value());
+    SerializeUint32(static_cast<uint32_t>(length), length_index);
   }
 }
 
