@@ -143,7 +143,8 @@ inline void BinAstSerializeVisitor::SerializeUint64(uint64_t value) {
 
 inline void BinAstSerializeVisitor::SerializeUint32(
     uint32_t value, const base::Optional<size_t> index = base::nullopt) {
-  // DCHECK(index >= 0 && index <= byte_data_.size());
+  DCHECK(!index.has_value() ||
+         (index.value() >= 0 && index <= byte_data_.size()));
   for (size_t i = 0; i < sizeof(uint32_t) / sizeof(uint8_t); ++i) {
     size_t shift = sizeof(uint8_t) * 8 * i;
     uint32_t mask = 0xff << shift;
