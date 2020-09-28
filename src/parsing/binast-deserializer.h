@@ -23,7 +23,8 @@ class BinAstDeserializer {
  public:
   BinAstDeserializer(Isolate* isolate, Parser* parser, Scope* outer_scope, Handle<BinAstParseData> parse_data);
 
-  AstNode* DeserializeAst();
+  AstNode* DeserializeAst(base::Optional<uint32_t> start_offset,
+                          base::Optional<uint32_t> length);
 
  private:
   template <typename T>
@@ -55,7 +56,7 @@ class BinAstDeserializer {
 
   DeserializeResult<Variable*> DeserializeLocalVariable(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeNonLocalVariable(uint8_t* serialized_binast, int offset, Scope* scope);
-  DeserializeResult<Variable*> DeserializeVariableReference(uint8_t* serialized_binast, int offset);
+  DeserializeResult<Variable*> DeserializeVariableReference(uint8_t* serialized_binast, int offset, Scope* scope = nullptr);
   DeserializeResult<Variable*> DeserializeScopeVariable(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeNonScopeVariable(uint8_t* serialized_binast, int offset);
   DeserializeResult<Variable*> DeserializeScopeVariableOrReference(uint8_t* serialized_binast, int offset, Scope* scope);
@@ -96,6 +97,7 @@ class BinAstDeserializer {
 
   Isolate* isolate_;
   Parser* parser_;
+  Scope* outer_scope_;
   Handle<BinAstParseData> parse_data_;
   std::unordered_map<uint32_t, const AstRawString*> string_table_;
   std::unordered_map<uint32_t, Variable*> variables_by_id_;

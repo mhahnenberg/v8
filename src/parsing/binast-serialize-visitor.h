@@ -380,6 +380,7 @@ inline bool BinAstSerializeVisitor::SerializeAst(AstNode* root) {
 }
 
 inline void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
+  auto variable_offset = byte_data_.size();
   SerializeRawStringReference(variable->raw_name());
 
   // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
@@ -389,7 +390,9 @@ inline void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
   SerializeUint16(variable->bit_field_);
 
   DCHECK(variable_ids_.count(variable) == 0);
-  variable_ids_.insert({variable, variable_ids_.size() + 1});
+  printf("\ninsert variable %s with id %lu\n", variable->raw_name()->raw_data(),
+         variable_offset);
+  variable_ids_.insert({variable, variable_offset});
 }
 
 inline void BinAstSerializeVisitor::SerializeVariableReference(Variable* variable) {
@@ -401,6 +404,7 @@ inline void BinAstSerializeVisitor::SerializeVariableReference(Variable* variabl
   DCHECK(var_id_result != variable_ids_.end());
   uint32_t var_id = var_id_result->second;
   SerializeVarUint32(var_id);
+  // SerializeRawStringReference(variable->raw_name());
 }
 
 inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {

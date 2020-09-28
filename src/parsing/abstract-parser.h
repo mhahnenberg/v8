@@ -2011,11 +2011,21 @@ void AbstractParser<Impl>::ParseFunction(
     auto start = std::chrono::high_resolution_clock::now();
     bool is_inner = shared_info->HasUncompiledDataWithInnerBinAstParseData();
     Handle<BinAstParseData> binast_parse_data;
+    base::Optional<uint32_t> offset = base::nullopt;
+    base::Optional<uint32_t> length = base::nullopt;
     if (is_inner) {
       binast_parse_data =
           handle(shared_info->uncompiled_data_with_inner_bin_ast_parse_data()
                      .binast_parse_data(),
                  isolate);
+
+      offset.emplace(
+          shared_info->uncompiled_data_with_inner_bin_ast_parse_data()
+              .data_offset());
+
+      length.emplace(
+          shared_info->uncompiled_data_with_inner_bin_ast_parse_data()
+              .data_length());
     } else {
       binast_parse_data =
           handle(shared_info->uncompiled_data_with_binast_parse_data()
@@ -2033,7 +2043,7 @@ void AbstractParser<Impl>::ParseFunction(
           &impl()->function_state_, &impl()->scope_, outer_function);
       typename ParserBase<Impl>::BlockState block_state(&impl()->scope_, outer);
       BinAstDeserializer deserializer(isolate, impl(), outer, binast_parse_data);
-      AstNode* ast_node = deserializer.DeserializeAst();
+      AstNode* ast_node = deserializer.DeserializeAst(offset, length);
       literal = ast_node->AsFunctionLiteral();
       DCHECK(literal != nullptr);
     }

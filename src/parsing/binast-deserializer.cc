@@ -14,12 +14,16 @@
 namespace v8 {
 namespace internal {
 
-BinAstDeserializer::BinAstDeserializer(Isolate* isolate, Parser* parser, Scope* outer_scope, Handle<BinAstParseData> parse_data)
-    : isolate_(isolate), parser_(parser), parse_data_(parse_data)
-{
-}
+BinAstDeserializer::BinAstDeserializer(Isolate* isolate, Parser* parser,
+                                       Scope* outer_scope,
+                                       Handle<BinAstParseData> parse_data)
+    : isolate_(isolate),
+      parser_(parser),
+      outer_scope_(outer_scope),
+      parse_data_(parse_data) {}
 
-AstNode* BinAstDeserializer::DeserializeAst() {
+AstNode* BinAstDeserializer::DeserializeAst(
+    base::Optional<uint32_t> start_offset, base::Optional<uint32_t> length) {
   auto serialized_ast = parse_data_->serialized_ast();
   DCHECK(UseCompression() == BinAstSerializeVisitor::UseCompression());
   std::unique_ptr<uint8_t[]> compressed_byte_array_with_size_header = std::make_unique<uint8_t[]>(serialized_ast.length());
@@ -46,6 +50,11 @@ AstNode* BinAstDeserializer::DeserializeAst() {
   auto string_table_result = DeserializeStringTable(uncompressed_byte_array.get(), offset);
   offset = string_table_result.new_offset;
   bool is_toplevel = true;
+  if (start_offset.has_value()) {
+    is_toplevel = false;
+    offset = start_offset.value();
+  }
+
   auto result = DeserializeAstNode(uncompressed_byte_array.get(), offset, is_toplevel);
   // Check that we consumed all the bytes that were serialized.
   DCHECK(static_cast<size_t>(result.new_offset) == original_size);
@@ -240,7 +249,7 @@ BinAstDeserializer::DeserializeResult<Declaration*> BinAstDeserializer::Deserial
   auto decl_type = DeserializeUint8(serialized_binast, offset);
   offset = decl_type.new_offset;
 
-  auto variable = DeserializeVariableReference(serialized_binast, offset);
+  auto variable = DeserializeVariableReference(serialized_binast, offset, scope);
   offset = variable.new_offset;
 
   Declaration* result;
@@ -291,7 +300,7 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   scope->num_parameters_ = num_parameters_result.value;
 
   for (int i = 0; i < num_parameters_result.value; ++i) {
-    auto param_result = DeserializeVariableReference(serialized_binast, offset);
+    auto param_result = DeserializeVariableReference(serialized_binast, offset, scope);
     offset = param_result.new_offset;
     scope->params_.Add(param_result.value, zone());
   }
