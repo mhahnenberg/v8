@@ -159,6 +159,7 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
   case AstNode::kTryFinallyStatement:
   case AstNode::kDebuggerStatement:
   case AstNode::kInitializeClassMembersStatement:
+  case AstNode::kInitializeClassStaticElementsStatement:
   case AstNode::kRegExpLiteral:
   case AstNode::kAwait:
   case AstNode::kCallRuntime:
@@ -218,9 +219,30 @@ BinAstDeserializer::DeserializeResult<Declaration*> BinAstDeserializer::Deserial
   auto variable = DeserializeVariableReference(serialized_binast, offset);
   offset = variable.new_offset;
 
-  Declaration* decl = zone()->New<Declaration>(start_pos.value, static_cast<Declaration::DeclType>(decl_type.value));
-  decl->set_var(variable.value);
-  return {decl, offset};
+  Declaration* result;
+  switch (decl_type.value) {
+    case Declaration::DeclType::VariableDecl: {
+      auto is_nested = DeserializeUint8(serialized_binast, offset);
+      offset = is_nested.new_offset;
+
+      // TODO(binast): Add support for nested var decls.
+      DCHECK(!is_nested.value);
+      result = zone()->New<VariableDeclaration>(start_pos.value, is_nested.value);
+      break;
+    }
+    case Declaration::DeclType::FunctionDecl: {
+      auto func = DeserializeAstNode(serialized_binast, offset);
+      offset = func.new_offset;
+
+      result = zone()->New<FunctionDeclaration>((void*)func.value, start_pos.value);
+      break;
+    }
+    default: {
+      UNREACHABLE();
+    }
+  }
+  result->set_var(variable.value);
+  return {result, offset};
 }
 
 BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeDeclarations(uint8_t* serialized_binast, int offset, Scope* scope) {
