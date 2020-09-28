@@ -108,6 +108,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeAstNodeHeader(AstNode* node);
   void SerializeVariableProxy(VariableProxy* proxy);
 
+  void VisitMaybeNode(AstNode* maybe_node);
   void ToDoBinAst(AstNode* node);
 
   AstValueFactory* ast_value_factory_;
@@ -526,7 +527,10 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
 
   SerializeScopeParameters(scope);
   // TODO(binast): sloppy_block_functions_ (needed for non-strict mode support)
-  DCHECK(scope->sloppy_block_functions_.is_empty());
+  if (!scope->sloppy_block_functions_.is_empty()) {
+    printf("BinAstSerializeVisitor encountered unsupported sloppy block functions on DeclarationScope\n");
+    encountered_unhandled_node_ = true;
+  }
 
   SerializeVariableOrReference(scope->receiver_);
   SerializeVariableOrReference(scope->function_);
@@ -534,7 +538,7 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
   SerializeVariableOrReference(scope->arguments_);
 
   // TODO(binast): rare_data_ (needed for > ES5.1 feature support)
-  if (scope->rare_data_ == nullptr) {
+  if (scope->rare_data_ != nullptr) {
     printf("BinAstSerializeVisitor encountered unsupported rare data on DeclarationScope\n");
     encountered_unhandled_node_ = true;
   }
@@ -561,6 +565,15 @@ inline void BinAstSerializeVisitor::SerializeVariableProxy(VariableProxy* proxy)
     SerializeVariableOrReference(proxy->var());
   } else {
     SerializeRawStringReference(proxy->raw_name());
+  }
+}
+
+inline void BinAstSerializeVisitor::VisitMaybeNode(AstNode* maybe_node) {
+  if (maybe_node) {
+    SerializeUint8(1);
+    VisitNode(maybe_node);
+  } else {
+    SerializeUint8(0);
   }
 }
 
@@ -670,26 +683,9 @@ inline void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statemen
   SerializeAstNodeHeader(for_statement);
 
   // TODO(binast): are we guaranteed that we'll have all of these nodes?
-  if (for_statement->init()) {
-    SerializeUint8(1);
-    VisitNode(for_statement->init());
-  } else {
-    SerializeUint8(0);
-  }
-
-  if (for_statement->cond()) {
-    SerializeUint8(1);
-    VisitNode(for_statement->cond());
-  } else {
-    SerializeUint8(0);
-  }
-
-  if (for_statement->next()) {
-    SerializeUint8(1);
-    VisitNode(for_statement->next());
-  } else {
-    SerializeUint8(0);
-  }
+  VisitMaybeNode(for_statement->init());
+  VisitMaybeNode(for_statement->cond());
+  VisitMaybeNode(for_statement->next());
 
   VisitNode(for_statement->body());
 }

@@ -393,7 +393,7 @@ inline BinAstDeserializer::DeserializeResult<Literal*> BinAstDeserializer::Deser
       break;
     }
     case Literal::kBoolean: {
-      auto boolean = DeserializeUint8(serialized_binast, position);
+      auto boolean = DeserializeUint8(serialized_binast, offset);
       offset = boolean.new_offset;
       result = parser_->factory()->NewBooleanLiteral(boolean.value, position);
       break;
@@ -414,7 +414,7 @@ inline BinAstDeserializer::DeserializeResult<Literal*> BinAstDeserializer::Deser
       UNREACHABLE();
     }
   }
-  DCHECK(result->bit_field_ == bit_field);
+  result->bit_field_ = bit_field;
 
   return {result, offset};
 }
