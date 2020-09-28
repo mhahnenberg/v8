@@ -2022,7 +2022,7 @@ void AbstractParser<Impl>::ParseFunction(
       typename ParserBase<Impl>::FunctionState function_state(
           &impl()->function_state_, &impl()->scope_, outer_function);
       typename ParserBase<Impl>::BlockState block_state(&impl()->scope_, outer);
-      BinAstDeserializer deserializer(impl(), outer);
+      BinAstDeserializer deserializer(impl());
       AstNode* ast_node = deserializer.DeserializeAst(binast_parse_data->serialized_ast());
       literal = ast_node->AsFunctionLiteral();
       DCHECK(literal != nullptr);

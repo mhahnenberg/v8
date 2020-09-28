@@ -44,6 +44,7 @@ public:
   virtual void VisitSwitchStatement(SwitchStatement* switch_statement) = 0;
 
   void VisitNode(AstNode* node) {
+    DCHECK_NOT_NULL(node);
     switch (node->node_type()) {
       case AstNode::kFunctionLiteral: {
         VisitFunctionLiteral(static_cast<FunctionLiteral*>(node));

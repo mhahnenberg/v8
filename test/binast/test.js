@@ -1,5 +1,20 @@
 'use strict';
 
+function Thing() {
+  this.$ = {foo: null, bar: null};
+}
+
+Thing.prototype.ready = function() {
+  this.$.foo = 'foo';
+  this.$.bar = false;
+};
+
+function makeThing() {
+  var t = new Thing();
+  t.ready();
+  return t;
+}
+
 var double = function(x) { return x * 2; }
 function triple(x) { return x * 3; }
 function deep() {
@@ -125,6 +140,7 @@ setTimeout(function testCallback2() {
   console.log(sumForIn([1,2,3,4,5,6,7,8,9,10]));
   console.log(sumWhile(10));
   console.log(sumDoWhile(10));
+  console.log(makeThing());
 }, 5000);
 
 tickRunLoop();

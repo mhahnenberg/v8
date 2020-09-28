@@ -21,7 +21,7 @@ class Parser;
 
 class BinAstDeserializer {
  public:
-  BinAstDeserializer(Parser* parser, Scope* outer_scope);
+  BinAstDeserializer(Parser* parser);
 
   AstNode* DeserializeAst(ByteArray serialized_ast);
 
@@ -34,6 +34,8 @@ class BinAstDeserializer {
 
   Zone* zone();
   static bool UseCompression() { return false; }
+
+  DeserializeResult<AstNode*> DeserializeMaybeAstNode(uint8_t* serialized_binast, int offset);
 
   DeserializeResult<uint64_t> DeserializeUint64(uint8_t* bytes, int offset);
   DeserializeResult<uint32_t> DeserializeUint32(uint8_t* bytes, int offset);
