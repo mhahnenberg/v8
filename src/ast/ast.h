@@ -410,6 +410,7 @@ class VariableDeclaration : public Declaration {
  private:
   friend class AstNodeFactory;
   friend class BinAstNodeFactory;
+  friend class BinAstDeserializer;
 
  protected:
   explicit VariableDeclaration(int pos, bool is_nested = false)
@@ -430,6 +431,7 @@ class NestedVariableDeclaration final : public VariableDeclaration {
  private:
   friend class AstNodeFactory;
   friend class BinAstNodeFactory;
+  friend class BinAstDeserializer;
 
   NestedVariableDeclaration(Scope* scope, int pos)
       : VariableDeclaration(pos, true), scope_(scope) {}
@@ -449,6 +451,7 @@ class FunctionDeclaration final : public Declaration {
  private:
   friend class AstNodeFactory;
   friend class BinAstNodeFactory;
+  friend class BinAstDeserializer;
 
   FunctionDeclaration(void* fun, int pos)
       : Declaration(pos, Declaration::FunctionDecl), fun_(fun) {}

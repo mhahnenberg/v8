@@ -429,6 +429,21 @@ inline void BinAstSerializeVisitor::SerializeDeclaration(Scope* scope, Declarati
   SerializeInt32(decl->position());
   SerializeUint8(decl->type());
   SerializeVariableReference(decl->var());
+  switch(decl->type()) {
+    case Declaration::DeclType::VariableDecl: {
+      // TODO(binast): Add support for nested variable declarations.
+      if (decl->AsVariableDeclaration()->is_nested()) {
+        encountered_unhandled_node_ = true;
+        printf("BinAstSerializeVisitor encountered unhandled nested variable declaration, skipping function\n");
+      }
+      SerializeUint8(decl->AsVariableDeclaration()->is_nested());
+      break;
+    }
+    case Declaration::DeclType::FunctionDecl: {
+      VisitNode(decl->AsFunctionDeclaration()->fun<FunctionLiteral>());
+      break;
+    }
+  }
 }
 
 inline void BinAstSerializeVisitor::SerializeScopeDeclarations(Scope* scope) {
