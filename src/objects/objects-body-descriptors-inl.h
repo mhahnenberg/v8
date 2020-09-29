@@ -1080,6 +1080,11 @@ ReturnType BodyDescriptorApply(InstanceType type, T1 p1, T2 p2, T3 p3, T4 p4) {
     case UNCOMPILED_DATA_WITH_PREPARSE_DATA_TYPE:
       return Op::template apply<UncompiledDataWithPreparseData::BodyDescriptor>(
           p1, p2, p3, p4);
+    case UNCOMPILED_DATA_WITH_BIN_AST_PARSE_DATA_TYPE:
+      return Op::template apply<UncompiledDataWithBinAstParseData::BodyDescriptor>(
+          p1, p2, p3, p4);
+    case BIN_AST_PARSE_DATA_TYPE:
+      return Op::template apply<BinAstParseData::BodyDescriptor>(p1, p2, p3, p4);
     case HEAP_NUMBER_TYPE:
     case FILLER_TYPE:
     case BYTE_ARRAY_TYPE:
