@@ -1757,11 +1757,12 @@ bool BackgroundBinAstParseTask::Finalize(Isolate* isolate, Handle<SharedFunction
     return true;
   }
   Handle<BinAstParseData> binast_parse_data = info()->literal()->produced_binast_parse_data()->Serialize(isolate);
+  Handle<ByteArray> serialized_ast = handle(binast_parse_data->serialized_ast(), isolate);
   Handle<UncompiledData> data = isolate->factory()->NewUncompiledDataWithBinAstParseData(
         info()->literal()->GetInferredName(isolate),
         info()->literal()->start_position(),
         info()->literal()->end_position(),
-        binast_parse_data);
+        serialized_ast);
   function->set_uncompiled_data(*data);
   return true;
 }
@@ -3271,6 +3272,7 @@ Handle<SharedFunctionInfo> Compiler::GetSharedFunctionInfo(
       // accurate than the literal we preparsed.
       Handle<String> inferred_name =
           handle(existing_uncompiled_data->inferred_name(), isolate);
+
       Handle<PreparseData> preparse_data =
           literal->produced_preparse_data()->Serialize(isolate);
       Handle<UncompiledData> new_uncompiled_data =

@@ -9,6 +9,7 @@ extern class PreparseData extends HeapObject {
   children_length: int32;
 }
 
+@generateCppClass
 extern class BinAstParseData extends HeapObject {
   serialized_ast: ByteArray;
 }
@@ -108,7 +109,7 @@ class UncompiledDataWithPreparseData extends UncompiledData {
 @export
 @customCppClass
 class UncompiledDataWithBinAstParseData extends UncompiledData {
-  binast_parse_data: BinAstParseData;
+  binast_parse_data: ByteArray;
 }
 
 @export

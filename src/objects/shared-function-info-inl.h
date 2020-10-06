@@ -93,10 +93,7 @@ TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithoutPreparseData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithPreparseData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithBinAstParseData)
 
-OBJECT_CONSTRUCTORS_IMPL(BinAstParseData, HeapObject)
-
-CAST_ACCESSOR(BinAstParseData)
-ACCESSORS(BinAstParseData, serialized_ast, ByteArray, kSerializedAstOffset)
+TQ_OBJECT_CONSTRUCTORS_IMPL(BinAstParseData)
 
 TQ_OBJECT_CONSTRUCTORS_IMPL(BaselineData)
 
@@ -803,6 +800,7 @@ void SharedFunctionInfo::ClearBinAstParseData() {
 
   // Ensure that the clear was successful.
   DCHECK(HasUncompiledDataWithoutPreparseData());
+  DCHECK(!HasUncompiledDataWithBinAstParseData());
 }
 
 
