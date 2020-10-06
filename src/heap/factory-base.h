@@ -169,7 +169,7 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) FactoryBase
 
   Handle<UncompiledDataWithBinAstParseData> NewUncompiledDataWithBinAstParseData(
       Handle<String> inferred_name, int32_t start_position,
-      int32_t end_position, Handle<BinAstParseData>);
+      int32_t end_position, Handle<ByteArray>);
 
   // Allocates a FeedbackMedata object and zeroes the data section.
   Handle<FeedbackMetadata> NewFeedbackMetadata(

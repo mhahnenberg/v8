@@ -77,6 +77,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   virtual void VisitThisExpression(ThisExpression* this_expression) override;
   virtual void VisitRegExpLiteral(RegExpLiteral* reg_exp_literal) override;
   virtual void VisitSwitchStatement(SwitchStatement* switch_statement) override;
+  virtual void VisitUnhandledNodeType(AstNode* node) override;
 
  private:
   friend class BinAstDeserializer;
@@ -234,6 +235,7 @@ inline void BinAstSerializeVisitor::SerializeVarUint32(uint32_t value) {
 inline void BinAstSerializeVisitor::SerializeRawString(const AstRawString* s) {
   DCHECK(s != nullptr);
   DCHECK(string_table_indices_.count(s) == 0);
+  DCHECK(s->byte_length() >= 0);
   uint32_t length = s->byte_length();
   bool is_one_byte = s->is_one_byte();
   uint32_t hash_field = s->raw_hash_field();
@@ -294,7 +296,9 @@ inline void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* fu
       }
     }
   }
-  SerializeUint32(num_entries - num_constant_entries);
+  uint32_t num_non_constant_entries = num_entries - num_constant_entries;
+  DCHECK(num_entries >= num_constant_entries);
+  SerializeUint32(num_non_constant_entries);
   uint32_t current_index = 1;
   // Insert non-constant strings
   for (AstRawStringMap::Entry* entry = ast_value_factory_->string_table_.Start(); entry != nullptr; entry = ast_value_factory_->string_table_.Next(entry)) {
@@ -308,12 +312,8 @@ inline void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* fu
     string_table_indices_.insert({s, current_index});
     current_index += 1;
   }
-
-  // Only insert constant strings into the table (i.e. don't serialize their contents)
-  for (AstRawStringMap::Entry* entry = ast_value_factory_->string_constants_->string_table()->Start(); entry != nullptr; entry = ast_value_factory_->string_constants_->string_table()->Next(entry)) {
-    string_table_indices_.insert({entry->key, current_index});
-    current_index += 1;
-  }
+  
+  DCHECK(current_index - 1 == num_non_constant_entries);
 
   if (function_name != nullptr) {
     for (const AstRawString* s : function_name->ToRawStrings()) {
@@ -323,6 +323,12 @@ inline void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* fu
         current_index += 1;
       }
     }
+  }
+
+  // Only insert constant strings into the table (i.e. don't serialize their contents)
+  for (AstRawStringMap::Entry* entry = ast_value_factory_->string_constants_->string_table()->Start(); entry != nullptr; entry = ast_value_factory_->string_constants_->string_table()->Next(entry)) {
+    string_table_indices_.insert({entry->key, current_index});
+    current_index += 1;
   }
 
   DCHECK(current_index == num_entries + 1);
@@ -828,6 +834,11 @@ inline void BinAstSerializeVisitor::VisitSwitchStatement(
     SwitchStatement* switch_statement) {
   SerializeAstNodeHeader(switch_statement);
   ToDoBinAst(switch_statement);
+}
+
+inline void BinAstSerializeVisitor::VisitUnhandledNodeType(AstNode* node) {
+  SerializeAstNodeHeader(node);
+  ToDoBinAst(node);
 }
 
 }  // namespace internal

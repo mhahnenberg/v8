@@ -322,7 +322,7 @@ template <typename Impl>
 Handle<UncompiledDataWithBinAstParseData> 
 FactoryBase<Impl>::NewUncompiledDataWithBinAstParseData(
       Handle<String> inferred_name, int32_t start_position,
-      int32_t end_position, Handle<BinAstParseData> binast_parse_data) {
+      int32_t end_position, Handle<ByteArray> binast_parse_data) {
   return TorqueGeneratedFactory<Impl>::NewUncompiledDataWithBinAstParseData(
       inferred_name, start_position, end_position, binast_parse_data,
       AllocationType::kOld);
