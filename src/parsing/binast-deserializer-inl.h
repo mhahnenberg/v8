@@ -269,28 +269,17 @@ BinAstDeserializer::DeserializeVariableReference(uint8_t* serialized_binast,
     return {nullptr, offset};
   }
 
-  // auto raw_name = DeserializeRawStringReference(serialized_binast, offset);
-  // offset = variable_reference.new_offset;
-
-  // (void)raw_name;
-
-  printf("\nvariable reference %lu\n",
-         static_cast<unsigned long>(variable_reference.value));
-
   auto variable_result = variables_by_id_.find(variable_reference.value);
-  // DCHECK(variable_result != variables_by_id_.end() || scope);
+  DCHECK(variable_result != variables_by_id_.end() || scope);
 
   if (variable_result != variables_by_id_.end()) {
     return {variable_result->second, offset};
-  } else  {
-  return {DeserializeScopeVariable(serialized_binast, variable_reference.value,
-                                   scope ? scope : outer_scope_)
-              .value,
-          offset};
+  } else {
+    return {
+      DeserializeScopeVariable(serialized_binast, variable_reference.value, scope).value,
+      offset
+    };
   }
-  //  else {
-  //   // return {outer_scope_->LookupLocal(raw_name.value), offset};
-  // }
 }
 
 inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeScopeVariable(uint8_t* serialized_binast, int offset, Scope* scope) {
@@ -302,8 +291,7 @@ inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Dese
   if (variable == nullptr) {
     return {nullptr, offset};
   }
-  printf("\ninsert var %d\n", original_offset);
-  variables_by_id_.insert({variables_by_id_.size() + 1, variable});
+  variables_by_id_.insert({original_offset, variable});
   return {variable, offset};
 }
 
@@ -346,13 +334,11 @@ inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Dese
       return {nullptr, offset};
     }
     case ScopeVariableKind::Definition: {
-      printf("\nscope var definition\n");
       auto scope_result = DeserializeScopeVariable(serialized_binast, offset, scope);
       offset = scope_result.new_offset;
       return {scope_result.value, offset};
     }
     case ScopeVariableKind::Reference: {
-      printf("\nscope var reference\n");
       auto scope_result = DeserializeVariableReference(serialized_binast, offset, scope);
       offset = scope_result.new_offset;
       return {scope_result.value, offset};
@@ -372,13 +358,11 @@ inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Dese
       return {nullptr, offset};
     }
     case ScopeVariableKind::Definition: {
-      printf("\nnonscope var definition\n");
       auto scope_result = DeserializeNonScopeVariable(serialized_binast, offset);
       offset = scope_result.new_offset;
       return {scope_result.value, offset};
     }
     case ScopeVariableKind::Reference: {
-      printf("\nnonscope reference var\n");
       auto scope_result = DeserializeVariableReference(serialized_binast, offset);
       offset = scope_result.new_offset;
       return {scope_result.value, offset};

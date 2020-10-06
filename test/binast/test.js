@@ -15,7 +15,7 @@ function makeThing() {
   return t;
 }
 
-function explode2(a,b,c,d,e,f){"use strict";e.exports=a;function a(){return b;}}
+// function explode2(a,b,c,d,e,f){"use strict";e.exports=a;function a(){return b;}}
 
 var double = function(x) { return x * 2; }
 function triple(x) { return x * 3; }
@@ -148,9 +148,9 @@ setTimeout(function testCallback2() {
   var c = 2;
   var d = 3;
   var e = {};
-  console.log(explode2(a, b, c, d, e));
-  console.log(e);
-  console.log(e.exports());
+  // console.log(explode2(a, b, c, d, e));
+  // console.log(e);
+  // console.log(e.exports());
 }, 5000);
 
 tickRunLoop();

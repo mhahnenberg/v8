@@ -4,9 +4,6 @@
 
 #include "src/interpreter/bytecode-generator.h"
 
-#include <cinttypes>
-
-
 #include "src/api/api-inl.h"
 #include "src/ast/ast-source-ranges.h"
 #include "src/ast/scopes.h"

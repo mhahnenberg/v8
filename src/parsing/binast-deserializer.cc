@@ -15,11 +15,9 @@ namespace v8 {
 namespace internal {
 
 BinAstDeserializer::BinAstDeserializer(Isolate* isolate, Parser* parser,
-                                       Scope* outer_scope,
                                        Handle<BinAstParseData> parse_data)
     : isolate_(isolate),
       parser_(parser),
-      outer_scope_(outer_scope),
       parse_data_(parse_data) {}
 
 AstNode* BinAstDeserializer::DeserializeAst(
@@ -225,8 +223,10 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   offset = total_local_variables.new_offset;
 
   for (uint32_t i = 0; i < total_local_variables.value; ++i) {
-    auto new_variable = DeserializeLocalVariable(serialized_binast, offset, scope);
-    variables_by_id_.insert({variables_by_id_.size() + 1, new_variable.value});
+    auto start_offset = offset;
+    auto new_variable =
+        DeserializeLocalVariable(serialized_binast, offset, scope);
+    variables_by_id_.insert({start_offset, new_variable.value});
     offset = new_variable.new_offset;
   }
 
@@ -234,8 +234,10 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   offset = total_nonlocal_variables.new_offset;
 
   for (uint32_t i = 0; i < total_nonlocal_variables.value; ++i) {
-    auto new_variable = DeserializeNonLocalVariable(serialized_binast, offset, scope);
-    variables_by_id_.insert({variables_by_id_.size() + 1, new_variable.value});
+    auto start_offset = offset;
+    auto new_variable =
+        DeserializeNonLocalVariable(serialized_binast, offset, scope);
+    variables_by_id_.insert({start_offset, new_variable.value});
     offset = new_variable.new_offset;
   }
 

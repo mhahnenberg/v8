@@ -1,12 +1,12 @@
 'use strict';
 
-var deep = function () {
-  // var period = '.';
-  return function inner() {
-      return (function() {
-        return 'done';
-      });
+var deep = function deep() {
+  var period = '.';
+  return function inner(str) {
+    return function innermost() {
+      return str + period;
+    };
   };
 }
 
-console.log(deep()()());
+console.log(deep()('done')());

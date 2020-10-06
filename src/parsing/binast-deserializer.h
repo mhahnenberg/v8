@@ -21,7 +21,7 @@ class Parser;
 
 class BinAstDeserializer {
  public:
-  BinAstDeserializer(Isolate* isolate, Parser* parser, Scope* outer_scope, Handle<BinAstParseData> parse_data);
+  BinAstDeserializer(Isolate* isolate, Parser* parser, Handle<BinAstParseData> parse_data);
 
   AstNode* DeserializeAst(base::Optional<uint32_t> start_offset,
                           base::Optional<uint32_t> length);
@@ -97,7 +97,6 @@ class BinAstDeserializer {
 
   Isolate* isolate_;
   Parser* parser_;
-  Scope* outer_scope_;
   Handle<BinAstParseData> parse_data_;
   std::unordered_map<uint32_t, const AstRawString*> string_table_;
   std::unordered_map<uint32_t, Variable*> variables_by_id_;

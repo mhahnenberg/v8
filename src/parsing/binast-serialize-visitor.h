@@ -390,8 +390,6 @@ inline void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
   SerializeUint16(variable->bit_field_);
 
   DCHECK(variable_ids_.count(variable) == 0);
-  printf("\ninsert variable %s with id %lu\n", variable->raw_name()->raw_data(),
-         variable_offset);
   variable_ids_.insert({variable, variable_offset});
 }
 
@@ -404,7 +402,6 @@ inline void BinAstSerializeVisitor::SerializeVariableReference(Variable* variabl
   DCHECK(var_id_result != variable_ids_.end());
   uint32_t var_id = var_id_result->second;
   SerializeVarUint32(var_id);
-  // SerializeRawStringReference(variable->raw_name());
 }
 
 inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
@@ -659,9 +656,8 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
   if (!function_is_toplevel) {
     // Calculate length and insert at length_index
     auto length = byte_data_.size() - start;
-    auto offset = byte_data_.size() - length_index.value();
     DCHECK(length <= UINT32_MAX);
-    SerializeUint32(static_cast<uint32_t>(length), offset);
+    SerializeUint32(static_cast<uint32_t>(length), length_index.value());
   }
 }
 
