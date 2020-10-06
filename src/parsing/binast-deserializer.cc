@@ -230,6 +230,9 @@ BinAstDeserializer::DeserializeResult<Declaration*> BinAstDeserializer::Deserial
       break;
     }
     case Declaration::DeclType::FunctionDecl: {
+      // We need to push the Scope being currently deserialized onto the Scope stack while deserializing
+      // the FunctionLiterals inside FunctionDeclarations, otherwise their scope chain will end up skipping it.
+      Parser::FunctionState function_state(&parser_->function_state_, &parser_->scope_, scope->AsDeclarationScope());
       auto func = DeserializeAstNode(serialized_binast, offset);
       offset = func.new_offset;
 
@@ -377,7 +380,7 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
   offset = scope_type.new_offset;
 
   switch (scope_type.value) {
-    case CLASS_SCOPE: 
+    case CLASS_SCOPE:
     case EVAL_SCOPE:
     case MODULE_SCOPE:
     case SCRIPT_SCOPE:

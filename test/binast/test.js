@@ -15,6 +15,8 @@ function makeThing() {
   return t;
 }
 
+function explode2(a,b,c,d,e,f){"use strict";e.exports=a;function a(){return b;}}
+
 var double = function(x) { return x * 2; }
 function triple(x) { return x * 3; }
 function deep() {
@@ -141,6 +143,14 @@ setTimeout(function testCallback2() {
   console.log(sumWhile(10));
   console.log(sumDoWhile(10));
   console.log(makeThing());
+  var a = 0;
+  var b = 'sweet!';
+  var c = 2;
+  var d = 3;
+  var e = {};
+  console.log(explode2(a, b, c, d, e));
+  console.log(e);
+  console.log(e.exports());
 }, 5000);
 
 tickRunLoop();
