@@ -42,6 +42,7 @@ public:
   virtual void VisitThisExpression(ThisExpression* this_expression) = 0;
   virtual void VisitRegExpLiteral(RegExpLiteral* reg_exp_literal) = 0;
   virtual void VisitSwitchStatement(SwitchStatement* switch_statement) = 0;
+  virtual void VisitUnhandledNodeType(AstNode* node) = 0;
 
   void VisitNode(AstNode* node) {
     DCHECK_NOT_NULL(node);
@@ -197,6 +198,7 @@ public:
 
       default: {
         printf("Unimplemented node type: %s\n", node->node_type_name());
+        VisitUnhandledNodeType(node);
         break;
       }
     }

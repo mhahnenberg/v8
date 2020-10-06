@@ -86,10 +86,7 @@ TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithoutPreparseData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithPreparseData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithBinAstParseData)
 
-OBJECT_CONSTRUCTORS_IMPL(BinAstParseData, HeapObject)
-
-CAST_ACCESSOR(BinAstParseData)
-ACCESSORS(BinAstParseData, serialized_ast, ByteArray, kSerializedAstOffset)
+TQ_OBJECT_CONSTRUCTORS_IMPL(BinAstParseData)
 
 OBJECT_CONSTRUCTORS_IMPL(InterpreterData, Struct)
 
@@ -672,6 +669,7 @@ void SharedFunctionInfo::ClearBinAstParseData() {
 
   // Ensure that the clear was successful.
   DCHECK(HasUncompiledDataWithoutPreparseData());
+  DCHECK(!HasUncompiledDataWithBinAstParseData());
 }
 
 
@@ -708,7 +706,7 @@ template <typename LocalIsolate>
 void UncompiledDataWithBinAstParseData::Init(LocalIsolate* isolate,
                                           String inferred_name,
                                           int start_position, int end_position,
-                                          BinAstParseData binast_parse_data) {
+                                          ByteArray binast_parse_data) {
   this->UncompiledData::Init(isolate, inferred_name, start_position,
                              end_position);
   set_binast_parse_data(binast_parse_data);
