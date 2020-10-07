@@ -313,7 +313,7 @@ template <typename Impl>
 Handle<UncompiledDataWithBinAstParseData> 
 FactoryBase<Impl>::NewUncompiledDataWithBinAstParseData(
       Handle<String> inferred_name, int32_t start_position,
-      int32_t end_position, Handle<BinAstParseData> binast_parse_data) {
+      int32_t end_position, Handle<ByteArray> binast_parse_data) {
   Handle<UncompiledDataWithBinAstParseData> result = handle(
       UncompiledDataWithBinAstParseData::cast(NewWithImmortalMap(
           impl()->read_only_roots().uncompiled_data_with_bin_ast_parse_data_map(),
@@ -322,7 +322,6 @@ FactoryBase<Impl>::NewUncompiledDataWithBinAstParseData(
 
   result->Init(impl(), *inferred_name, start_position, end_position,
                *binast_parse_data);
-
   return result;
 }
 
