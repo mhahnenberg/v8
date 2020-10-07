@@ -55,7 +55,8 @@ AstNode* BinAstDeserializer::DeserializeAst(
 
   auto result = DeserializeAstNode(uncompressed_byte_array.get(), offset, is_toplevel);
   // Check that we consumed all the bytes that were serialized.
-  DCHECK(static_cast<size_t>(result.new_offset) == original_size);
+  DCHECK(static_cast<size_t>(result.new_offset) ==
+         (length.value_or(original_size) + start_offset.value_or(0)));
   return result.value;
 }
 
@@ -71,27 +72,24 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
   case AstNode::kFunctionLiteral: {
     uint32_t start_offset;
     uint32_t length;
-    if (!is_toplevel) {
-      auto deserial_start_offset = DeserializeUint32(serialized_binast, offset);
-      offset = deserial_start_offset.new_offset;
-      start_offset = deserial_start_offset.value;
+    auto deserial_start_offset = DeserializeUint32(serialized_binast, offset);
+    offset = deserial_start_offset.new_offset;
+    start_offset = deserial_start_offset.value;
 
-      auto deserial_length = DeserializeUint32(serialized_binast, offset);
-      offset = deserial_length.new_offset;
-      length = deserial_length.value;
-    }
+    auto deserial_length = DeserializeUint32(serialized_binast, offset);
+    offset = deserial_length.new_offset;
+    length = deserial_length.value;
 
-    auto result = DeserializeFunctionLiteral(serialized_binast, bit_field.value, position.value, offset);
+    auto result = DeserializeFunctionLiteral(serialized_binast, bit_field.value,
+                                             position.value, offset);
 
-    if (!is_toplevel) {
-      Handle<UncompiledDataWithInnerBinAstParseData> data =
-          isolate_->factory()->NewUncompiledDataWithInnerBinAstParseData(
-              result.value->GetInferredName(isolate_),
-              result.value->start_position(), result.value->end_position(),
-              parse_data_, start_offset, length);
+    Handle<UncompiledDataWithInnerBinAstParseData> data =
+        isolate_->factory()->NewUncompiledDataWithInnerBinAstParseData(
+            result.value->GetInferredName(isolate_),
+            result.value->start_position(), result.value->end_position(),
+            parse_data_, start_offset, length);
 
-      result.value->set_uncompiled_data_with_inner_bin_ast_parse_data(data);
-    }
+    result.value->set_uncompiled_data_with_inner_bin_ast_parse_data(data);
 
     return {result.value, result.new_offset};
   }
