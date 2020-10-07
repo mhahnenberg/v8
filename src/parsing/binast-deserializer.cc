@@ -15,14 +15,14 @@ namespace v8 {
 namespace internal {
 
 BinAstDeserializer::BinAstDeserializer(Isolate* isolate, Parser* parser,
-                                       Handle<BinAstParseData> parse_data)
+                                       Handle<ByteArray> parse_data)
     : isolate_(isolate),
       parser_(parser),
       parse_data_(parse_data) {}
 
 AstNode* BinAstDeserializer::DeserializeAst(
     base::Optional<uint32_t> start_offset, base::Optional<uint32_t> length) {
-  auto serialized_ast = parse_data_->serialized_ast();
+  ByteArray serialized_ast = *parse_data_;
   DCHECK(UseCompression() == BinAstSerializeVisitor::UseCompression());
   std::unique_ptr<uint8_t[]> compressed_byte_array_with_size_header = std::make_unique<uint8_t[]>(serialized_ast.length());
   serialized_ast.copy_out(0, compressed_byte_array_with_size_header.get(), serialized_ast.length());

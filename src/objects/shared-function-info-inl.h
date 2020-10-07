@@ -762,7 +762,7 @@ template <typename LocalIsolate>
 void UncompiledDataWithInnerBinAstParseData::Init(LocalIsolate* isolate,
                                           String inferred_name,
                                           int start_position, int end_position,
-                                          BinAstParseData binast_parse_data,
+                                          ByteArray binast_parse_data,
                                           int32_t offset, int32_t length) {
   this->UncompiledData::Init(isolate, inferred_name, start_position,
                              end_position);

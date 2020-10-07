@@ -146,7 +146,7 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) FactoryBase {
 
   Handle<UncompiledDataWithInnerBinAstParseData> NewUncompiledDataWithInnerBinAstParseData(
       Handle<String> inferred_name, int32_t start_position,
-      int32_t end_position, Handle<BinAstParseData>, int32_t offset,
+      int32_t end_position, Handle<ByteArray>, int32_t offset,
       int32_t length);
 
   // Allocates a FeedbackMedata object and zeroes the data section.
