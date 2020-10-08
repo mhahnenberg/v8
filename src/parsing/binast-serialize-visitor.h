@@ -557,6 +557,13 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
     scope->needs_private_name_context_chain_recalc_,
   });
 
+  if (scope->has_rest_) {
+    printf(
+        "BinAstSerializeVisitor encountered unsupported rest parameter on "
+        "DeclarationScope\n");
+    encountered_unhandled_node_ = true;
+  }
+
   SerializeScopeParameters(scope);
   // TODO(binast): sloppy_block_functions_ (needed for non-strict mode support)
   if (!scope->sloppy_block_functions_.is_empty()) {
