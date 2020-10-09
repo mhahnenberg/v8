@@ -2502,6 +2502,16 @@ class FunctionLiteral final : public Expression {
     produced_binast_parse_data_ = produced_binast_parse_data;
   }
 
+  Handle<UncompiledDataWithInnerBinAstParseData>
+  uncompiled_data_with_inner_bin_ast_parse_data() {
+    return uncompiled_data_with_inner_bin_ast_parse_data_;
+  }
+
+  void set_uncompiled_data_with_inner_bin_ast_parse_data(
+      Handle<UncompiledDataWithInnerBinAstParseData> data) {
+    uncompiled_data_with_inner_bin_ast_parse_data_ = data;
+  }
+
  private:
   friend class AstNodeFactory;
   friend class BinAstSerializeVisitor;
@@ -2572,6 +2582,9 @@ class FunctionLiteral final : public Expression {
   Handle<String> inferred_name_;
   ProducedPreparseData* produced_preparse_data_;
   ProducedBinAstParseData* produced_binast_parse_data_;
+
+  Handle<UncompiledDataWithInnerBinAstParseData>
+      uncompiled_data_with_inner_bin_ast_parse_data_;
 };
 
 // Property is used for passing information

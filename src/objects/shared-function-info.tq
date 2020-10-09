@@ -113,6 +113,14 @@ class UncompiledDataWithBinAstParseData extends UncompiledData {
 }
 
 @export
+@customCppClass
+class UncompiledDataWithInnerBinAstParseData extends UncompiledData {
+  binast_parse_data: ByteArray;
+  data_offset: uint32;
+  data_length: uint32;
+}
+
+@export
 class OnHeapBasicBlockProfilerData extends HeapObject {
   block_ids: ByteArray;  // Stored as 4-byte ints
   counts: ByteArray;     // Stored as 4-byte unsigned ints

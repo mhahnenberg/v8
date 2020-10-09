@@ -162,6 +162,15 @@ class UncompiledDataWithBinAstParseData
   TQ_OBJECT_CONSTRUCTORS(UncompiledDataWithBinAstParseData)
 };
 
+class UncompiledDataWithInnerBinAstParseData
+    : public TorqueGeneratedUncompiledDataWithInnerBinAstParseData<
+          UncompiledDataWithInnerBinAstParseData, UncompiledData> {
+ public:
+  class BodyDescriptor;
+
+  TQ_OBJECT_CONSTRUCTORS(UncompiledDataWithInnerBinAstParseData)
+};
+
 class InterpreterData : public Struct {
  public:
   DECL_ACCESSORS(bytecode_array, BytecodeArray)
@@ -374,6 +383,10 @@ class SharedFunctionInfo
   inline UncompiledDataWithBinAstParseData uncompiled_data_with_binast_parse_data() const;
   inline void set_uncompiled_data_with_binast_parse_data(UncompiledDataWithBinAstParseData data);
 
+  inline bool HasUncompiledDataWithInnerBinAstParseData() const;
+  inline UncompiledDataWithInnerBinAstParseData uncompiled_data_with_inner_bin_ast_parse_data() const;
+  inline void set_uncompiled_data_with_inner_bin_ast_parse_data(UncompiledDataWithInnerBinAstParseData data);
+
   inline bool HasUncompiledDataWithoutPreparseData() const;
 
   // Clear out pre-parsed scope data from UncompiledDataWithPreparseData,
@@ -383,6 +396,7 @@ class SharedFunctionInfo
   // Clear out binary AST data from UncompiledDataWithBinAstParseData,
   // turning it into UncompiledDataWithoutPreparseData.
   inline void ClearBinAstParseData();
+  inline void ClearInnerBinAstParseData();
 
   // The inferred_name is inferred from variable or property assignment of this
   // function. It is used to facilitate debugging and profiling of JavaScript
