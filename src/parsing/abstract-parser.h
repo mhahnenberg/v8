@@ -2010,83 +2010,52 @@ void AbstractParser<Impl>::ParseFunction(
         impl()->runtime_call_stats_, RuntimeCallCounterId::kDeserializeBinAst);
     auto start = std::chrono::high_resolution_clock::now();
     bool is_inner = shared_info->HasUncompiledDataWithInnerBinAstParseData();
+    Handle<ByteArray> binast_parse_data;
+    base::Optional<uint32_t> offset;
+    base::Optional<uint32_t> length;
     if (is_inner) {
       Handle<UncompiledDataWithInnerBinAstParseData> uncompiled_data =
           handle(shared_info->uncompiled_data_with_inner_bin_ast_parse_data(),
                  isolate);
 
-      Handle<ByteArray> binast_parse_data =
-          handle(uncompiled_data->binast_parse_data(), isolate);
+      binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
 
-      uint32_t offset = uncompiled_data->data_offset();
-      uint32_t length = uncompiled_data->data_length();
-
-      FunctionLiteral* literal;
-      {
-        // We need to setup the parser/initial outer scope before we can start
-        // deserialization.
-        Scope* outer = impl()->original_scope_;
-        DeclarationScope* outer_function = outer->GetClosureScope();
-        DCHECK(outer);
-        typename ParserBase<Impl>::FunctionState function_state(
-            &impl()->function_state_, &impl()->scope_, outer_function);
-        typename ParserBase<Impl>::BlockState block_state(&impl()->scope_,
-                                                          outer);
-        BinAstDeserializer deserializer(isolate, impl(), binast_parse_data);
-        AstNode* ast_node = deserializer.DeserializeAst(offset, length);
-        literal = ast_node->AsFunctionLiteral();
-        DCHECK(literal != nullptr);
-      }
-      auto elapsed = std::chrono::high_resolution_clock::now() - start;
-      long long microseconds =
-          std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
-              .count();
-      printf("\nDeserialized function literal for '");
-      if (literal->has_shared_name()) {
-        for (const AstRawString* s : literal->raw_name()->ToRawStrings()) {
-          printf("%.*s", s->byte_length(), s->raw_data());
-        }
-      }
-      printf("' in %lld us\n", microseconds);
-      // TODO(binast): Store the literal on the ParseInfo
-      result = literal;
+      offset.emplace(uncompiled_data->data_offset());
+      length.emplace(uncompiled_data->data_length());
     } else {
       Handle<UncompiledDataWithBinAstParseData> uncompiled_data = handle(
           shared_info->uncompiled_data_with_binast_parse_data(), isolate);
 
-      Handle<ByteArray> binast_parse_data =
-          handle(uncompiled_data->binast_parse_data(), isolate);
-
-      FunctionLiteral* literal;
-      {
-        // We need to setup the parser/initial outer scope before we can start
-        // deserialization.
-        Scope* outer = impl()->original_scope_;
-        DeclarationScope* outer_function = outer->GetClosureScope();
-        DCHECK(outer);
-        typename ParserBase<Impl>::FunctionState function_state(
-            &impl()->function_state_, &impl()->scope_, outer_function);
-        typename ParserBase<Impl>::BlockState block_state(&impl()->scope_,
-                                                          outer);
-        BinAstDeserializer deserializer(isolate, impl(), binast_parse_data);
-        AstNode* ast_node = deserializer.DeserializeAst();
-        literal = ast_node->AsFunctionLiteral();
-        DCHECK(literal != nullptr);
-      }
-      auto elapsed = std::chrono::high_resolution_clock::now() - start;
-      long long microseconds =
-          std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
-              .count();
-      printf("\nDeserialized function literal for '");
-      if (literal->has_shared_name()) {
-        for (const AstRawString* s : literal->raw_name()->ToRawStrings()) {
-          printf("%.*s", s->byte_length(), s->raw_data());
-        }
-      }
-      printf("' in %lld us\n", microseconds);
-      // TODO(binast): Store the literal on the ParseInfo
-      result = literal;
+      binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
     }
+
+    FunctionLiteral* literal;
+    {
+      // We need to setup the parser/initial outer scope before we can start
+      // deserialization.
+      Scope* outer = impl()->original_scope_;
+      DeclarationScope* outer_function = outer->GetClosureScope();
+      DCHECK(outer);
+      typename ParserBase<Impl>::FunctionState function_state(
+          &impl()->function_state_, &impl()->scope_, outer_function);
+      typename ParserBase<Impl>::BlockState block_state(&impl()->scope_, outer);
+      BinAstDeserializer deserializer(isolate, impl(), binast_parse_data);
+      AstNode* ast_node = deserializer.DeserializeAst(offset, length);
+      literal = ast_node->AsFunctionLiteral();
+      DCHECK(literal != nullptr);
+    }
+    auto elapsed = std::chrono::high_resolution_clock::now() - start;
+    long long microseconds =
+        std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+    printf("\nDeserialized function literal for '");
+    if (literal->has_shared_name()) {
+      for (const AstRawString* s : literal->raw_name()->ToRawStrings()) {
+        printf("%.*s", s->byte_length(), s->raw_data());
+      }
+    }
+    printf("' in %lld us\n", microseconds);
+    // TODO(binast): Store the literal on the ParseInfo
+    result = literal;
   }
 
   if (V8_UNLIKELY(result == nullptr && shared_info->private_name_lookup_skips_outer_class() &&

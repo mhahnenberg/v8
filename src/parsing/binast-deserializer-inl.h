@@ -275,6 +275,8 @@ BinAstDeserializer::DeserializeVariableReference(uint8_t* serialized_binast,
   if (variable_result != variables_by_id_.end()) {
     return {variable_result->second, offset};
   } else {
+    // When using an offset to deserialize inner functions, we may encounter variable references that are serialized earlier in the data.
+    // To deal with this noncontiguous data, jump there to deserialize the variable, but do not follow the resulting offset.
     return {
       DeserializeScopeVariable(serialized_binast, variable_reference.value, scope).value,
       offset

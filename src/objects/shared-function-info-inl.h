@@ -664,8 +664,6 @@ void SharedFunctionInfo::ClearBinAstParseData() {
   DCHECK(HasUncompiledDataWithBinAstParseData());
   UncompiledDataWithBinAstParseData data = uncompiled_data_with_binast_parse_data();
 
-  // Trim off the pre-parsed scope data from the uncompiled data by swapping the
-  // map, leaving only an uncompiled data without pre-parsed scope.
   DisallowHeapAllocation no_gc;
   Heap* heap = GetHeapFromWritableObject(data);
 
@@ -694,8 +692,6 @@ void SharedFunctionInfo::ClearInnerBinAstParseData() {
   DCHECK(HasUncompiledDataWithInnerBinAstParseData());
   UncompiledDataWithInnerBinAstParseData data = uncompiled_data_with_inner_bin_ast_parse_data();
 
-  // Trim off the pre-parsed scope data from the uncompiled data by swapping the
-  // map, leaving only an uncompiled data without pre-parsed scope.
   DisallowHeapAllocation no_gc;
   Heap* heap = GetHeapFromWritableObject(data);
 
@@ -717,6 +713,7 @@ void SharedFunctionInfo::ClearInnerBinAstParseData() {
 
   // Ensure that the clear was successful.
   DCHECK(HasUncompiledDataWithoutPreparseData());
+  DCHECK(!HasUncompiledDataWithInnerBinAstParseData());
 }
 
 template <typename LocalIsolate>
