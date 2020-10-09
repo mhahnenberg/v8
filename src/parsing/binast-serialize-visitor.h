@@ -125,7 +125,6 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
 
   std::unique_ptr<uint8_t[]> compressed_byte_data_;
   size_t compressed_byte_data_length_;
-  bool at_toplevel_ = true;
 };
 
 // TODO(binast): Maybe templatize these to reduce duplication?
@@ -665,9 +664,6 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
 
   SerializeInt32(function_literal->body()->length());
   for (Statement* statement : *function_literal->body()) {
-    if (at_toplevel_) {
-      at_toplevel_ = false;
-    }
     VisitNode(statement);
   }
 

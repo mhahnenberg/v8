@@ -71,17 +71,27 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
   AstNode::NodeType nodeType = AstNode::NodeTypeField::decode(bit_field.value);
   switch (nodeType) {
   case AstNode::kFunctionLiteral: {
-    base::Optional<BinAstDeserializer::DeserializeResult<uint32_t>> start_offset;
-    base::Optional<BinAstDeserializer::DeserializeResult<uint32_t>> length;
-    if (!is_toplevel) {
-      start_offset.emplace(DeserializeUint32(serialized_binast, offset));
-      offset = start_offset.value().new_offset;
+    BinAstDeserializer::DeserializeResult<uint32_t> start_offset =
+        DeserializeUint32(serialized_binast, offset);
+    offset = start_offset.new_offset;
 
-      length.emplace(DeserializeUint32(serialized_binast, offset));
-      offset = length.value().new_offset;
+    BinAstDeserializer::DeserializeResult<uint32_t> length =
+        DeserializeUint32(serialized_binast, offset);
+    offset = length.new_offset;
+
+    auto result = DeserializeFunctionLiteral(serialized_binast, bit_field.value,
+                                             position.value, offset);
+
+    if (!is_toplevel) {
+      Handle<UncompiledDataWithInnerBinAstParseData> data =
+          isolate_->factory()->NewUncompiledDataWithInnerBinAstParseData(
+              result.value->GetInferredName(isolate_),
+              result.value->start_position(), result.value->end_position(),
+              parse_data_, start_offset.value, length.value);
+
+      result.value->set_uncompiled_data_with_inner_bin_ast_parse_data(data);
     }
 
-    auto result = DeserializeFunctionLiteral(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
   case AstNode::kReturnStatement: {
