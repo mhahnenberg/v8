@@ -210,6 +210,7 @@ class AbstractParser
   friend bool v8::internal::parsing::ParseFunction(
       ParseInfo*, Handle<SharedFunctionInfo> shared_info, Isolate*,
       parsing::ReportErrorsAndStatisticsMode stats_mode);
+  friend class BinAstDeserializer;
 
   bool AllowsLazyParsingWithoutUnresolvedVariables() const {
     return !impl()->MaybeParsingArrowhead() &&
