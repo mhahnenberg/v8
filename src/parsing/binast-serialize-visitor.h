@@ -86,7 +86,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeUint8(uint8_t value);
   void SerializeUint16(uint16_t value);
   void SerializeUint16Flags(const std::list<bool>& flags);
-  void SerializeUint32(uint32_t value);
+  void SerializeUint32(uint32_t value, const base::Optional<size_t> index);
   void SerializeVarUint32(uint32_t value);
   void SerializeUint64(uint64_t value);
   void SerializeInt32(int32_t value);
@@ -121,6 +121,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
 
   std::unique_ptr<uint8_t[]> compressed_byte_data_;
   size_t compressed_byte_data_length_;
+  bool at_toplevel_ = true;
 };
 
 // TODO(binast): Maybe templatize these to reduce duplication?
@@ -140,7 +141,10 @@ inline void BinAstSerializeVisitor::SerializeUint64(uint64_t value) {
   }
 }
 
-inline void BinAstSerializeVisitor::SerializeUint32(uint32_t value) {
+inline void BinAstSerializeVisitor::SerializeUint32(
+    uint32_t value, const base::Optional<size_t> index = base::nullopt) {
+  DCHECK(!index.has_value() ||
+         (index.value() >= 0 && index <= byte_data_.size()));
   for (size_t i = 0; i < sizeof(uint32_t) / sizeof(uint8_t); ++i) {
     size_t shift = sizeof(uint8_t) * 8 * i;
     uint32_t mask = 0xff << shift;
@@ -148,7 +152,12 @@ inline void BinAstSerializeVisitor::SerializeUint32(uint32_t value) {
     uint32_t final_value = masked_value >> shift;
     DCHECK(final_value <= 0xff);
     uint8_t truncated_final_value = final_value;
-    byte_data_.push_back(truncated_final_value);
+
+    if (!index.has_value()) {
+      byte_data_.push_back(truncated_final_value);
+    } else {
+      byte_data_[index.value() + i] = truncated_final_value;
+    }
   }
 }
 
@@ -608,7 +617,22 @@ inline void BinAstSerializeVisitor::ToDoBinAst(AstNode* node) {
 }
 
 inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
+  bool function_is_toplevel = at_toplevel_;
+
+  size_t start = byte_data_.size();
+
   SerializeAstNodeHeader(function_literal);
+
+  base::Optional<size_t> length_index;
+  if (!function_is_toplevel) {
+    DCHECK(start <= UINT32_MAX);
+    SerializeUint32(static_cast<uint32_t>(start));
+
+    // make placeholder for length, save index so we can insert it later
+    length_index.emplace(byte_data_.size());
+    SerializeUint32(0);
+  }
+
   const AstConsString* name = function_literal->raw_name();
   SerializeConsString(name);
   SerializeDeclarationScope(function_literal->scope());
@@ -622,7 +646,17 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
 
   SerializeInt32(function_literal->body()->length());
   for (Statement* statement : *function_literal->body()) {
+    if (at_toplevel_) {
+      at_toplevel_ = false;
+    }
     VisitNode(statement);
+  }
+
+  if (!function_is_toplevel) {
+    // Calculate length and insert at length_index
+    auto length = byte_data_.size() - start;
+    DCHECK(length <= UINT32_MAX);
+    SerializeUint32(static_cast<uint32_t>(length), length_index);
   }
 }
 
