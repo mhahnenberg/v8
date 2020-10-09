@@ -309,26 +309,12 @@ FunctionLiteral* BinAstParser::ParseFunctionLiteral(
   }
   scope->set_start_position(position());
 
-  // Eager or lazy parse? If is_lazy_top_level_function, we'll parse
-  // lazily. We'll call SkipFunction, which may decide to
-  // abort lazy parsing if it suspects that wasn't a good idea. If so (in
-  // which case the parser is expected to have backtracked), or if we didn't
-  // try to lazy parse in the first place, we'll have to parse eagerly.
-  bool did_preparse_successfully =
-      should_preparse &&
-      SkipFunction(function_name, kind, function_syntax_kind, scope,
-                   &num_parameters, &function_length, &produced_preparse_data);
-
-  if (!did_preparse_successfully) {
-    // If skipping aborted, it rewound the scanner until before the LPAREN.
-    // Consume it in that case.
-    if (should_preparse) Consume(Token::LPAREN);
-    should_post_parallel_task = false;
-    ParseFunction(&body, function_name, pos, kind, function_syntax_kind, scope,
-                  &num_parameters, &function_length, &has_duplicate_parameters,
-                  &expected_property_count, &suspend_count,
-                  arguments_for_wrapped_function);
-  }
+  if (should_preparse) Consume(Token::LPAREN);
+  should_post_parallel_task = false;
+  ParseFunction(&body, function_name, pos, kind, function_syntax_kind, scope,
+                &num_parameters, &function_length, &has_duplicate_parameters,
+                &expected_property_count, &suspend_count,
+                arguments_for_wrapped_function);
 
   if (V8_UNLIKELY(FLAG_log_function_events)) {
     double ms = timer.Elapsed().InMillisecondsF();
@@ -341,14 +327,6 @@ FunctionLiteral* BinAstParser::ParseFunctionLiteral(
         scope->end_position(),
         reinterpret_cast<const char*>(function_name->raw_data()),
         function_name->byte_length());
-  }
-  if (V8_UNLIKELY(TracingFlags::is_runtime_stats_enabled()) &&
-      did_preparse_successfully) {
-    if (runtime_call_stats_) {
-      runtime_call_stats_->CorrectCurrentCounterId(
-          RuntimeCallCounterId::kPreParseWithVariableResolution,
-          RuntimeCallStats::kThreadSpecific);
-    }
   }
 
   // Validate function name. We can do this only after parsing the function,

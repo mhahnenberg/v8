@@ -14,10 +14,7 @@
 namespace v8 {
 namespace internal {
 
-BinAstDeserializer::BinAstDeserializer(Parser* parser)
-  : parser_(parser)
-{
-}
+BinAstDeserializer::BinAstDeserializer(Parser* parser) : parser_(parser) {}
 
 AstNode* BinAstDeserializer::DeserializeAst(ByteArray serialized_ast) {
   DCHECK(UseCompression() == BinAstSerializeVisitor::UseCompression());
@@ -44,13 +41,14 @@ AstNode* BinAstDeserializer::DeserializeAst(ByteArray serialized_ast) {
   int offset = 0;
   auto string_table_result = DeserializeStringTable(uncompressed_byte_array.get(), offset);
   offset = string_table_result.new_offset;
-  auto result = DeserializeAstNode(uncompressed_byte_array.get(), offset);
+  bool is_toplevel = true;
+  auto result = DeserializeAstNode(uncompressed_byte_array.get(), offset, is_toplevel);
   // Check that we consumed all the bytes that were serialized.
   DCHECK(static_cast<size_t>(result.new_offset) == original_size);
   return result.value;
 }
 
-BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeAstNode(uint8_t* serialized_binast, int offset) {
+BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeAstNode(uint8_t* serialized_binast, int offset, bool is_toplevel) {
   auto bit_field = DeserializeUint32(serialized_binast, offset);
   offset = bit_field.new_offset;
 
@@ -60,6 +58,16 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
   AstNode::NodeType nodeType = AstNode::NodeTypeField::decode(bit_field.value);
   switch (nodeType) {
   case AstNode::kFunctionLiteral: {
+    base::Optional<BinAstDeserializer::DeserializeResult<uint32_t>> start_offset;
+    base::Optional<BinAstDeserializer::DeserializeResult<uint32_t>> length;
+    if (!is_toplevel) {
+      start_offset.emplace(DeserializeUint32(serialized_binast, offset));
+      offset = start_offset.value().new_offset;
+
+      length.emplace(DeserializeUint32(serialized_binast, offset));
+      offset = length.value().new_offset;
+    }
+
     auto result = DeserializeFunctionLiteral(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
