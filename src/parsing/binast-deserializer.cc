@@ -41,7 +41,8 @@ AstNode* BinAstDeserializer::DeserializeAst(ByteArray serialized_ast) {
   int offset = 0;
   auto string_table_result = DeserializeStringTable(uncompressed_byte_array.get(), offset);
   offset = string_table_result.new_offset;
-  auto result = DeserializeAstNode(uncompressed_byte_array.get(), offset, true);
+  bool is_toplevel = true;
+  auto result = DeserializeAstNode(uncompressed_byte_array.get(), offset, is_toplevel);
   // Check that we consumed all the bytes that were serialized.
   DCHECK(static_cast<size_t>(result.new_offset) == original_size);
   return result.value;
