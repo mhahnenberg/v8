@@ -186,6 +186,10 @@ void SharedFunctionInfo::SetScript(ReadOnlyRoots roots,
     ClearBinAstParseData();
   }
 
+  if (reset_preparsed_scope_data && HasUncompiledDataWithInnerBinAstParseData()) {
+    ClearInnerBinAstParseData();
+  }
+
   // Add shared function info to new script's list. If a collection occurs,
   // the shared function info may be temporarily in two lists.
   // This is okay because the gc-time processing of these lists can tolerate
@@ -349,8 +353,12 @@ void SharedFunctionInfo::DiscardCompiled(
     shared_info->ClearPreparseData();
   } else if (shared_info->HasUncompiledDataWithBinAstParseData()) {
     // If this is uncompiled data with a binary AST data, we can just
-    // clear out the scope data and keep the uncompiled data.
+    // clear out the parse data and keep the uncompiled data.
     shared_info->ClearBinAstParseData();
+  } else if (shared_info->HasUncompiledDataWithInnerBinAstParseData()) {
+    // If this is uncompiled data with a binary AST data, we can just
+    // clear out the parse data and keep the uncompiled data.
+    shared_info->ClearInnerBinAstParseData();
   } else {
     // Create a new UncompiledData, without pre-parsed scope, and update the
     // function data to point to it. Use the raw function data setter to avoid
@@ -675,7 +683,11 @@ void SharedFunctionInfo::SetPosition(int start_position, int end_position) {
     } else if (HasUncompiledDataWithBinAstParseData()) {
       // Clear out binary AST data
       ClearBinAstParseData();
+    } else if (HasUncompiledDataWithInnerBinAstParseData()) {
+      // Clear out binary AST data
+      ClearInnerBinAstParseData();
     }
+
     uncompiled_data().set_start_position(start_position);
     uncompiled_data().set_end_position(end_position);
   } else {

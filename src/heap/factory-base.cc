@@ -329,6 +329,16 @@ FactoryBase<Impl>::NewUncompiledDataWithBinAstParseData(
 }
 
 template <typename Impl>
+Handle<UncompiledDataWithInnerBinAstParseData>
+FactoryBase<Impl>::NewUncompiledDataWithInnerBinAstParseData(
+    Handle<String> inferred_name, int32_t start_position, int32_t end_position,
+    Handle<ByteArray> binast_parse_data, uint32_t offset, uint32_t length) {
+  return TorqueGeneratedFactory<Impl>::NewUncompiledDataWithInnerBinAstParseData(
+      inferred_name, start_position, end_position, binast_parse_data, offset, length,
+      AllocationType::kOld);
+}
+
+template <typename Impl>
 Handle<SharedFunctionInfo> FactoryBase<Impl>::NewSharedFunctionInfo(
     MaybeHandle<String> maybe_name, MaybeHandle<HeapObject> maybe_function_data,
     int maybe_builtin_index, FunctionKind kind) {
