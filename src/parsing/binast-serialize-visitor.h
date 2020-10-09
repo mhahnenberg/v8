@@ -24,7 +24,9 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   BinAstSerializeVisitor(AstValueFactory* ast_value_factory)
     : BinAstVisitor(),
       ast_value_factory_(ast_value_factory),
-      encountered_unhandled_node_(false) {
+      encountered_unhandled_nodes_(0),
+      skipped_functions_(0),
+      serialized_functions_(0) {
   }
 
   uint8_t* serialized_bytes() const {
@@ -117,7 +119,9 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   std::vector<uint8_t> byte_data_;
   std::unordered_map<Variable*, uint32_t> variable_ids_;
   std::unordered_map<VariableProxy*, int> var_proxy_ids;
-  bool encountered_unhandled_node_;
+  int encountered_unhandled_nodes_;
+  int skipped_functions_;
+  int serialized_functions_;
 
   std::unique_ptr<uint8_t[]> compressed_byte_data_;
   size_t compressed_byte_data_length_;
@@ -351,7 +355,16 @@ inline bool BinAstSerializeVisitor::SerializeAst(AstNode* root) {
   SerializeStringTable(literal->raw_name());
   VisitNode(root);
 
-  if (encountered_unhandled_node_) {
+  if (encountered_unhandled_nodes_ > 0) {
+    printf("Failed to serialize function: '");
+    for (const AstRawString* s : literal->raw_name()->ToRawStrings()) {
+      printf("%.*s", s->byte_length(), s->raw_data());
+    }
+    printf(
+        "'. Successfully serialized %d functions, and skipped serialization due to %d "
+        "functions containing a total of %d unsupported nodes \n",
+        serialized_functions_, skipped_functions_,
+        encountered_unhandled_nodes_);
     return false;
   }
 
@@ -447,7 +460,7 @@ inline void BinAstSerializeVisitor::SerializeDeclaration(Scope* scope, Declarati
     case Declaration::DeclType::VariableDecl: {
       // TODO(binast): Add support for nested variable declarations.
       if (decl->AsVariableDeclaration()->is_nested()) {
-        encountered_unhandled_node_ = true;
+        encountered_unhandled_nodes_++;
         printf("BinAstSerializeVisitor encountered unhandled nested variable declaration, skipping function\n");
       }
       SerializeUint8(decl->AsVariableDeclaration()->is_nested());
@@ -561,14 +574,14 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
     printf(
         "BinAstSerializeVisitor encountered unsupported rest parameter on "
         "DeclarationScope\n");
-    encountered_unhandled_node_ = true;
+    encountered_unhandled_nodes_++;
   }
 
   SerializeScopeParameters(scope);
   // TODO(binast): sloppy_block_functions_ (needed for non-strict mode support)
   if (!scope->sloppy_block_functions_.is_empty()) {
     printf("BinAstSerializeVisitor encountered unsupported sloppy block functions on DeclarationScope\n");
-    encountered_unhandled_node_ = true;
+    encountered_unhandled_nodes_++;
   }
 
   SerializeVariableOrReference(scope->receiver_);
@@ -579,7 +592,7 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
   // TODO(binast): rare_data_ (needed for > ES5.1 feature support)
   if (scope->rare_data_ != nullptr) {
     printf("BinAstSerializeVisitor encountered unsupported rare data on DeclarationScope\n");
-    encountered_unhandled_node_ = true;
+    encountered_unhandled_nodes_++;
   }
 }
 
@@ -620,11 +633,13 @@ inline void BinAstSerializeVisitor::ToDoBinAst(AstNode* node) {
   // TODO(binast): Delete this function when it's no longer needed.
   printf("BinAstSerializeVisitor encountered unhandled node type: %s\n", node->node_type_name());
   // UNREACHABLE();
-  encountered_unhandled_node_ = true;
+  encountered_unhandled_nodes_++;
 }
 
 inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
   size_t start = byte_data_.size();
+
+  int original_unsupported_nodes = encountered_unhandled_nodes_;
 
   SerializeAstNodeHeader(function_literal);
 
@@ -651,6 +666,11 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
   for (Statement* statement : *function_literal->body()) {
     VisitNode(statement);
   }
+
+  int unhandled_inner_nodes = encountered_unhandled_nodes_ - original_unsupported_nodes;
+  if (unhandled_inner_nodes > 0) {
+    skipped_functions_++;
+  } 
 
   // Calculate length and insert at length_index
   auto length = byte_data_.size() - start;
