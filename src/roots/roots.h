@@ -121,6 +121,8 @@ class Symbol;
     UncompiledDataWithPreparseDataMap)                                         \
   V(Map, uncompiled_data_with_bin_ast_parse_data_map,                          \
     UncompiledDataWithBinAstParseDataMap)                                      \
+  V(Map, uncompiled_data_with_inner_bin_ast_parse_data_map,                              \
+    UncompiledDataWithInnerBinAstParseDataMap)                                         \
   V(Map, weak_fixed_array_map, WeakFixedArrayMap)                              \
   V(Map, weak_array_list_map, WeakArrayListMap)                                \
   V(Map, ephemeron_hash_table_map, EphemeronHashTableMap)                      \

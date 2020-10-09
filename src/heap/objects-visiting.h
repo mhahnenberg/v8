@@ -59,6 +59,7 @@ namespace internal {
   V(UncompiledDataWithoutPreparseData) \
   V(UncompiledDataWithPreparseData)    \
   V(UncompiledDataWithBinAstParseData) \
+  V(UncompiledDataWithInnerBinAstParseData)    \
   V(WasmArray)                         \
   V(WasmCapiFunctionData)              \
   V(WasmIndirectFunctionTable)         \

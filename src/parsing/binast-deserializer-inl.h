@@ -259,7 +259,9 @@ inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Dese
   return {variable, offset};
 }
 
-inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeVariableReference(uint8_t* serialized_binast, int offset) {
+inline BinAstDeserializer::DeserializeResult<Variable*>
+BinAstDeserializer::DeserializeVariableReference(uint8_t* serialized_binast,
+                                                 int offset, Scope* scope) {
   auto variable_reference = DeserializeVarUint32(serialized_binast, offset);
   offset = variable_reference.new_offset;
 
@@ -268,13 +270,22 @@ inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Dese
   }
 
   auto variable_result = variables_by_id_.find(variable_reference.value);
-  DCHECK(variable_result != variables_by_id_.end());
-  Variable* variable = variable_result->second;
+  DCHECK(variable_result != variables_by_id_.end() || scope);
 
-  return {variable, offset};
+  if (variable_result != variables_by_id_.end()) {
+    return {variable_result->second, offset};
+  } else {
+    // When using an offset to deserialize inner functions, we may encounter variable references that are serialized earlier in the data.
+    // To deal with this noncontiguous data, jump there to deserialize the variable, but do not follow the resulting offset.
+    return {
+      DeserializeScopeVariable(serialized_binast, variable_reference.value, scope).value,
+      offset
+    };
+  }
 }
 
 inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeScopeVariable(uint8_t* serialized_binast, int offset, Scope* scope) {
+  auto original_offset = offset;
   auto variable_result = DeserializeNonLocalVariable(serialized_binast, offset, scope);
   offset = variable_result.new_offset;
   
@@ -282,7 +293,7 @@ inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Dese
   if (variable == nullptr) {
     return {nullptr, offset};
   }
-  variables_by_id_.insert({variables_by_id_.size() + 1, variable});
+  variables_by_id_.insert({original_offset, variable});
   return {variable, offset};
 }
 
@@ -330,7 +341,7 @@ inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Dese
       return {scope_result.value, offset};
     }
     case ScopeVariableKind::Reference: {
-      auto scope_result = DeserializeVariableReference(serialized_binast, offset);
+      auto scope_result = DeserializeVariableReference(serialized_binast, offset, scope);
       offset = scope_result.new_offset;
       return {scope_result.value, offset};
     }

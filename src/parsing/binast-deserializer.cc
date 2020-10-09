@@ -14,9 +14,16 @@
 namespace v8 {
 namespace internal {
 
-BinAstDeserializer::BinAstDeserializer(Parser* parser) : parser_(parser) {}
+BinAstDeserializer::BinAstDeserializer(Isolate* isolate, Parser* parser,
+                                       Handle<ByteArray> parse_data)
+    : isolate_(isolate),
+      parser_(parser),
+      parse_data_(parse_data) {}
 
-AstNode* BinAstDeserializer::DeserializeAst(ByteArray serialized_ast) {
+AstNode* BinAstDeserializer::DeserializeAst(
+    base::Optional<uint32_t> start_offset, base::Optional<uint32_t> length) {
+  ByteArray serialized_ast = *parse_data_;
+
   DCHECK(UseCompression() == BinAstSerializeVisitor::UseCompression());
   std::unique_ptr<uint8_t[]> compressed_byte_array_with_size_header = std::make_unique<uint8_t[]>(serialized_ast.length());
   serialized_ast.copy_out(0, compressed_byte_array_with_size_header.get(), serialized_ast.length());
@@ -42,9 +49,15 @@ AstNode* BinAstDeserializer::DeserializeAst(ByteArray serialized_ast) {
   auto string_table_result = DeserializeStringTable(uncompressed_byte_array.get(), offset);
   offset = string_table_result.new_offset;
   bool is_toplevel = true;
+  if (start_offset.has_value()) {
+    is_toplevel = false;
+    offset = start_offset.value();
+  }
+
   auto result = DeserializeAstNode(uncompressed_byte_array.get(), offset, is_toplevel);
   // Check that we consumed all the bytes that were serialized.
-  DCHECK(static_cast<size_t>(result.new_offset) == original_size);
+  DCHECK(static_cast<size_t>(result.new_offset) ==
+         (length.value_or(original_size) + start_offset.value_or(0)));
   return result.value;
 }
 
@@ -58,17 +71,27 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
   AstNode::NodeType nodeType = AstNode::NodeTypeField::decode(bit_field.value);
   switch (nodeType) {
   case AstNode::kFunctionLiteral: {
-    base::Optional<BinAstDeserializer::DeserializeResult<uint32_t>> start_offset;
-    base::Optional<BinAstDeserializer::DeserializeResult<uint32_t>> length;
-    if (!is_toplevel) {
-      start_offset.emplace(DeserializeUint32(serialized_binast, offset));
-      offset = start_offset.value().new_offset;
+    BinAstDeserializer::DeserializeResult<uint32_t> start_offset =
+        DeserializeUint32(serialized_binast, offset);
+    offset = start_offset.new_offset;
 
-      length.emplace(DeserializeUint32(serialized_binast, offset));
-      offset = length.value().new_offset;
+    BinAstDeserializer::DeserializeResult<uint32_t> length =
+        DeserializeUint32(serialized_binast, offset);
+    offset = length.new_offset;
+
+    auto result = DeserializeFunctionLiteral(serialized_binast, bit_field.value,
+                                             position.value, offset);
+
+    if (!is_toplevel) {
+      Handle<UncompiledDataWithInnerBinAstParseData> data =
+          isolate_->factory()->NewUncompiledDataWithInnerBinAstParseData(
+              result.value->GetInferredName(isolate_),
+              result.value->start_position(), result.value->end_position(),
+              parse_data_, start_offset.value, length.value);
+
+      result.value->set_uncompiled_data_with_inner_bin_ast_parse_data(data);
     }
 
-    auto result = DeserializeFunctionLiteral(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
   case AstNode::kReturnStatement: {
@@ -199,8 +222,10 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   offset = total_local_variables.new_offset;
 
   for (uint32_t i = 0; i < total_local_variables.value; ++i) {
-    auto new_variable = DeserializeLocalVariable(serialized_binast, offset, scope);
-    variables_by_id_.insert({variables_by_id_.size() + 1, new_variable.value});
+    auto start_offset = offset;
+    auto new_variable =
+        DeserializeLocalVariable(serialized_binast, offset, scope);
+    variables_by_id_.insert({start_offset, new_variable.value});
     offset = new_variable.new_offset;
   }
 
@@ -208,8 +233,10 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   offset = total_nonlocal_variables.new_offset;
 
   for (uint32_t i = 0; i < total_nonlocal_variables.value; ++i) {
-    auto new_variable = DeserializeNonLocalVariable(serialized_binast, offset, scope);
-    variables_by_id_.insert({variables_by_id_.size() + 1, new_variable.value});
+    auto start_offset = offset;
+    auto new_variable =
+        DeserializeNonLocalVariable(serialized_binast, offset, scope);
+    variables_by_id_.insert({start_offset, new_variable.value});
     offset = new_variable.new_offset;
   }
 
@@ -223,7 +250,7 @@ BinAstDeserializer::DeserializeResult<Declaration*> BinAstDeserializer::Deserial
   auto decl_type = DeserializeUint8(serialized_binast, offset);
   offset = decl_type.new_offset;
 
-  auto variable = DeserializeVariableReference(serialized_binast, offset);
+  auto variable = DeserializeVariableReference(serialized_binast, offset, scope);
   offset = variable.new_offset;
 
   Declaration* result;
@@ -274,7 +301,7 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   scope->num_parameters_ = num_parameters_result.value;
 
   for (int i = 0; i < num_parameters_result.value; ++i) {
-    auto param_result = DeserializeVariableReference(serialized_binast, offset);
+    auto param_result = DeserializeVariableReference(serialized_binast, offset, scope);
     offset = param_result.new_offset;
     scope->params_.Add(param_result.value, zone());
   }

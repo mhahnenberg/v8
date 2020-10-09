@@ -88,6 +88,13 @@ extern class UncompiledDataWithBinAstParseData extends UncompiledData {
   binast_parse_data: ByteArray;
 }
 
+@generateCppClass
+extern class UncompiledDataWithInnerBinAstParseData extends UncompiledData {
+  binast_parse_data: ByteArray;
+  data_offset: uint32;
+  data_length: uint32;
+}
+
 @export
 class OnHeapBasicBlockProfilerData extends HeapObject {
   block_rpo_numbers: ByteArray;  // Stored as 4-byte ints

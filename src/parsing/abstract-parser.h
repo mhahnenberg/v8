@@ -2004,13 +2004,30 @@ void AbstractParser<Impl>::ParseFunction(
   scanner_.Initialize();
 
   FunctionLiteral* result = nullptr;
-  if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData())) {
-    Handle<UncompiledDataWithBinAstParseData> uncompiled_data = handle(shared_info->uncompiled_data_with_binast_parse_data(), isolate);
-    Handle<ByteArray> binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
-
-    RuntimeCallTimerScope runtime_timer(impl()->runtime_call_stats_,
-                                      RuntimeCallCounterId::kDeserializeBinAst);
+  if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData() ||
+                  shared_info->HasUncompiledDataWithInnerBinAstParseData())) {
+    RuntimeCallTimerScope runtime_timer(
+        impl()->runtime_call_stats_, RuntimeCallCounterId::kDeserializeBinAst);
     auto start = std::chrono::high_resolution_clock::now();
+    bool is_inner = shared_info->HasUncompiledDataWithInnerBinAstParseData();
+    Handle<ByteArray> binast_parse_data;
+    base::Optional<uint32_t> offset;
+    base::Optional<uint32_t> length;
+    if (is_inner) {
+      Handle<UncompiledDataWithInnerBinAstParseData> uncompiled_data =
+          handle(shared_info->uncompiled_data_with_inner_bin_ast_parse_data(),
+                 isolate);
+
+      binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
+
+      offset.emplace(uncompiled_data->data_offset());
+      length.emplace(uncompiled_data->data_length());
+    } else {
+      Handle<UncompiledDataWithBinAstParseData> uncompiled_data = handle(
+          shared_info->uncompiled_data_with_binast_parse_data(), isolate);
+
+      binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
+    }
 
     FunctionLiteral* literal;
     {
@@ -2022,8 +2039,8 @@ void AbstractParser<Impl>::ParseFunction(
       typename ParserBase<Impl>::FunctionState function_state(
           &impl()->function_state_, &impl()->scope_, outer_function);
       typename ParserBase<Impl>::BlockState block_state(&impl()->scope_, outer);
-      BinAstDeserializer deserializer(impl());
-      AstNode* ast_node = deserializer.DeserializeAst(*binast_parse_data);
+      BinAstDeserializer deserializer(isolate, impl(), binast_parse_data);
+      AstNode* ast_node = deserializer.DeserializeAst(offset, length);
       literal = ast_node->AsFunctionLiteral();
       DCHECK(literal != nullptr);
     }

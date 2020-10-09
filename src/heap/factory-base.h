@@ -29,6 +29,7 @@ class BinAstParseData;
 class UncompiledDataWithoutPreparseData;
 class UncompiledDataWithPreparseData;
 class UncompiledDataWithBinAstParseData;
+class UncompiledDataWithInnerBinAstParseData;
 class BytecodeArray;
 class CoverageInfo;
 class ClassPositions;
@@ -142,6 +143,11 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) FactoryBase {
   Handle<UncompiledDataWithBinAstParseData> NewUncompiledDataWithBinAstParseData(
       Handle<String> inferred_name, int32_t start_position,
       int32_t end_position, Handle<ByteArray>);
+
+  Handle<UncompiledDataWithInnerBinAstParseData> NewUncompiledDataWithInnerBinAstParseData(
+      Handle<String> inferred_name, int32_t start_position,
+      int32_t end_position, Handle<ByteArray>, uint32_t offset,
+      uint32_t length);
 
   // Allocates a FeedbackMedata object and zeroes the data section.
   Handle<FeedbackMetadata> NewFeedbackMetadata(
