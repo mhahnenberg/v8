@@ -178,7 +178,10 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
     auto result = DeserializeUnaryOperation(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
-  case AstNode::kObjectLiteral:
+  case AstNode::kObjectLiteral: {
+    auto result = DeserializeObjectLiteral(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
   case AstNode::kArrayLiteral:
   case AstNode::kNaryOperation:
   case AstNode::kTryCatchStatement:
@@ -887,6 +890,53 @@ BinAstDeserializer::DeserializeResult<UnaryOperation*> BinAstDeserializer::Deser
 
 BinAstDeserializer::DeserializeResult<ThisExpression*> BinAstDeserializer::DeserializeThisExpression(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
   ThisExpression* result = parser_->factory()->ThisExpression();
+  result->bit_field_ = bit_field;
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<ObjectLiteral*> BinAstDeserializer::DeserializeObjectLiteral(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  auto properties_length = DeserializeInt32(serialized_binast, offset);
+  offset = properties_length.new_offset;
+
+  auto literal_position = DeserializeInt32(serialized_binast, offset);
+  offset = literal_position.new_offset;
+
+  std::vector<void*> pointer_buffer;
+  ScopedPtrList<ObjectLiteral::Property> properties(&pointer_buffer);
+
+  int number_of_boilerplate_properties = 0;  // add increments for this
+
+  for (int i = 0; i < properties_length.value; i++) {
+    auto key = DeserializeAstNode(serialized_binast, offset);
+    offset = key.new_offset;
+
+    auto value = DeserializeAstNode(serialized_binast, offset);
+    offset = value.new_offset;
+
+    auto kind = DeserializeUint8(serialized_binast, offset);
+    offset = kind.new_offset;
+
+    auto is_computed_name = DeserializeUint8(serialized_binast, offset);
+    offset = is_computed_name.new_offset;
+
+    auto property = parser_->factory()->NewObjectLiteralProperty(
+        static_cast<Expression*>(key.value),
+        static_cast<Expression*>(value.value),
+        static_cast<ObjectLiteral::Property::Kind>(kind.value),
+        is_computed_name.value);
+
+    if (parser_->IsBoilerplateProperty(property) &&
+        !is_computed_name.value) {
+      number_of_boilerplate_properties++;
+    }
+
+    properties.Add(property);
+  }
+
+  bool has_rest_property = false;
+  ObjectLiteral* result = parser_->factory()->NewObjectLiteral(
+      properties, number_of_boilerplate_properties, literal_position.value,
+      has_rest_property);
   result->bit_field_ = bit_field;
   return {result, offset};
 }
