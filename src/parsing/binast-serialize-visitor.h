@@ -859,6 +859,9 @@ inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_lit
     SerializeUint8(property->kind());
 
     if (property->kind() == ObjectLiteral::Property::SPREAD) {
+      printf(
+          "BinAstSerializeVisitor encountered unhandled spread in object "
+          "literal, skipping function\n");
       encountered_unhandled_nodes_++;
     }
 
