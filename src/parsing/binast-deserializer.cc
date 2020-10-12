@@ -901,7 +901,8 @@ BinAstDeserializer::DeserializeResult<ObjectLiteral*> BinAstDeserializer::Deseri
   auto literal_position = DeserializeInt32(serialized_binast, offset);
   offset = literal_position.new_offset;
 
-  ScopedPtrList<ObjectLiteral::Property> properties(parser_->pointer_buffer());
+  std::vector<void*> pointer_buffer;
+  ScopedPtrList<ObjectLiteral::Property> properties(&pointer_buffer);
 
   int number_of_boilerplate_properties = 0;  // add increments for this
 
