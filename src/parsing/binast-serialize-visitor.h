@@ -68,7 +68,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   virtual void VisitBinaryOperation(BinaryOperation* binary_op) override;
   virtual void VisitNaryOperation(NaryOperation* nary_op) override;
 
-  virtual void VisitObjectLiteral(ObjectLiteral* binary_op) override;
+  virtual void VisitObjectLiteral(ObjectLiteral* object_literal) override;
   virtual void VisitArrayLiteral(ArrayLiteral* array_literal) override;
   virtual void VisitCompoundAssignment(
       CompoundAssignment* compound_assignment) override;
@@ -841,7 +841,26 @@ inline void BinAstSerializeVisitor::VisitNaryOperation(NaryOperation* nary_op) {
 
 inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_literal) {
   SerializeAstNodeHeader(object_literal);
-  ToDoBinAst(object_literal);
+
+  SerializeInt32(object_literal->properties()->length());
+  SerializeInt32(object_literal->position());
+
+  for (int i = 0; i < object_literal->properties()->length(); i++) {
+    auto property = object_literal->properties()->at(i);
+
+    VisitNode(property->key());
+    VisitNode(property->value());
+    SerializeUint8(property->kind());
+
+    if (property->kind() == ObjectLiteral::Property::SPREAD) {
+      printf(
+          "BinAstSerializeVisitor encountered unhandled spread in object "
+          "literal, skipping function\n");
+      encountered_unhandled_nodes_++;
+    }
+
+    SerializeUint8(property->is_computed_name());
+  }
 }
 
 inline void BinAstSerializeVisitor::VisitArrayLiteral(ArrayLiteral* array_literal) {
