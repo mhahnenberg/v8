@@ -933,9 +933,10 @@ BinAstDeserializer::DeserializeResult<ObjectLiteral*> BinAstDeserializer::Deseri
     properties.Add(property);
   }
 
+  bool has_rest_property = false;
   ObjectLiteral* result = parser_->factory()->NewObjectLiteral(
       properties, number_of_boilerplate_properties, literal_position.value,
-      false);
+      has_rest_property);
   result->bit_field_ = bit_field;
   return {result, offset};
 }
