@@ -182,7 +182,10 @@ BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeA
     auto result = DeserializeObjectLiteral(serialized_binast, bit_field.value, position.value, offset);
     return {result.value, result.new_offset};
   }
-  case AstNode::kArrayLiteral:
+  case AstNode::kArrayLiteral: {
+    auto result = DeserializeArrayLiteral(serialized_binast, bit_field.value, position.value, offset);
+    return {result.value, result.new_offset};
+  }
   case AstNode::kNaryOperation:
   case AstNode::kTryCatchStatement:
   case AstNode::kSwitchStatement:
@@ -937,6 +940,37 @@ BinAstDeserializer::DeserializeResult<ObjectLiteral*> BinAstDeserializer::Deseri
   ObjectLiteral* result = parser_->factory()->NewObjectLiteral(
       properties, number_of_boilerplate_properties, literal_position.value,
       has_rest_property);
+  result->bit_field_ = bit_field;
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<ArrayLiteral*>
+BinAstDeserializer::DeserializeArrayLiteral(uint8_t* serialized_binast,
+                                            uint32_t bit_field,
+                                            int32_t position, int offset) {
+  auto array_length = DeserializeInt32(serialized_binast, offset);
+  offset = array_length.new_offset;
+
+  auto literal_position = DeserializeInt32(serialized_binast, offset);
+  offset = literal_position.new_offset;
+
+  auto first_spread_index = DeserializeInt32(serialized_binast, offset);
+  offset = first_spread_index.new_offset;
+
+  DCHECK(first_spread_index.value == -1);
+
+  std::vector<void*> pointer_buffer;
+  ScopedPtrList<Expression> values(&pointer_buffer);
+
+  for (int i = 0; i < array_length.value; i++) {
+    auto value = DeserializeAstNode(serialized_binast, offset);
+    offset = value.new_offset;
+
+    values.Add(static_cast<Expression*>(value.value));
+  }
+
+  ArrayLiteral* result = parser_->factory()->NewArrayLiteral(
+      values, first_spread_index.value, literal_position.value);
   result->bit_field_ = bit_field;
   return {result, offset};
 }
