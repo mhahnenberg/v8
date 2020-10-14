@@ -203,6 +203,27 @@ inline BinAstDeserializer::DeserializeResult<AstConsString*> BinAstDeserializer:
   return {cons_string, offset};
 }
 
+inline Variable* BinAstDeserializer::CreateLocalTemporaryVariable(Scope* scope, const AstRawString* name, int index, int initializer_position, uint32_t bit_field) {
+  // We just use bogus values for mode, etc. since they're already encoded in the bit field
+  // The main difference between local and non-local is whether the Variable appeared in the locals_ list when the Scope was serialized.
+  Variable* variable = scope->NewTemporary(name);
+  variable->index_ = index;
+  variable->initializer_position_ = initializer_position;
+  variable->bit_field_ = bit_field;
+  return variable;
+}
+
+inline Variable* BinAstDeserializer::CreateLocalNonTemporaryVariable(Scope* scope, const AstRawString* name, int index, int initializer_position, uint32_t bit_field) {
+  // We just use bogus values for mode, etc. since they're already encoded in the bit field
+  bool was_added = false;
+  // The main difference between local and non-local is whether the Variable appeared in the locals_ list when the Scope was serialized.
+  Variable* variable = scope->Declare(parser_->zone(), name, VariableMode::kVar, NORMAL_VARIABLE, kCreatedInitialized, kMaybeAssigned, &was_added);
+  variable->index_ = index;
+  variable->initializer_position_ = initializer_position;
+  variable->bit_field_ = bit_field;
+  return variable;
+}
+
 inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeLocalVariable(uint8_t* serialized_binast, int offset, Scope* scope) {
   auto name = DeserializeRawStringReference(serialized_binast, offset);
   offset = name.new_offset;
@@ -219,14 +240,14 @@ inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Dese
   auto bit_field = DeserializeUint16(serialized_binast, offset);
   offset = bit_field.new_offset;
 
-  // We just use bogus values for mode, etc. since they're already encoded in the bit field
-  bool was_added = false;
-  // The main difference between local and non-local is whether the Variable appeared in the locals_ list when the Scope was serialized.
-  Variable* variable = scope->Declare(parser_->zone(), name.value, VariableMode::kVar, NORMAL_VARIABLE, kCreatedInitialized, kMaybeAssigned, &was_added);
-  variable->index_ = index.value;
-  variable->initializer_position_ = initializer_position.value;
-  variable->bit_field_ = bit_field.value;
-  return {variable, offset};
+  auto variable_mode = Variable::VariableModeField::decode(bit_field.value);
+  if (variable_mode == VariableMode::kTemporary) {
+    auto variable = CreateLocalTemporaryVariable(scope, name.value, index.value, initializer_position.value, bit_field.value);
+    return {variable, offset};
+  } else {
+    auto variable = CreateLocalNonTemporaryVariable(scope, name.value, index.value, initializer_position.value, bit_field.value);
+    return {variable, offset};
+  }
 }
 
 inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeNonLocalVariable(uint8_t* serialized_binast, int offset, Scope* scope) {
