@@ -17,6 +17,10 @@ function makeThing() {
 
 function explode2(a,b,c,d,e,f){"use strict";e.exports=a;function a(){return b;}}
 
+function defaultParam(interimText, opt_finalText = 'a') {
+  return opt_finalText;
+};
+
 var double = function(x) { return x * 2; }
 function triple(x) { return x * 3; }
 function deep() {
@@ -210,6 +214,7 @@ setTimeout(function testCallback2() {
   console.log(explode2(a, b, c, d, e));
   console.log(e);
   console.log(e.exports());
+  console.log(defaultParam());
 }, 5000);
 
 tickRunLoop();

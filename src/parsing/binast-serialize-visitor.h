@@ -395,6 +395,10 @@ inline void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
   SerializeRawStringReference(variable->raw_name());
 
   // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
+  if (variable->has_local_if_not_shadowed()) {
+    printf("BinAstSerializeVisitor encountered unsupported variable with local_if_not_shadowed field set\n");
+    encountered_unhandled_nodes_++;
+  }
 
   SerializeInt32(variable->index());
   SerializeInt32(variable->initializer_position());
@@ -417,17 +421,19 @@ inline void BinAstSerializeVisitor::SerializeVariableReference(Variable* variabl
 
 inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
   // Serialize locals first.
-  std::unordered_set<const AstRawString*> locals;
-  std::unordered_set<const AstRawString*> temporaries;
+  uint32_t total_local_vars = 0;
+  uint32_t total_temporaries = 0;
+  std::unordered_set<const AstRawString*> deduped_locals;
+  std::vector<const AstRawString*> temporaries;
   for (Variable* variable : scope->locals_) {
-    locals.insert(variable->raw_name());
+    total_local_vars++;
+    deduped_locals.insert(variable->raw_name());
+
     if (variable->mode() == VariableMode::kTemporary) {
-      temporaries.insert(variable->raw_name());
+      total_temporaries++;
     }
   }
 
-  DCHECK(locals.size() < UINT32_MAX);
-  uint32_t total_local_vars = static_cast<uint32_t>(locals.size());
   SerializeUint32(total_local_vars);
   for (Variable* variable : scope->locals_) {
     SerializeVariable(variable);
@@ -435,7 +441,7 @@ inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
 
   // Now serialize any remaining variables we missed
   DCHECK(temporaries.size() < UINT32_MAX);
-  uint32_t total_non_temporary_locals = total_local_vars - static_cast<uint32_t>(temporaries.size());
+  uint32_t total_non_temporary_locals = total_local_vars - total_temporaries;
   DCHECK(static_cast<uint32_t>(scope->num_var()) >= total_non_temporary_locals);
   // Temporaries are only stored in locals_ (and not variables_), so don't include them in the non-local vars count.
   uint32_t total_nonlocal_vars = scope->num_var() - total_non_temporary_locals;
@@ -443,7 +449,7 @@ inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
   SerializeUint32(total_nonlocal_vars);
   for (VariableMap::Entry* entry = scope->variables_.Start(); entry != nullptr; entry = scope->variables_.Next(entry)) {
     Variable* variable = reinterpret_cast<Variable*>(entry->value);
-    if (locals.count(variable->raw_name()) == 0) {
+    if (deduped_locals.count(variable->raw_name()) == 0) {
       SerializeVariable(variable);
       serialized_nonlocal_vars += 1;
     }

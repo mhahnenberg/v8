@@ -57,6 +57,9 @@ class BinAstDeserializer {
   DeserializeResult<const AstRawString*> DeserializeRawStringReference(uint8_t* bytes, int offset);
   DeserializeResult<AstConsString*> DeserializeConsString(uint8_t* bytes, int offset);
 
+  Variable* CreateLocalTemporaryVariable(Scope* scope, const AstRawString* name, int index, int initializer_position, uint32_t bit_field);
+  Variable* CreateLocalNonTemporaryVariable(Scope* scope, const AstRawString* name, int index, int initializer_position, uint32_t bit_field);
+
   DeserializeResult<Variable*> DeserializeLocalVariable(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeNonLocalVariable(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeVariableReference(uint8_t* serialized_binast, int offset, Scope* scope = nullptr);
