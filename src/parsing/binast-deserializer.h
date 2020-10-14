@@ -95,6 +95,12 @@ class BinAstDeserializer {
   DeserializeResult<ThisExpression*> DeserializeThisExpression(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<ObjectLiteral*> DeserializeObjectLiteral(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<ArrayLiteral*> DeserializeArrayLiteral(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<NaryOperation*> DeserializeNaryOperation(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<Conditional*> DeserializeConditional(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<TryCatchStatement*> DeserializeTryCatchStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<RegExpLiteral*> DeserializeRegExpLiteral(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<SwitchStatement*> DeserializeSwitchStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<Throw*> DeserializeThrow(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<std::nullptr_t> DeserializeNodeStub(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
 
   Isolate* isolate_;

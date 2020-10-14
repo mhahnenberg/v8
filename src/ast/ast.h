@@ -2038,6 +2038,7 @@ class NaryOperation final : public Expression {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstDeserializer;
 
   NaryOperation(Zone* zone, Token::Value op, Expression* first,
                 size_t initial_subsequent_size)

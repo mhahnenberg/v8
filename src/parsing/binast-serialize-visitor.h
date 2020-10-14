@@ -110,6 +110,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeDeclarationScope(DeclarationScope* scope);
   void SerializeAstNodeHeader(AstNode* node);
   void SerializeVariableProxy(VariableProxy* proxy);
+  void SerializeCaseClause(CaseClause* case_clause);
 
   void VisitMaybeNode(AstNode* maybe_node);
   void ToDoBinAst(AstNode* node);
@@ -620,6 +621,20 @@ inline void BinAstSerializeVisitor::SerializeVariableProxy(VariableProxy* proxy)
   }
 }
 
+inline void BinAstSerializeVisitor::SerializeCaseClause(
+    CaseClause* case_clause) {
+  if (!case_clause->is_default()) {
+    SerializeUint8(0);
+    VisitNode(case_clause->label());
+  } else {
+    SerializeUint8(1);
+  }
+  SerializeInt32(case_clause->statements()->length());
+  for (Statement* statement : *case_clause->statements()) {
+    VisitNode(statement);
+  }
+}
+
 inline void BinAstSerializeVisitor::VisitMaybeNode(AstNode* maybe_node) {
   if (maybe_node) {
     SerializeUint8(1);
@@ -842,14 +857,21 @@ inline void BinAstSerializeVisitor::VisitBinaryOperation(BinaryOperation* binary
 
 inline void BinAstSerializeVisitor::VisitNaryOperation(NaryOperation* nary_op) {
   SerializeAstNodeHeader(nary_op);
-  ToDoBinAst(nary_op);
+  VisitNode(nary_op->first());
+  auto subsequent_length = static_cast<uint32_t>(nary_op->subsequent_length());
+
+  SerializeUint32(subsequent_length);
+
+  for (uint32_t i = 0; i < subsequent_length; i++) {
+    VisitNode(nary_op->subsequent(i));
+    SerializeInt32(nary_op->subsequent_op_position(i));
+  }
 }
 
 inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_literal) {
   SerializeAstNodeHeader(object_literal);
 
   SerializeInt32(object_literal->properties()->length());
-  SerializeInt32(object_literal->position());
 
   for (int i = 0; i < object_literal->properties()->length(); i++) {
     auto property = object_literal->properties()->at(i);
@@ -878,7 +900,6 @@ inline void BinAstSerializeVisitor::VisitArrayLiteral(ArrayLiteral* array_litera
   }
 
   SerializeInt32(array_literal->values()->length());
-  SerializeInt32(array_literal->position());
   SerializeInt32(array_literal->first_spread_index());
 
   for (int i = 0; i < array_literal->values()->length(); i++) {
@@ -897,18 +918,22 @@ inline void BinAstSerializeVisitor::VisitCompoundAssignment(CompoundAssignment* 
 
 inline void BinAstSerializeVisitor::VisitConditional(Conditional* conditional) {
   SerializeAstNodeHeader(conditional);
-  ToDoBinAst(conditional);
+  VisitNode(conditional->condition());
+  VisitNode(conditional->then_expression());
+  VisitNode(conditional->else_expression());
 }
 
 inline void BinAstSerializeVisitor::VisitTryCatchStatement(
     TryCatchStatement* try_catch_statement) {
   SerializeAstNodeHeader(try_catch_statement);
-  ToDoBinAst(try_catch_statement);
+  VisitNode(try_catch_statement->try_block());
+  SerializeScope(try_catch_statement->scope());
+  VisitNode(try_catch_statement->catch_block());
 }
 
 inline void BinAstSerializeVisitor::VisitThrow(Throw* throw_statement) {
   SerializeAstNodeHeader(throw_statement);
-  ToDoBinAst(throw_statement);
+  VisitNode(throw_statement->exception());
 }
 
 inline void BinAstSerializeVisitor::VisitThisExpression(ThisExpression* this_expression) {
@@ -918,13 +943,18 @@ inline void BinAstSerializeVisitor::VisitThisExpression(ThisExpression* this_exp
 inline void BinAstSerializeVisitor::VisitRegExpLiteral(
     RegExpLiteral* reg_exp_literal) {
   SerializeAstNodeHeader(reg_exp_literal);
-  ToDoBinAst(reg_exp_literal);
+  SerializeRawStringReference(reg_exp_literal->raw_pattern());
+  SerializeInt32(reg_exp_literal->flags());
 }
 
 inline void BinAstSerializeVisitor::VisitSwitchStatement(
     SwitchStatement* switch_statement) {
   SerializeAstNodeHeader(switch_statement);
-  ToDoBinAst(switch_statement);
+  VisitNode(switch_statement->tag());
+  SerializeInt32(switch_statement->cases()->length());
+  for (int i = 0; i < switch_statement->cases()->length(); i++) {
+    SerializeCaseClause(switch_statement->cases()->at(i));
+  }
 }
 
 inline void BinAstSerializeVisitor::VisitUnhandledNodeType(AstNode* node) {
