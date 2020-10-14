@@ -88,9 +88,57 @@ function sumDoWhile(n) {
   } while (i < n);
   return result;
 }
+function sum(a, b, c) {
+  var result = a + b + c;
+  return result;
+}
 
 function shouldNotSerialize(a) {
   return [...a];
+}
+
+function conditional(a, b) {
+  return a ? b : null;
+}
+
+function trycatch() {
+  try {
+    dfah;
+  } catch (e) {
+    return 'caught';
+  }
+}
+
+function regexmatch(str) {
+  return str.match(/test/i);
+}
+
+function switchWithBreak(bar) {
+  var out;
+  switch (bar) {
+    case 1:
+      out = 1;
+      break;
+    case 2:
+      out = 2;
+      break;
+    default:
+      out = 0;
+      break;
+  }
+
+  return out;
+}
+
+function switchWithoutBreak(bar) {
+  switch (bar) {
+    case 1:
+      return 1;
+    case 2:
+      return 2;
+    default:
+      return 0;
+  }
 }
 
 var oldSetTimeout = setTimeout;
@@ -146,8 +194,14 @@ setTimeout(function testCallback2() {
   console.log(sumForIn([1,2,3,4,5,6,7,8,9,10]));
   console.log(sumWhile(10));
   console.log(sumDoWhile(10));
+  console.log(sum(10, 1, 3));
   console.log(makeThing());
   console.log(shouldNotSerialize([1, 2, 3]));
+  console.log(conditional(false));
+  console.log(trycatch());
+  console.log(regexmatch('test'));
+  console.log(switchWithBreak(100));
+  console.log(switchWithoutBreak(100));
   var a = 0;
   var b = 'sweet!';
   var c = 2;
