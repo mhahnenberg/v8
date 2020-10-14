@@ -89,6 +89,10 @@ function sumDoWhile(n) {
   return result;
 }
 
+function shouldNotSerialize(a) {
+  return [...a];
+}
+
 var oldSetTimeout = setTimeout;
 var timerCallbacks = [];
 function newSetTimeout(func, delayMs) {
@@ -143,6 +147,7 @@ setTimeout(function testCallback2() {
   console.log(sumWhile(10));
   console.log(sumDoWhile(10));
   console.log(makeThing());
+  console.log(shouldNotSerialize([1, 2, 3]));
   var a = 0;
   var b = 'sweet!';
   var c = 2;
