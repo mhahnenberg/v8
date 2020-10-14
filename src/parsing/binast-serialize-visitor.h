@@ -871,7 +871,21 @@ inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_lit
 
 inline void BinAstSerializeVisitor::VisitArrayLiteral(ArrayLiteral* array_literal) {
   SerializeAstNodeHeader(array_literal);
-  ToDoBinAst(array_literal);
+
+  if (array_literal->first_spread_index() != -1) {
+    printf("BinAstSerializeVisitor encountered unhandled array spread, skipping function\n");
+    encountered_unhandled_nodes_++;
+  }
+
+  SerializeInt32(array_literal->values()->length());
+  SerializeInt32(array_literal->position());
+  SerializeInt32(array_literal->first_spread_index());
+
+  for (int i = 0; i < array_literal->values()->length(); i++) {
+    auto value = array_literal->values()->at(i);
+
+    VisitNode(value);
+  }
 }
 
 inline void BinAstSerializeVisitor::VisitCompoundAssignment(CompoundAssignment* compound_assignment) {
