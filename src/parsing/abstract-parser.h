@@ -2004,6 +2004,7 @@ void AbstractParser<Impl>::ParseFunction(
   info->set_function_name(impl()->ast_value_factory()->GetString(name));
   scanner_.Initialize();
 
+  long long deserialize_microseconds = 0;
   FunctionLiteral* result = nullptr;
   if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData() ||
                   shared_info->HasUncompiledDataWithInnerBinAstParseData())) {
@@ -2017,7 +2018,7 @@ void AbstractParser<Impl>::ParseFunction(
     if (is_inner) {
       Handle<UncompiledDataWithInnerBinAstParseData> uncompiled_data =
           handle(shared_info->uncompiled_data_with_inner_bin_ast_parse_data(),
-                 isolate);
+                isolate);
 
       binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
 
@@ -2046,17 +2047,10 @@ void AbstractParser<Impl>::ParseFunction(
       DCHECK(literal != nullptr);
     }
     auto elapsed = std::chrono::high_resolution_clock::now() - start;
-    long long microseconds =
+    deserialize_microseconds =
         std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-    printf("\nDeserialized function literal for '");
-    if (literal->has_shared_name()) {
-      for (const AstRawString* s : literal->raw_name()->ToRawStrings()) {
-        printf("%.*s", s->byte_length(), s->raw_data());
-      }
-    }
-    printf("' in %lld us\n", microseconds);
     // TODO(binast): Store the literal on the ParseInfo
-    result = literal;
+    // result = literal;
   }
 
   if (V8_UNLIKELY(result == nullptr && shared_info->private_name_lookup_skips_outer_class() &&
@@ -2073,15 +2067,13 @@ void AbstractParser<Impl>::ParseFunction(
     result = DoParseFunction(isolate, info, start_position, end_position,
                              function_literal_id, info->function_name());
     auto elapsed = std::chrono::high_resolution_clock::now() - start;
-    long long microseconds =
+    long long parse_microseconds =
         std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-    printf("Parsed function literal for '");
-    if (result->has_shared_name()) {
-      for (const AstRawString* s : result->raw_name()->ToRawStrings()) {
-        printf("%.*s", s->byte_length(), s->raw_data());
-      }
+    if (deserialize_microseconds > 0) {
+      double percent_change = (double)(deserialize_microseconds - parse_microseconds) / (double)parse_microseconds * 100.0;
+      int function_length = result->end_position() - result->start_position();
+      printf("Parse time: %lld vs deserialize time: %lld (%lf%% change) for %d bytes\n", parse_microseconds, deserialize_microseconds, percent_change, function_length);
     }
-    printf("' in %lld us\n", microseconds);
   }
   MaybeResetCharacterStream(info, result);
   MaybeProcessSourceRanges(info, result, impl()->stack_limit_);
