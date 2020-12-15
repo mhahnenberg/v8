@@ -58,6 +58,10 @@ class BinAstDeserializer {
   DeserializeResult<std::array<bool, 16>> DeserializeUint16Flags(uint8_t* bytes, int offset);
   DeserializeResult<double> DeserializeDouble(uint8_t* bytes, int offset);
 
+  DeserializeResult<AstNode*> DeserializeNodeReference(uint8_t* bytes, int offset, void** patchable_field);
+  void RecordBreakableStatement(uint32_t offset, BreakableStatement* node);
+  void PatchPendingNodeReferences(uint32_t offset, AstNode* node);
+
   DeserializeResult<const char*> DeserializeCString(uint8_t* bytes, int offset);
   DeserializeResult<const AstRawString*> DeserializeRawString(uint8_t* bytes, int offset);
   DeserializeResult<std::nullptr_t> DeserializeStringTable(uint8_t* bytes, int offset);
@@ -113,6 +117,8 @@ class BinAstDeserializer {
   DeserializeResult<TryCatchStatement*> DeserializeTryCatchStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<RegExpLiteral*> DeserializeRegExpLiteral(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<SwitchStatement*> DeserializeSwitchStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<BreakStatement*> DeserializeBreakStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
+  DeserializeResult<ContinueStatement*> DeserializeContinueStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<Throw*> DeserializeThrow(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<std::nullptr_t> DeserializeNodeStub(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
 
@@ -121,6 +127,8 @@ class BinAstDeserializer {
   Handle<ByteArray> parse_data_;
   std::vector<const AstRawString*> string_table_vec_;
   std::unordered_map<uint32_t, Variable*> variables_by_id_;
+  std::unordered_map<uint32_t, AstNode*> nodes_by_offset_;
+  std::unordered_map<uint32_t, std::vector<void**>> patchable_fields_by_offset_;
 };
 
 }  // namespace internal

@@ -407,6 +407,8 @@ inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Dese
 }
 
 inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeAstNode(uint8_t* serialized_binast, int offset, bool is_toplevel) {
+  auto original_offset = offset;
+
   auto bit_field_and_position = DeserializeUint64(serialized_binast, offset);
   offset = bit_field_and_position.new_offset;
 
@@ -417,6 +419,7 @@ inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::Deser
   int32_t position = bit_field_and_position_convertor.fields.second;
 
   AstNode::NodeType nodeType = AstNode::NodeTypeField::decode(bit_field);
+
   switch (nodeType) {
   case AstNode::kFunctionLiteral: {
     BinAstDeserializer::DeserializeResult<uint32_t> start_offset =
@@ -430,7 +433,6 @@ inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::Deser
     auto result = DeserializeFunctionLiteral(serialized_binast, bit_field, position, offset);
 
     if (!is_toplevel) {
-      printf("PREPARSE++: Storing inner binast parse data on function literal\n");
       Handle<UncompiledDataWithInnerBinAstParseData> data =
           isolate_->factory()->NewUncompiledDataWithInnerBinAstParseData(
               result.value->GetInferredName(isolate_),
@@ -480,6 +482,7 @@ inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::Deser
   }
   case AstNode::kBlock: {
     auto result = DeserializeBlock(serialized_binast, bit_field, position, offset);
+    RecordBreakableStatement(original_offset, result.value);
     return {result.value, result.new_offset};
   }
   case AstNode::kAssignment: {
@@ -496,10 +499,12 @@ inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::Deser
   }
   case AstNode::kForStatement: {
     auto result = DeserializeForStatement(serialized_binast, bit_field, position, offset);
+    RecordBreakableStatement(original_offset, result.value);
     return {result.value, result.new_offset};
   }
   case AstNode::kForInStatement: {
     auto result = DeserializeForInStatement(serialized_binast, bit_field, position, offset);
+    RecordBreakableStatement(original_offset, result.value);
     return {result.value, result.new_offset};
   }
   case AstNode::kCountOperation: {
@@ -512,10 +517,12 @@ inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::Deser
   }
   case AstNode::kWhileStatement: {
     auto result = DeserializeWhileStatement(serialized_binast, bit_field, position, offset);
+    RecordBreakableStatement(original_offset, result.value);
     return {result.value, result.new_offset};
   }
   case AstNode::kDoWhileStatement: {
     auto result = DeserializeDoWhileStatement(serialized_binast, bit_field, position, offset);
+    RecordBreakableStatement(original_offset, result.value);
     return {result.value, result.new_offset};
   }
   case AstNode::kThisExpression: {
@@ -552,16 +559,23 @@ inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::Deser
   }
   case AstNode::kSwitchStatement: {
     auto result = DeserializeSwitchStatement(serialized_binast, bit_field, position, offset);
+    RecordBreakableStatement(original_offset, result.value);
     return {result.value, result.new_offset};
   }
   case AstNode::kThrow: {
     auto result = DeserializeThrow(serialized_binast, bit_field, position, offset);
     return {result.value, result.new_offset};
   }
+  case AstNode::kContinueStatement: {
+    auto result = DeserializeContinueStatement(serialized_binast, bit_field, position, offset);
+    return {result.value, result.new_offset};
+  }
+  case AstNode::kBreakStatement: {
+    auto result = DeserializeBreakStatement(serialized_binast, bit_field, position, offset);
+    return {result.value, result.new_offset};
+  }
   case AstNode::kForOfStatement:
   case AstNode::kSloppyBlockFunctionStatement:
-  case AstNode::kContinueStatement:
-  case AstNode::kBreakStatement:
   case AstNode::kTryFinallyStatement:
   case AstNode::kDebuggerStatement:
   case AstNode::kInitializeClassMembersStatement:
@@ -588,6 +602,37 @@ inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::Deser
     UNREACHABLE();
   }
   }
+}
+
+inline void BinAstDeserializer::RecordBreakableStatement(uint32_t offset, BreakableStatement* node) {
+  nodes_by_offset_[offset] = node;
+  PatchPendingNodeReferences(offset, node);
+}
+
+inline void BinAstDeserializer::PatchPendingNodeReferences(uint32_t offset, AstNode* node) {
+  if (patchable_fields_by_offset_.count(offset) == 0) {
+    return;
+  }
+  auto& fields_to_patch = patchable_fields_by_offset_[offset];
+  for (void** field : fields_to_patch) {
+    DCHECK(*field == nullptr);
+    *field = node;
+  }
+  patchable_fields_by_offset_.erase(offset);
+}
+
+inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeNodeReference(uint8_t* bytes, int offset, void** patchable_field) {
+  auto node_offset = DeserializeUint32(bytes, offset);
+  offset = node_offset.new_offset;
+
+  auto result = nodes_by_offset_.find(node_offset.value);
+  if (result != nodes_by_offset_.end()) {
+    *patchable_field = result->second;
+    return {result->second, offset};
+  }
+
+  patchable_fields_by_offset_[node_offset.value].push_back(patchable_field);
+  return {nullptr, offset};
 }
 
 inline BinAstDeserializer::DeserializeResult<ReturnStatement*> BinAstDeserializer::DeserializeReturnStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
