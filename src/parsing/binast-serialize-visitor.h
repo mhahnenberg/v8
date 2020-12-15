@@ -79,6 +79,8 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   virtual void VisitThisExpression(ThisExpression* this_expression) override;
   virtual void VisitRegExpLiteral(RegExpLiteral* reg_exp_literal) override;
   virtual void VisitSwitchStatement(SwitchStatement* switch_statement) override;
+  virtual void VisitBreakStatement(BreakStatement* break_statement) override;
+  virtual void VisitContinueStatement(ContinueStatement* continue_statement) override;
   virtual void VisitUnhandledNodeType(AstNode* node) override;
 
  private:
@@ -93,6 +95,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeUint64(uint64_t value);
   void SerializeInt32(int32_t value);
   void SerializeDouble(double value);
+  void SerializeNodeReference(const AstNode* node);
   void SerializeCString(const char* str);
   void SerializeRawString(const AstRawString* s);
   void SerializeConsString(const AstConsString* cons_string);
@@ -115,11 +118,16 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void VisitMaybeNode(AstNode* maybe_node);
   void ToDoBinAst(AstNode* node);
 
+  void RecordBreakableStatement(BreakableStatement* node);
+  void PatchPendingNodeReferences(const AstNode* node, size_t offset);
+
   AstValueFactory* ast_value_factory_;
   std::unordered_map<const AstRawString*, uint32_t> string_table_indices_;
   std::vector<uint8_t> byte_data_;
   std::unordered_map<Variable*, uint32_t> variable_ids_;
   std::unordered_map<VariableProxy*, int> var_proxy_ids;
+  std::unordered_map<const AstNode*, uint32_t> node_offsets_;
+  std::unordered_map<const AstNode*, std::vector<uint32_t>> patchable_node_reference_offsets_;
   int encountered_unhandled_nodes_;
   int skipped_functions_;
   int serialized_functions_;
@@ -353,6 +361,8 @@ inline bool BinAstSerializeVisitor::SerializeAst(AstNode* root) {
   DCHECK(literal != nullptr);
   SerializeStringTable(literal->raw_name());
   VisitNode(root);
+  // Make sure we eventually patched everything.
+  DCHECK(patchable_node_reference_offsets_.empty());
 
   if (encountered_unhandled_nodes_ > 0) {
     printf("Failed to serialize function: '");
@@ -379,6 +389,7 @@ inline bool BinAstSerializeVisitor::SerializeAst(AstNode* root) {
       return false;
     }
   }
+
 
   auto elapsed = std::chrono::high_resolution_clock::now() - start;
   long long microseconds = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
@@ -610,6 +621,34 @@ inline void BinAstSerializeVisitor::SerializeScope(Scope* scope) {
   SerializeCommonScopeFields(scope);
 }
 
+inline void BinAstSerializeVisitor::PatchPendingNodeReferences(const AstNode* node, size_t node_offset) {
+  if (patchable_node_reference_offsets_.count(node) == 0) {
+    return;
+  }
+  CHECK(node_offset <= UINT32_MAX);
+  uint32_t bounded_node_offset = static_cast<uint32_t>(node_offset);
+  std::vector<uint32_t>& offsets_to_patch = patchable_node_reference_offsets_[node];
+  for (uint32_t patch_offset : offsets_to_patch) {
+    SerializeUint32(bounded_node_offset, patch_offset);
+  }
+  patchable_node_reference_offsets_.erase(node);
+}
+
+inline void BinAstSerializeVisitor::SerializeNodeReference(const AstNode* node) {
+  auto result = node_offsets_.find(node);
+  if (result != node_offsets_.end()) {
+    SerializeUint32(result->second);
+    return;
+  }
+
+  // We don't have an offset for this node yet, so record the offset to be patched
+  // when we eventually process it. Then serialize a placeholder value.
+  size_t current_offset = byte_data_.size();
+  CHECK(current_offset <= UINT32_MAX);
+  SerializeUint32(0);
+  patchable_node_reference_offsets_[node].push_back(static_cast<uint32_t>(current_offset));
+}
+
 inline void BinAstSerializeVisitor::SerializeAstNodeHeader(AstNode* node) {
   SerializeUint32(node->bit_field_);
   SerializeInt32(node->position_);
@@ -655,6 +694,13 @@ inline void BinAstSerializeVisitor::ToDoBinAst(AstNode* node) {
   encountered_unhandled_nodes_++;
 }
 
+inline void BinAstSerializeVisitor::RecordBreakableStatement(BreakableStatement* node) {
+  size_t current_offset = byte_data_.size();
+  DCHECK(current_offset <= UINT32_MAX);
+  node_offsets_.insert({{node, static_cast<uint32_t>(current_offset)}});
+  PatchPendingNodeReferences(node, current_offset);
+}
+
 inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
   size_t start = byte_data_.size();
 
@@ -698,6 +744,8 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
 }
 
 inline void BinAstSerializeVisitor::VisitBlock(Block* block) {
+  RecordBreakableStatement(block);
+  
   SerializeAstNodeHeader(block);
   if (block->scope()) {
     SerializeUint8(1);
@@ -774,6 +822,7 @@ inline void BinAstSerializeVisitor::VisitVariableProxyExpression(VariableProxyEx
 }
 
 inline void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statement) {
+  RecordBreakableStatement(for_statement);
   SerializeAstNodeHeader(for_statement);
 
   // TODO(binast): are we guaranteed that we'll have all of these nodes?
@@ -785,6 +834,7 @@ inline void BinAstSerializeVisitor::VisitForStatement(ForStatement* for_statemen
 }
 
 inline void BinAstSerializeVisitor::VisitForInStatement(ForInStatement* for_in_statement) {
+  RecordBreakableStatement(for_in_statement);
   SerializeAstNodeHeader(for_in_statement);
   VisitNode(for_in_statement->each());
   VisitNode(for_in_statement->subject());
@@ -792,12 +842,14 @@ inline void BinAstSerializeVisitor::VisitForInStatement(ForInStatement* for_in_s
 }
 
 inline void BinAstSerializeVisitor::VisitWhileStatement(WhileStatement* while_statement) {
+  RecordBreakableStatement(while_statement);
   SerializeAstNodeHeader(while_statement);
   VisitNode(while_statement->cond());
   VisitNode(while_statement->body());
 }
 
 inline void BinAstSerializeVisitor::VisitDoWhileStatement(DoWhileStatement* do_while_statement) {
+  RecordBreakableStatement(do_while_statement);
   SerializeAstNodeHeader(do_while_statement);
   VisitNode(do_while_statement->cond());
   VisitNode(do_while_statement->body());
@@ -949,12 +1001,23 @@ inline void BinAstSerializeVisitor::VisitRegExpLiteral(
 
 inline void BinAstSerializeVisitor::VisitSwitchStatement(
     SwitchStatement* switch_statement) {
+  RecordBreakableStatement(switch_statement);
   SerializeAstNodeHeader(switch_statement);
   VisitNode(switch_statement->tag());
   SerializeInt32(switch_statement->cases()->length());
   for (int i = 0; i < switch_statement->cases()->length(); i++) {
     SerializeCaseClause(switch_statement->cases()->at(i));
   }
+}
+
+inline void BinAstSerializeVisitor::VisitBreakStatement(BreakStatement* break_statement) {
+  SerializeAstNodeHeader(break_statement);
+  SerializeNodeReference(break_statement->target());
+}
+
+inline void BinAstSerializeVisitor::VisitContinueStatement(ContinueStatement* continue_statement) {
+  SerializeAstNodeHeader(continue_statement);
+  SerializeNodeReference(continue_statement->target());
 }
 
 inline void BinAstSerializeVisitor::VisitUnhandledNodeType(AstNode* node) {
