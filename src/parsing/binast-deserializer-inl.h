@@ -144,22 +144,18 @@ inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserial
   auto length = DeserializeUint32(serialized_ast, offset);
   offset = length.new_offset;
 
-  std::vector<uint8_t> raw_data;
-  raw_data.reserve(length.value);
-  for (uint32_t i = 0; i < length.value; ++i) {
-    auto next_byte = DeserializeUint8(serialized_ast, offset);
-    offset = next_byte.new_offset;
-    raw_data.push_back(next_byte.value);
-  }
+  std::unique_ptr<uint8_t[]> raw_data(new uint8_t[length.value]);
+  memcpy(raw_data.get(), &serialized_ast[offset], length.value);
+  offset += sizeof(uint8_t) * length.value;
   const AstRawString* s = nullptr;
-  if (raw_data.size() > 0) {
-    Vector<const byte> literal_bytes(&raw_data[0], raw_data.size());
+  if (length.value > 0) {
+    Vector<const byte> literal_bytes(raw_data.get(), length.value);
     s = parser_->ast_value_factory()->GetString(hash_field.value, is_one_byte.value, literal_bytes);
   } else {
     Vector<const byte> literal_bytes;
     s = parser_->ast_value_factory()->GetString(hash_field.value, is_one_byte.value, literal_bytes);
   }
-  string_table_.insert({string_table_.size() + 1, s});
+  string_table_vec_.push_back(s);
   return {s, offset};
 }
 
@@ -167,7 +163,7 @@ inline BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer:
   auto num_non_constant_entries = DeserializeUint32(serialized_ast, offset);
   offset = num_non_constant_entries.new_offset;
 
-  string_table_.reserve(num_non_constant_entries.value);
+  string_table_vec_.reserve(num_non_constant_entries.value + parser_->ast_value_factory()->string_constants_->string_table()->occupancy());
 
   for (uint32_t i = 0; i < num_non_constant_entries.value; ++i) {
     auto string = DeserializeRawString(serialized_ast, offset);
@@ -175,7 +171,7 @@ inline BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer:
   }
 
   for (AstRawStringMap::Entry* entry = parser_->ast_value_factory()->string_constants_->string_table()->Start(); entry != nullptr; entry = parser_->ast_value_factory()->string_constants_->string_table()->Next(entry)) {
-    string_table_.insert({string_table_.size() + 1, entry->key});
+    string_table_vec_.push_back(entry->key);
   }
 
   return {nullptr, offset};
@@ -187,10 +183,9 @@ inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserial
   if (string_table_index.value == 0) {
     return {nullptr, offset};
   }
-  auto lookup_result = string_table_.find(string_table_index.value);
-  DCHECK(lookup_result != string_table_.end());
-  const AstRawString* result = lookup_result->second;
-  DCHECK(result != nullptr);
+
+  DCHECK(string_table_index.value > 0 && string_table_index.value <= string_table_vec_.size());
+  const AstRawString* result = string_table_vec_[string_table_index.value - 1];
   return {result, offset};
 }
 
@@ -435,6 +430,7 @@ inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::Deser
     auto result = DeserializeFunctionLiteral(serialized_binast, bit_field, position, offset);
 
     if (!is_toplevel) {
+      printf("PREPARSE++: Storing inner binast parse data on function literal\n");
       Handle<UncompiledDataWithInnerBinAstParseData> data =
           isolate_->factory()->NewUncompiledDataWithInnerBinAstParseData(
               result.value->GetInferredName(isolate_),
