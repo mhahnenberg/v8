@@ -36,6 +36,13 @@ class BinAstDeserializer {
   Zone* zone();
   static bool UseCompression() { return false; }
 
+  AstNode* DeserializeCompressedAst(base::Optional<uint32_t> start_offset,
+                        base::Optional<uint32_t> length);
+  AstNode* DeserializeUncompressedAst(base::Optional<uint32_t> start_offset,
+                                      base::Optional<uint32_t> length,
+                                      uint8_t* uncompressed_ast,
+                                      size_t uncompressed_size);
+
   DeserializeResult<AstNode*> DeserializeMaybeAstNode(uint8_t* serialized_binast, int offset);
 
   DeserializeResult<uint64_t> DeserializeUint64(uint8_t* bytes, int offset);
@@ -109,7 +116,7 @@ class BinAstDeserializer {
   Isolate* isolate_;
   Parser* parser_;
   Handle<ByteArray> parse_data_;
-  std::unordered_map<uint32_t, const AstRawString*> string_table_;
+  std::vector<const AstRawString*> string_table_vec_;
   std::unordered_map<uint32_t, Variable*> variables_by_id_;
 };
 

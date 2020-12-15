@@ -5466,6 +5466,9 @@ void SharedFunctionInfo::InitFromFunctionLiteral(
     data = isolate->factory()->NewUncompiledDataWithPreparseData(
         lit->GetInferredName(isolate), lit->start_position(),
         lit->end_position(), preparse_data);
+  } else if (lit->has_uncompiled_data_with_inner_bin_ast_parse_data()) {
+    printf("PREPARSE++: Initializing SharedFunctionInfo with inner binast parse data\n");
+    data = lit->uncompiled_data_with_inner_bin_ast_parse_data();
   } else {
     data = isolate->factory()->NewUncompiledDataWithoutPreparseData(
         lit->GetInferredName(isolate), lit->start_position(),

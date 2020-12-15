@@ -22,31 +22,41 @@ BinAstDeserializer::BinAstDeserializer(Isolate* isolate, Parser* parser,
 
 AstNode* BinAstDeserializer::DeserializeAst(
     base::Optional<uint32_t> start_offset, base::Optional<uint32_t> length) {
-  ByteArray serialized_ast = *parse_data_;
+  DCHECK(UseCompression() == BinAstSerializeVisitor::UseCompression());
+  if (UseCompression()) {
+    return DeserializeCompressedAst(start_offset, length);
+  } else {
+    ByteArray serialized_ast = *parse_data_;
+    return DeserializeUncompressedAst(start_offset, length, serialized_ast.GetDataStartAddress(), serialized_ast.length());
+  }
+}
+
+AstNode* BinAstDeserializer::DeserializeCompressedAst(
+    base::Optional<uint32_t> start_offset, base::Optional<uint32_t> length) {
 
   DCHECK(UseCompression() == BinAstSerializeVisitor::UseCompression());
+  DCHECK(UseCompression());
+  ByteArray serialized_ast = *parse_data_;
   std::unique_ptr<uint8_t[]> compressed_byte_array_with_size_header = std::make_unique<uint8_t[]>(serialized_ast.length());
   serialized_ast.copy_out(0, compressed_byte_array_with_size_header.get(), serialized_ast.length());
 
-  std::unique_ptr<uint8_t[]> uncompressed_byte_array;
-  size_t original_size = 0;
-  if (UseCompression()) {
-    original_size = *reinterpret_cast<size_t*>(compressed_byte_array_with_size_header.get());
-    uint8_t* compressed_data = compressed_byte_array_with_size_header.get() + sizeof(size_t);
+  size_t uncompressed_size = *reinterpret_cast<size_t*>(compressed_byte_array_with_size_header.get());
+  uint8_t* compressed_data = compressed_byte_array_with_size_header.get() + sizeof(size_t);
 
-    uncompressed_byte_array = std::make_unique<uint8_t[]>(original_size);
-    int uncompress_result = uncompress(uncompressed_byte_array.get(), &original_size, compressed_data, serialized_ast.length() - sizeof(size_t));
-    if (uncompress_result != Z_OK) {
-      printf("Error decompressing serialized AST: %s\n", zError(uncompress_result));
-      UNREACHABLE();
-    }
-  } else {
-    original_size = serialized_ast.length();
-    uncompressed_byte_array = std::move(compressed_byte_array_with_size_header);
+  std::unique_ptr<uint8_t[]> uncompressed_byte_array = std::make_unique<uint8_t[]>(uncompressed_size);
+  int uncompress_result = uncompress(uncompressed_byte_array.get(), &uncompressed_size, compressed_data, serialized_ast.length() - sizeof(size_t));
+  if (uncompress_result != Z_OK) {
+    printf("Error decompressing serialized AST: %s\n", zError(uncompress_result));
+    UNREACHABLE();
   }
 
+  return DeserializeUncompressedAst(start_offset, length, uncompressed_byte_array.get(), uncompressed_size);
+}
+
+AstNode* BinAstDeserializer::DeserializeUncompressedAst(
+    base::Optional<uint32_t> start_offset, base::Optional<uint32_t> length, uint8_t* uncompressed_ast, size_t uncompressed_size) {
   int offset = 0;
-  auto string_table_result = DeserializeStringTable(uncompressed_byte_array.get(), offset);
+  auto string_table_result = DeserializeStringTable(uncompressed_ast, offset);
   offset = string_table_result.new_offset;
   bool is_toplevel = true;
   if (start_offset.has_value()) {
@@ -54,10 +64,10 @@ AstNode* BinAstDeserializer::DeserializeAst(
     offset = start_offset.value();
   }
 
-  auto result = DeserializeAstNode(uncompressed_byte_array.get(), offset, is_toplevel);
+  auto result = DeserializeAstNode(uncompressed_ast, offset, is_toplevel);
   // Check that we consumed all the bytes that were serialized.
   DCHECK(static_cast<size_t>(result.new_offset) ==
-         (length.value_or(original_size) + start_offset.value_or(0)));
+         (length.value_or(uncompressed_size) + start_offset.value_or(0)));
   return result.value;
 }
 
