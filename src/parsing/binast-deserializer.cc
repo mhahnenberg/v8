@@ -632,6 +632,26 @@ BinAstDeserializer::DeserializeSwitchStatement(uint8_t* serialized_binast,
   return {result, offset};
 }
 
+BinAstDeserializer::DeserializeResult<BreakStatement*>
+BinAstDeserializer::DeserializeBreakStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  BreakStatement* result = parser_->factory()->NewBreakStatement(nullptr, position);
+
+  auto target = DeserializeNodeReference(serialized_binast, offset, reinterpret_cast<void**>(&result->target_));
+  offset = target.new_offset;
+
+  return {result, offset};
+}
+
+BinAstDeserializer::DeserializeResult<ContinueStatement*>
+BinAstDeserializer::DeserializeContinueStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  ContinueStatement* result = parser_->factory()->NewContinueStatement(nullptr, position);
+
+  auto target = DeserializeNodeReference(serialized_binast, offset, reinterpret_cast<void**>(&result->target_));
+  offset = target.new_offset;
+
+  return {result, offset};
+}
+
 BinAstDeserializer::DeserializeResult<Throw*>
 BinAstDeserializer::DeserializeThrow(uint8_t* serialized_binast,
                                      uint32_t bit_field, int32_t position,

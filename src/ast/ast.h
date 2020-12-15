@@ -749,6 +749,7 @@ class ContinueStatement final : public JumpStatement {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstDeserializer;
 
   ContinueStatement(IterationStatement* target, int pos)
       : JumpStatement(pos, kContinueStatement), target_(target) {}
@@ -763,6 +764,7 @@ class BreakStatement final : public JumpStatement {
 
  private:
   friend class AstNodeFactory;
+  friend class BinAstDeserializer;
 
   BreakStatement(BreakableStatement* target, int pos)
       : JumpStatement(pos, kBreakStatement), target_(target) {}
