@@ -2045,12 +2045,14 @@ void AbstractParser<Impl>::ParseFunction(
       AstNode* ast_node = deserializer.DeserializeAst(offset, length);
       literal = ast_node->AsFunctionLiteral();
       DCHECK(literal != nullptr);
-    }
-    auto elapsed = std::chrono::high_resolution_clock::now() - start;
-    deserialize_microseconds =
+      result = literal;
+
+      auto elapsed = std::chrono::high_resolution_clock::now() - start;
+      deserialize_microseconds =
         std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-    // TODO(binast): Store the literal on the ParseInfo
-    // result = literal;
+      int function_length = result->end_position() - result->start_position();
+      printf("PREPARSE++: Deserialize time for %sfunction (%d bytes) in %lld us", is_inner ? "inner " : "", function_length, deserialize_microseconds);
+    }
   }
 
   if (V8_UNLIKELY(result == nullptr && shared_info->private_name_lookup_skips_outer_class() &&
@@ -2069,11 +2071,8 @@ void AbstractParser<Impl>::ParseFunction(
     auto elapsed = std::chrono::high_resolution_clock::now() - start;
     long long parse_microseconds =
         std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-    if (deserialize_microseconds > 0) {
-      double percent_change = (double)(deserialize_microseconds - parse_microseconds) / (double)parse_microseconds * 100.0;
-      int function_length = result->end_position() - result->start_position();
-      printf("Parse time: %lld vs deserialize time: %lld (%lf%% change) for %d bytes\n", parse_microseconds, deserialize_microseconds, percent_change, function_length);
-    }
+    int function_length = result->end_position() - result->start_position();
+    printf("PREPARSE++: Parse time: %lld us for %d bytes\n", parse_microseconds, function_length);
   }
   MaybeResetCharacterStream(info, result);
   MaybeProcessSourceRanges(info, result, impl()->stack_limit_);
