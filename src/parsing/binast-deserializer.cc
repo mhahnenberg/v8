@@ -556,12 +556,21 @@ BinAstDeserializer::DeserializeTryCatchStatement(uint8_t* serialized_binast,
   auto scope = DeserializeScope(serialized_binast, offset);
   offset = scope.new_offset;
 
-  auto catch_block = DeserializeAstNode(serialized_binast, offset);
-  offset = catch_block.new_offset;
+  Block* catch_block = nullptr;
+  if (scope.value == nullptr) {
+    auto catch_block_result = DeserializeAstNode(serialized_binast, offset);
+    catch_block = static_cast<Block*>(catch_block_result.value);
+    offset = catch_block_result.new_offset;
+  } else {
+    Parser::BlockState catch_variable_block_state(&parser_->scope_, scope.value);
+    auto catch_block_result = DeserializeAstNode(serialized_binast, offset);
+    catch_block = static_cast<Block*>(catch_block_result.value);
+    offset = catch_block_result.new_offset;
+  }
 
   TryCatchStatement* result = parser_->factory()->NewTryCatchStatement(
       static_cast<Block*>(try_block.value), scope.value,
-      static_cast<Block*>(catch_block.value), position);
+      catch_block, position);
   result->bit_field_ = bit_field;
   return {result, offset};
 }
