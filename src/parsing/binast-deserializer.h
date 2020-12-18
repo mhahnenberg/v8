@@ -64,7 +64,9 @@ class BinAstDeserializer {
 
   DeserializeResult<const char*> DeserializeCString(uint8_t* bytes, int offset);
   DeserializeResult<const AstRawString*> DeserializeRawString(uint8_t* bytes, int offset);
+  DeserializeResult<const AstRawString*> DeserializeProxyString(uint8_t* serialized_ast, int offset);
   DeserializeResult<std::nullptr_t> DeserializeStringTable(uint8_t* bytes, int offset);
+  DeserializeResult<std::nullptr_t> DeserializeProxyStringTable(uint8_t* serialized_ast, int offset);
   DeserializeResult<const AstRawString*> DeserializeRawStringReference(uint8_t* bytes, int offset);
   DeserializeResult<AstConsString*> DeserializeConsString(uint8_t* bytes, int offset);
 
@@ -125,7 +127,7 @@ class BinAstDeserializer {
   Isolate* isolate_;
   Parser* parser_;
   Handle<ByteArray> parse_data_;
-  std::vector<const AstRawString*> string_table_vec_;
+  std::unordered_map<uint32_t, const AstRawString*> strings_by_offset_;
   std::unordered_map<uint32_t, Variable*> variables_by_id_;
   std::unordered_map<uint32_t, AstNode*> nodes_by_offset_;
   std::unordered_map<uint32_t, std::vector<void**>> patchable_fields_by_offset_;

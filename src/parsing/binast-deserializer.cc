@@ -26,8 +26,7 @@ AstNode* BinAstDeserializer::DeserializeAst(
   if (UseCompression()) {
     return DeserializeCompressedAst(start_offset, length);
   } else {
-    ByteArray serialized_ast = *parse_data_;
-    return DeserializeUncompressedAst(start_offset, length, serialized_ast.GetDataStartAddress(), serialized_ast.length());
+    return DeserializeUncompressedAst(start_offset, length, parse_data_->GetDataStartAddress(), parse_data_->length());
   }
 }
 
@@ -56,10 +55,16 @@ AstNode* BinAstDeserializer::DeserializeCompressedAst(
 AstNode* BinAstDeserializer::DeserializeUncompressedAst(
     base::Optional<uint32_t> start_offset, base::Optional<uint32_t> length, uint8_t* uncompressed_ast, size_t uncompressed_size) {
   int offset = 0;
+  bool is_toplevel = true;
+
   auto string_table_result = DeserializeStringTable(uncompressed_ast, offset);
   offset = string_table_result.new_offset;
-  bool is_toplevel = true;
+
+  // Note: we don't deserialize the string table here because we rely on the
+  // proxy string table within the FunctionLiteral, which references offsets in
+  // the actual string table, even if we're deserializing a top-level function.
   if (start_offset.has_value()) {
+    DCHECK(start_offset.value() >= static_cast<uint32_t>(offset));
     is_toplevel = false;
     offset = start_offset.value();
   }
@@ -349,6 +354,16 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
 }
 
 BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::DeserializeFunctionLiteral(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  // Swap in a new map for string offsets.
+  std::unordered_map<uint32_t, const AstRawString*> temp_strings_by_offset;
+  strings_by_offset_.swap(temp_strings_by_offset);
+
+  auto proxy_string_table_offset = DeserializeUint32(serialized_binast, offset);
+  offset = proxy_string_table_offset.new_offset;
+
+  auto proxy_string_table = DeserializeProxyStringTable(serialized_binast, proxy_string_table_offset.value);
+  // Note: We set the offset after processing the body of the function.
+
   // TODO(binast): Kind of silly that we serialize a cons string only to deserialized into a raw string
   auto name = DeserializeConsString(serialized_binast, offset);
   offset = name.new_offset;
@@ -410,6 +425,10 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
     }
   }
 
+  // Setting the offset now to advance past the proxy string table.
+  DCHECK(static_cast<uint32_t>(offset) == proxy_string_table_offset.value);
+  offset = proxy_string_table.new_offset;
+
   FunctionLiteral* result = parser_->factory()->NewFunctionLiteral(
     raw_name, scope.value, body, expected_property_count.value, parameter_count.value,
     function_length.value, has_duplicate_parameters, function_syntax_kind,
@@ -418,6 +437,9 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   result->function_token_position_ = function_token_position.value;
   result->suspend_count_ = suspend_count.value;
   result->bit_field_ = bit_field;
+
+  // Swap the string table back for the previous function.
+  strings_by_offset_.swap(temp_strings_by_offset);
 
   return {result, offset};
 }

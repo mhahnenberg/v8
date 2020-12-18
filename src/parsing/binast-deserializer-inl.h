@@ -135,6 +135,8 @@ inline BinAstDeserializer::DeserializeResult<const char*> BinAstDeserializer::De
 }
 
 inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserializer::DeserializeRawString(uint8_t* serialized_ast, int offset) {
+  auto original_offset = offset;
+
   auto is_one_byte = DeserializeUint8(serialized_ast, offset);
   offset = is_one_byte.new_offset;
 
@@ -155,37 +157,54 @@ inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserial
     Vector<const byte> literal_bytes;
     s = parser_->ast_value_factory()->GetString(hash_field.value, is_one_byte.value, literal_bytes);
   }
-  string_table_vec_.push_back(s);
+  DCHECK(strings_by_offset_.count(original_offset) == 0);
+  strings_by_offset_[original_offset] = s;
   return {s, offset};
 }
 
-inline BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeStringTable(uint8_t* serialized_ast, int offset) {
-  auto num_non_constant_entries = DeserializeUint32(serialized_ast, offset);
-  offset = num_non_constant_entries.new_offset;
+inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserializer::DeserializeProxyString(uint8_t* serialized_ast, int offset) {
+  auto raw_offset = DeserializeUint32(serialized_ast, offset);
+  offset = raw_offset.new_offset;
 
-  string_table_vec_.reserve(num_non_constant_entries.value + parser_->ast_value_factory()->string_constants_->string_table()->occupancy());
-
-  for (uint32_t i = 0; i < num_non_constant_entries.value; ++i) {
-    auto string = DeserializeRawString(serialized_ast, offset);
-    offset = string.new_offset;
+  {
+    auto result = strings_by_offset_.find(raw_offset.value);
+    if (result != strings_by_offset_.end()) {
+      return {result->second, offset};
+    }
   }
 
-  for (AstRawStringMap::Entry* entry = parser_->ast_value_factory()->string_constants_->string_table()->Start(); entry != nullptr; entry = parser_->ast_value_factory()->string_constants_->string_table()->Next(entry)) {
-    string_table_vec_.push_back(entry->key);
+  auto result = DeserializeRawString(serialized_ast, raw_offset.value);
+  return {result.value, offset};
+} 
+
+inline BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeStringTable(uint8_t* serialized_ast, int offset) {
+  auto end_offset = DeserializeUint32(serialized_ast, offset);
+  return {nullptr, end_offset.value};
+}
+
+inline BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeProxyStringTable(uint8_t* serialized_ast, int offset) {
+  auto num_proxy_strings = DeserializeUint32(serialized_ast, offset);
+  offset = num_proxy_strings.new_offset;
+
+  strings_by_offset_.reserve(num_proxy_strings.value);
+
+  for (uint32_t i = 0; i < num_proxy_strings.value; ++i) {
+    auto string = DeserializeProxyString(serialized_ast, offset);
+    offset = string.new_offset;
   }
 
   return {nullptr, offset};
 }
 
 inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserializer::DeserializeRawStringReference(uint8_t* serialized_ast, int offset) {
-  auto string_table_index = DeserializeVarUint32(serialized_ast, offset);
-  offset = string_table_index.new_offset;
-  if (string_table_index.value == 0) {
+  auto string_table_offset = DeserializeVarUint32(serialized_ast, offset);
+  offset = string_table_offset.new_offset;
+  if (string_table_offset.value == 0) {
     return {nullptr, offset};
   }
 
-  DCHECK(string_table_index.value > 0 && string_table_index.value <= string_table_vec_.size());
-  const AstRawString* result = string_table_vec_[string_table_index.value - 1];
+  DCHECK(strings_by_offset_.count(string_table_offset.value) > 0);
+  const AstRawString* result = strings_by_offset_[string_table_offset.value];
   return {result, offset};
 }
 
@@ -438,7 +457,6 @@ inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::Deser
               result.value->GetInferredName(isolate_),
               result.value->start_position(), result.value->end_position(),
               parse_data_, start_offset.value, length.value);
-
       result.value->set_uncompiled_data_with_inner_bin_ast_parse_data(data);
     }
 
