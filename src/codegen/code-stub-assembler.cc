@@ -13968,7 +13968,7 @@ TNode<Code> CodeStubAssembler::GetSharedFunctionInfoCode(
   BIND(&check_is_uncompiled_data_with_preparse_data);
   Goto(&check_is_uncompiled_data_without_preparse_data);
   BIND(&check_is_uncompiled_data_with_binast_parse_data);
-  Goto(&check_is_uncompiled_data_with_inner_binast_parse_data);
+  Goto(&check_is_uncompiled_data_without_preparse_data);
   BIND(&check_is_uncompiled_data_with_inner_binast_parse_data);
   Goto(&check_is_uncompiled_data_without_preparse_data);
   BIND(&check_is_uncompiled_data_without_preparse_data);
