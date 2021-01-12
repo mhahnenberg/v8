@@ -5257,6 +5257,8 @@ void SharedFunctionInfo::DiscardCompiled(
     // If this is uncompiled data with a binary AST data, we can just
     // clear out the scope data and keep the uncompiled data.
     shared_info->ClearBinAstParseData();
+  } else if (shared_info->HasUncompiledDataWithInnerBinAstParseData()) {
+    shared_info->ClearInnerBinAstParseData();
   } else {
     // Create a new UncompiledData, without pre-parsed scope, and update the
     // function data to point to it. Use the raw function data setter to avoid
@@ -5462,7 +5464,6 @@ void SharedFunctionInfo::InitFromFunctionLiteral(
   ProducedPreparseData* scope_data = lit->produced_preparse_data();
   if (scope_data != nullptr) {
     Handle<PreparseData> preparse_data = scope_data->Serialize(isolate);
-
     data = isolate->factory()->NewUncompiledDataWithPreparseData(
         lit->GetInferredName(isolate), lit->start_position(),
         lit->end_position(), preparse_data);
@@ -5475,6 +5476,7 @@ void SharedFunctionInfo::InitFromFunctionLiteral(
   }
 
   shared_info->set_uncompiled_data(*data);
+  DCHECK(lit->has_uncompiled_data_with_inner_bin_ast_parse_data() || !shared_info->HasUncompiledDataWithInnerBinAstParseData());
 }
 
 template EXPORT_TEMPLATE_DEFINE(V8_EXPORT_PRIVATE) void SharedFunctionInfo::
@@ -5607,6 +5609,8 @@ void SharedFunctionInfo::SetPosition(int start_position, int end_position) {
     } else if (HasUncompiledDataWithBinAstParseData()) {
       // Clear out binary AST data
       ClearBinAstParseData();
+    } else if (HasUncompiledDataWithInnerBinAstParseData()) {
+      ClearInnerBinAstParseData();
     }
     uncompiled_data().set_start_position(start_position);
     uncompiled_data().set_end_position(end_position);

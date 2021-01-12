@@ -274,10 +274,11 @@ class JSFinalizationRegistry::BodyDescriptor final : public BodyDescriptorBase {
 class SharedFunctionInfo::BodyDescriptor final : public BodyDescriptorBase {
  public:
   static bool IsValidSlot(Map map, HeapObject obj, int offset) {
-    static_assert(kEndOfWeakFieldsOffset == kStartOfStrongFieldsOffset,
-                  "Leverage that strong fields directly follow weak fields"
-                  "to call FixedBodyDescriptor<...>::IsValidSlot below");
-    return FixedBodyDescriptor<kStartOfWeakFieldsOffset,
+    // TODO(binast): Undo this change.
+    // static_assert(kEndOfWeakFieldsOffset == kStartOfStrongFieldsOffset,
+    //               "Leverage that strong fields directly follow weak fields "
+    //               "to call FixedBodyDescriptor<...>::IsValidSlot below");
+    return FixedBodyDescriptor<kStartOfStrongFieldsOffset,
                                kEndOfStrongFieldsOffset,
                                kAlignedSize>::IsValidSlot(map, obj, offset);
   }
@@ -285,7 +286,8 @@ class SharedFunctionInfo::BodyDescriptor final : public BodyDescriptorBase {
   template <typename ObjectVisitor>
   static inline void IterateBody(Map map, HeapObject obj, int object_size,
                                  ObjectVisitor* v) {
-    IterateCustomWeakPointer(obj, kFunctionDataOffset, v);
+    // TODO(binast): Undo this change.
+    // IterateCustomWeakPointer(obj, kFunctionDataOffset, v);
     IteratePointers(obj, SharedFunctionInfo::kStartOfStrongFieldsOffset,
                     SharedFunctionInfo::kEndOfStrongFieldsOffset, v);
   }

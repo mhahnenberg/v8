@@ -24,6 +24,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   BinAstSerializeVisitor(AstValueFactory* ast_value_factory)
     : BinAstVisitor(),
       ast_value_factory_(ast_value_factory),
+      active_function_literal_(nullptr),
       encountered_unhandled_nodes_(0),
       skipped_functions_(0),
       serialized_functions_(0) {
@@ -101,6 +102,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeConsString(const AstConsString* cons_string);
   void SerializeRawStringReference(const AstRawString* s);
   void SerializeStringTable(const AstConsString* function_name);
+  void SerializeProxyStringTable();
   void SerializeVariable(Variable* variable);
   void SerializeVariableReference(Variable* variable);
   void SerializeVariableOrReference(Variable* variable);
@@ -122,12 +124,14 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void PatchPendingNodeReferences(const AstNode* node, size_t offset);
 
   AstValueFactory* ast_value_factory_;
-  std::unordered_map<const AstRawString*, uint32_t> string_table_indices_;
+  std::unordered_map<const AstRawString*, uint32_t> string_offsets_;
   std::vector<uint8_t> byte_data_;
   std::unordered_map<Variable*, uint32_t> variable_ids_;
   std::unordered_map<VariableProxy*, int> var_proxy_ids;
   std::unordered_map<const AstNode*, uint32_t> node_offsets_;
   std::unordered_map<const AstNode*, std::vector<uint32_t>> patchable_node_reference_offsets_;
+  std::unordered_map<FunctionLiteral*, std::unordered_set<uint32_t>> used_string_offsets_by_function_;
+  FunctionLiteral* active_function_literal_;
   int encountered_unhandled_nodes_;
   int skipped_functions_;
   int serialized_functions_;
@@ -255,11 +259,14 @@ inline void BinAstSerializeVisitor::SerializeVarUint32(uint32_t value) {
 
 inline void BinAstSerializeVisitor::SerializeRawString(const AstRawString* s) {
   DCHECK(s != nullptr);
-  DCHECK(string_table_indices_.count(s) == 0);
+  DCHECK(string_offsets_.count(s) == 0);
   DCHECK(s->byte_length() >= 0);
   uint32_t length = s->byte_length();
   bool is_one_byte = s->is_one_byte();
   uint32_t hash_field = s->hash_field();
+
+  uint32_t current_offset = static_cast<uint32_t>(byte_data_.size());
+  string_offsets_.insert({s, current_offset});
 
   SerializeUint8(is_one_byte);
   SerializeUint32(hash_field);
@@ -273,14 +280,17 @@ inline void BinAstSerializeVisitor::SerializeRawString(const AstRawString* s) {
 }
 
 inline void BinAstSerializeVisitor::SerializeRawStringReference(const AstRawString* s) {
-  auto lookup_result = string_table_indices_.find(s);
-  if (lookup_result == string_table_indices_.end()) {
+  auto lookup_result = string_offsets_.find(s);
+  if (lookup_result == string_offsets_.end()) {
     printf("ERROR: Failed to find raw string reference for '%.*s'\n", s->byte_length(), s->raw_data());
     DCHECK(false);
   }
-  // DCHECK(lookup_result != string_table_indices_.end());
-  uint32_t string_table_index = lookup_result->second;
-  SerializeVarUint32(string_table_index);
+
+  DCHECK(string_offsets_.count(s) != 0);
+  used_string_offsets_by_function_[active_function_literal_].insert(string_offsets_[s]);
+
+  uint32_t string_table_offset = lookup_result->second;
+  SerializeVarUint32(string_table_offset);
 }
 
 inline void BinAstSerializeVisitor::SerializeConsString(const AstConsString* cons_string) {
@@ -293,7 +303,7 @@ inline void BinAstSerializeVisitor::SerializeConsString(const AstConsString* con
   uint32_t length = 0;
   for (const AstRawString* string : strings) {
     DCHECK(string != nullptr);
-    DCHECK(string_table_indices_.count(string) == 1);
+    DCHECK(string_offsets_.count(string) == 1);
     (void)string;
     length += 1;
   }
@@ -307,7 +317,6 @@ inline void BinAstSerializeVisitor::SerializeConsString(const AstConsString* con
 
 inline void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* function_name) {
   uint32_t num_entries = ast_value_factory_->string_table_.occupancy();
-  uint32_t num_constant_entries = ast_value_factory_->string_constants_->string_table()->occupancy();
   // We serialize the outer function raw_name too.
   // TODO(binast): Do we need to?
   if (function_name != nullptr) {
@@ -318,43 +327,31 @@ inline void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* fu
       }
     }
   }
-  uint32_t num_non_constant_entries = num_entries - num_constant_entries;
-  DCHECK(num_entries >= num_constant_entries);
-  SerializeUint32(num_non_constant_entries);
-  uint32_t current_index = 1;
+
+  DCHECK(num_entries > 0);
+  // Record the current offset to patch the total size of the string table later.
+  size_t string_table_start_offset = byte_data_.size();
+  SerializeUint32(0);
+
+  SerializeUint32(num_entries);
   // Insert non-constant strings
   for (base::HashMap::Entry* entry = ast_value_factory_->string_table_.Start(); entry != nullptr; entry = ast_value_factory_->string_table_.Next(entry)) {
     const AstRawString* s = reinterpret_cast<const AstRawString*>(entry->key);
-    // We don't want to serialize string constants that are shared between Isolates
-    base::HashMap::Entry* string_const_entry = ast_value_factory_->string_constants_->string_table()->Lookup(const_cast<AstRawString*>(s), s->Hash());
-    if (string_const_entry != nullptr) {
-      continue;
-    }
     SerializeRawString(s);
-    string_table_indices_.insert({s, current_index});
-    current_index += 1;
   }
-  DCHECK(current_index - 1 == num_non_constant_entries);
 
   if (function_name != nullptr) {
     for (const AstRawString* s : function_name->ToRawStrings()) {
       void* key = const_cast<AstRawString*>(s);
       if (ast_value_factory_->string_table_.Lookup(key, s->Hash()) == nullptr) {
         SerializeRawString(s);
-        string_table_indices_.insert({s, current_index});
-        current_index += 1;
       }
     }
   }
 
-  // Only insert constant strings into the table (i.e. don't serialize their contents)
-  for (base::HashMap::Entry* entry = ast_value_factory_->string_constants_->string_table()->Start(); entry != nullptr; entry = ast_value_factory_->string_constants_->string_table()->Next(entry)) {
-    const AstRawString* s = reinterpret_cast<const AstRawString*>(entry->key);
-    string_table_indices_.insert({s, current_index});
-    current_index += 1;
-  }
-
-  DCHECK(current_index == num_entries + 1);
+  DCHECK(string_offsets_.size() == num_entries);
+  size_t string_table_end_offset = byte_data_.size();
+  SerializeUint32(static_cast<uint32_t>(string_table_end_offset), static_cast<uint32_t>(string_table_start_offset));
 }
 
 inline bool BinAstSerializeVisitor::SerializeAst(AstNode* root) {
@@ -703,7 +700,25 @@ inline void BinAstSerializeVisitor::RecordBreakableStatement(BreakableStatement*
   PatchPendingNodeReferences(node, current_offset);
 }
 
+class ActiveFunctionLiteralScope {
+ public:
+  ActiveFunctionLiteralScope(FunctionLiteral** active_literal, FunctionLiteral* next_literal)
+    : active_literal_(active_literal),
+      previous_literal_(*active_literal_) {
+    *active_literal_ = next_literal;
+  }
+
+  ~ActiveFunctionLiteralScope() {
+    *active_literal_ = previous_literal_;
+  }
+
+ private:
+  FunctionLiteral** active_literal_;
+  FunctionLiteral* previous_literal_;
+};
+
 inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
+  ActiveFunctionLiteralScope function_literal_scope(&active_function_literal_, function_literal);
   size_t start = byte_data_.size();
 
   int original_unsupported_nodes = encountered_unhandled_nodes_;
@@ -716,6 +731,12 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
 
   // make placeholder for length, save index so we can insert it later
   length_index.emplace(byte_data_.size());
+  SerializeUint32(0);
+
+  // This tells us how much to offset to get to the proxy string table since we
+  // can't insert it here because it would mess up the indexes inside the serialized
+  // inner functions.
+  size_t proxy_string_table_offset_index = byte_data_.size();
   SerializeUint32(0);
 
   const AstConsString* name = function_literal->raw_name();
@@ -734,15 +755,27 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
     VisitNode(statement);
   }
 
+  SerializeUint32(static_cast<uint32_t>(byte_data_.size()), static_cast<uint32_t>(proxy_string_table_offset_index));
+  SerializeProxyStringTable();
+
   int unhandled_inner_nodes = encountered_unhandled_nodes_ - original_unsupported_nodes;
   if (unhandled_inner_nodes > 0) {
     skipped_functions_++;
-  } 
+  }
 
   // Calculate length and insert at length_index
   auto length = byte_data_.size() - start;
   DCHECK(length <= UINT32_MAX);
   SerializeUint32(static_cast<uint32_t>(length), length_index.value());
+}
+
+inline void BinAstSerializeVisitor::SerializeProxyStringTable() {
+  std::unordered_set<uint32_t>& raw_string_offsets = used_string_offsets_by_function_[active_function_literal_];
+
+  SerializeUint32(static_cast<uint32_t>(raw_string_offsets.size()));
+  for (uint32_t offset : raw_string_offsets) {
+    SerializeUint32(offset);
+  }
 }
 
 inline void BinAstSerializeVisitor::VisitBlock(Block* block) {
