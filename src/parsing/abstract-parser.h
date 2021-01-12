@@ -2006,16 +2006,17 @@ void AbstractParser<Impl>::ParseFunction(
 
   long long deserialize_microseconds = 0;
   FunctionLiteral* result = nullptr;
+  bool is_inner_binast = false;
   if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData() ||
                   shared_info->HasUncompiledDataWithInnerBinAstParseData())) {
     RuntimeCallTimerScope runtime_timer(
         impl()->runtime_call_stats_, RuntimeCallCounterId::kDeserializeBinAst);
     auto start = std::chrono::high_resolution_clock::now();
-    bool is_inner = shared_info->HasUncompiledDataWithInnerBinAstParseData();
+    is_inner_binast = shared_info->HasUncompiledDataWithInnerBinAstParseData();
     Handle<ByteArray> binast_parse_data;
     base::Optional<uint32_t> offset;
     base::Optional<uint32_t> length;
-    if (is_inner) {
+    if (is_inner_binast) {
       Handle<UncompiledDataWithInnerBinAstParseData> uncompiled_data =
           handle(shared_info->uncompiled_data_with_inner_bin_ast_parse_data(),
                 isolate);
@@ -2051,7 +2052,7 @@ void AbstractParser<Impl>::ParseFunction(
       deserialize_microseconds =
         std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
       int function_length = result->end_position() - result->start_position();
-      printf("PREPARSE++: Deserialize time for %sfunction (%d bytes) in %lld us", is_inner ? "inner " : "", function_length, deserialize_microseconds);
+      printf("PREPARSE++: Deserialize time for %sfunction (%d bytes) in %lld us", is_inner_binast ? "inner " : "", function_length, deserialize_microseconds);
     }
   }
 
