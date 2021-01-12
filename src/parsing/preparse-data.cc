@@ -605,6 +605,32 @@ BaseConsumedPreparseData<Data>::GetDataForSkippableFunction(
 }
 
 template <class Data>
+bool BaseConsumedPreparseData<Data>::IsFunctionOffsetNextSkippable(int start_position) {
+  typename ByteData::ReadingScope reading_scope(this);
+  base::Optional<int32_t> start_position_from_data = scope_data_->PeekVarint32();
+  // TODO: Is it sufficient/okay to just rely on whether we can successfully read a Varint32?
+  if (start_position_from_data.has_value()) {
+    return start_position == *start_position_from_data;
+  } else {
+    return false;
+  }
+}
+
+template <class Data>
+int BaseConsumedPreparseData<Data>::NextSkippableFunctionOffset() {
+  typename ByteData::ReadingScope reading_scope(this);
+  base::Optional<int32_t> start_position_from_data = scope_data_->PeekVarint32();
+  DCHECK(start_position_from_data.has_value());
+  return *start_position_from_data;
+}
+
+template <class Data>
+void BaseConsumedPreparseData<Data>::ResetIndex() {
+  scope_data_->ResetIndex();
+  DCHECK(VerifyDataStart());
+}
+
+template <class Data>
 void BaseConsumedPreparseData<Data>::RestoreScopeAllocationData(
     DeclarationScope* scope, AstValueFactory* ast_value_factory, Zone* zone) {
   DCHECK_EQ(scope->scope_type(), ScopeType::FUNCTION_SCOPE);
@@ -737,10 +763,14 @@ template <class Data>
 bool BaseConsumedPreparseData<Data>::VerifyDataStart() {
   typename ByteData::ReadingScope reading_scope(this);
   // The first uint32 contains the size of the skippable function data.
+  // printf("VerifyDataStart Reading scope_data_start\n");
   int scope_data_start = scope_data_->ReadUint32();
+  // printf("VerifyDataStart SetPosition scope_data_start\n");
   scope_data_->SetPosition(scope_data_start);
+  // printf("Checking for ByteData::kMagicValue\n");
   CHECK_EQ(scope_data_->ReadUint32(), ByteData::kMagicValue);
   // The first data item is scope_data_start. Skip over it.
+  // printf("Setting position to ByteData:kPlaceholderSize\n");
   scope_data_->SetPosition(ByteData::kPlaceholderSize);
   return true;
 }

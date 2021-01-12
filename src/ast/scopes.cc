@@ -579,6 +579,8 @@ bool DeclarationScope::Analyze(ParseInfo* info) {
   DCHECK_NOT_NULL(info->literal());
   DeclarationScope* scope = info->literal()->scope();
 
+  // printf("Analyzing DeclScope: literal scope: %p\n", scope);
+
   base::Optional<AllowHandleDereference> allow_deref;
 #ifdef DEBUG
   if (scope->outer_scope() && !scope->outer_scope()->scope_info_.is_null()) {
@@ -604,6 +606,7 @@ bool DeclarationScope::Analyze(ParseInfo* info) {
   if (scope->must_use_preparsed_scope_data_) {
     DCHECK_EQ(scope->scope_type_, ScopeType::FUNCTION_SCOPE);
     allow_deref.emplace();
+    printf("RestoreScopeAllocationData: %p\n", scope);
     info->consumed_preparse_data()->RestoreScopeAllocationData(
         scope, info->ast_value_factory(), info->zone());
   }

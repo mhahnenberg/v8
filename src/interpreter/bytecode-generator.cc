@@ -1591,6 +1591,7 @@ void BytecodeGenerator::VisitGlobalDeclarations(Declaration::List* decls) {
   RegisterAllocationScope register_scope(this);
   for (Declaration* decl : *decls) {
     Variable* var = decl->var();
+    // printf("Visiting global var '%.*s'\n", var->raw_name()->byte_length(), var->raw_name()->raw_data());
     DCHECK(var->is_used());
     if (var->location() == VariableLocation::UNALLOCATED) {
       // var or function.

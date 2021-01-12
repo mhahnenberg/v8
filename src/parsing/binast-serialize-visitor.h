@@ -107,6 +107,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeVariableReference(Variable* variable);
   void SerializeVariableOrReference(Variable* variable);
   void SerializeScopeVariableMap(Scope* scope);
+  void SerializeScopeUnresolvedList(Scope* scope);
   void SerializeDeclaration(Scope* scope, Declaration* decl);
   void SerializeScopeDeclarations(Scope* scope);
   void SerializeScopeParameters(DeclarationScope* scope);
@@ -467,6 +468,19 @@ inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
   DCHECK(total_nonlocal_vars == serialized_nonlocal_vars);
 }
 
+inline void BinAstSerializeVisitor::SerializeScopeUnresolvedList(Scope* scope) {
+  auto original_offset = byte_data_.size();
+  SerializeUint32(0); // for patching the number of entries later
+
+  uint32_t num_unresolved = 0;
+  for (VariableProxy* proxy = scope->unresolved_list_.first(); proxy != nullptr; proxy = proxy->next_unresolved()) {
+    SerializeVariableProxy(proxy);
+    num_unresolved++;
+  }
+
+  SerializeUint32(num_unresolved, original_offset);
+}
+
 inline void BinAstSerializeVisitor::SerializeDeclaration(Scope* scope, Declaration* decl) {
   SerializeInt32(decl->position());
   SerializeUint8(decl->type());
@@ -529,6 +543,7 @@ inline void BinAstSerializeVisitor::SerializeVariableOrReference(Variable* varia
 
 inline void BinAstSerializeVisitor::SerializeCommonScopeFields(Scope* scope) {
   SerializeScopeVariableMap(scope);
+  SerializeScopeUnresolvedList(scope);
   SerializeScopeDeclarations(scope);
 #ifdef DEBUG
   if (scope->scope_name_ == nullptr) {

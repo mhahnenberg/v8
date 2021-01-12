@@ -1683,6 +1683,12 @@ void AbstractParser<Impl>::ParseProgram(
   FunctionLiteral* result = impl()->DoParseProgram(isolate, info);
   MaybeResetCharacterStream(info, result);
   MaybeProcessSourceRanges(info, result, impl()->stack_limit_);
+
+  // Handle<String> source_code = Object::ToString(isolate, SharedFunctionInfo::GetSourceCode(shared_info)).ToHandleChecked();
+  // std::unique_ptr<char[]> raw_source_code = source_code->ToCString();
+  // printf("PREPARSE++: parsing function '");
+  // printf("' at offset %d with source code: \"\n", start_position);
+  // printf("%s\n\"\n", raw_source_code.get());
   impl()->PostProcessParseResult(isolate, info, result);
 
   HandleSourceURLComments(isolate, script);
@@ -2007,6 +2013,7 @@ void AbstractParser<Impl>::ParseFunction(
   long long deserialize_microseconds = 0;
   FunctionLiteral* result = nullptr;
   bool is_inner_binast = false;
+  MaybeHandle<PreparseData> preparse_data;
   if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData() ||
                   shared_info->HasUncompiledDataWithInnerBinAstParseData())) {
     RuntimeCallTimerScope runtime_timer(
@@ -2022,6 +2029,9 @@ void AbstractParser<Impl>::ParseFunction(
                 isolate);
 
       binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
+      if (!uncompiled_data->preparse_data().IsNull()) {
+        preparse_data = handle(PreparseData::cast(uncompiled_data->preparse_data()), isolate);
+      }
 
       offset.emplace(uncompiled_data->data_offset());
       length.emplace(uncompiled_data->data_length());
@@ -2030,6 +2040,9 @@ void AbstractParser<Impl>::ParseFunction(
           shared_info->uncompiled_data_with_binast_parse_data(), isolate);
 
       binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
+      if (!uncompiled_data->preparse_data().IsNull()) {
+        preparse_data = handle(PreparseData::cast(uncompiled_data->preparse_data()), isolate);
+      }
     }
 
     FunctionLiteral* literal;
@@ -2042,7 +2055,7 @@ void AbstractParser<Impl>::ParseFunction(
       typename ParserBase<Impl>::FunctionState function_state(
           &impl()->function_state_, &impl()->scope_, outer_function);
       typename ParserBase<Impl>::BlockState block_state(&impl()->scope_, outer);
-      BinAstDeserializer deserializer(isolate, impl(), binast_parse_data);
+      BinAstDeserializer deserializer(isolate, impl(), binast_parse_data, preparse_data);
       AstNode* ast_node = deserializer.DeserializeAst(offset, length);
       literal = ast_node->AsFunctionLiteral();
       DCHECK(literal != nullptr);
@@ -2055,6 +2068,12 @@ void AbstractParser<Impl>::ParseFunction(
       printf("PREPARSE++: Deserialize time for %sfunction (%d bytes) in %lld us", is_inner_binast ? "inner " : "", function_length, deserialize_microseconds);
     }
   }
+
+  // Handle<String> source_code = Object::ToString(isolate, SharedFunctionInfo::GetSourceCode(shared_info)).ToHandleChecked();
+  // std::unique_ptr<char[]> raw_source_code = source_code->ToCString();
+  // printf("PREPARSE++: parsing function '");
+  // printf("' at offset %d with source code: \"\n", start_position);
+  // printf("%s\n\"\n", raw_source_code.get());
 
   if (V8_UNLIKELY(result == nullptr && shared_info->private_name_lookup_skips_outer_class() &&
                   impl()->original_scope_->is_class_scope())) {

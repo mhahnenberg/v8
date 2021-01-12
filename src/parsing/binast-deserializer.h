@@ -21,7 +21,7 @@ class Parser;
 
 class BinAstDeserializer {
  public:
-  BinAstDeserializer(Isolate* isolate, Parser* parser, Handle<ByteArray> parse_data);
+  BinAstDeserializer(Isolate* isolate, Parser* parser, Handle<ByteArray> parse_data, MaybeHandle<PreparseData> preparse_data);
 
   AstNode* DeserializeAst(base::Optional<uint32_t> start_offset = base::nullopt,
                           base::Optional<uint32_t> length = base::nullopt);
@@ -42,6 +42,8 @@ class BinAstDeserializer {
                                       base::Optional<uint32_t> length,
                                       uint8_t* uncompressed_ast,
                                       size_t uncompressed_size);
+
+  void ConsumePreparseData();
 
   DeserializeResult<AstNode*> DeserializeMaybeAstNode(uint8_t* serialized_binast, int offset);
 
@@ -78,12 +80,13 @@ class BinAstDeserializer {
   DeserializeResult<Variable*> DeserializeScopeVariableOrReference(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeNonScopeVariableOrReference(uint8_t* serialized_binast, int offset);
   DeserializeResult<std::nullptr_t> DeserializeScopeVariableMap(uint8_t* serialized_binast, int offset, Scope* scope);
+  DeserializeResult<std::nullptr_t> DeserializeScopeUnresolvedList(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Declaration*> DeserializeDeclaration(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<std::nullptr_t> DeserializeScopeDeclarations(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<std::nullptr_t> DeserializeScopeParameters(uint8_t* serialized_binast, int offset, DeclarationScope* scope);
   DeserializeResult<std::nullptr_t> DeserializeCommonScopeFields(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Scope*> DeserializeScope(uint8_t* serialized_binast, int offset);
-  DeserializeResult<DeclarationScope*> DeserializeDeclarationScope(uint8_t* serialized_binast, int offset);
+  DeserializeResult<DeclarationScope*> DeserializeDeclarationScope(uint8_t* serialized_binast, int offset, bool can_skip_function);
 
   DeserializeResult<AstNode*> DeserializeAstNode(uint8_t* serialized_ast, int offset, bool is_toplevel = false);
   DeserializeResult<FunctionLiteral*> DeserializeFunctionLiteral(uint8_t* serialized_ast, uint32_t bit_field, int32_t position, int offset);
@@ -91,7 +94,7 @@ class BinAstDeserializer {
   DeserializeResult<BinaryOperation*> DeserializeBinaryOperation(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<Property*> DeserializeProperty(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<ExpressionStatement*> DeserializeExpressionStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<VariableProxy*> DeserializeVariableProxy(uint8_t* serialized_binast, int offset);
+  DeserializeResult<VariableProxy*> DeserializeVariableProxy(uint8_t* serialized_binast, int offset, bool add_unresolved = true);
   DeserializeResult<VariableProxyExpression*> DeserializeVariableProxyExpression(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<Literal*> DeserializeLiteral(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
   DeserializeResult<Call*> DeserializeCall(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset);
@@ -124,10 +127,13 @@ class BinAstDeserializer {
   Isolate* isolate_;
   Parser* parser_;
   Handle<ByteArray> parse_data_;
+  MaybeHandle<PreparseData> preparse_data_;
   std::unordered_map<uint32_t, const AstRawString*> strings_by_offset_;
   std::unordered_map<uint32_t, Variable*> variables_by_id_;
   std::unordered_map<uint32_t, AstNode*> nodes_by_offset_;
   std::unordered_map<uint32_t, std::vector<void**>> patchable_fields_by_offset_;
+  std::unordered_map<int, ProducedPreparseData*> produced_preparse_data_by_offset_;
+  bool is_root_fn_;
 };
 
 }  // namespace internal

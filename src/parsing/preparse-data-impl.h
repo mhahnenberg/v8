@@ -67,6 +67,8 @@ class BaseConsumedPreparseData : public ConsumedPreparseData {
     void SetPosition(int position) {
       DCHECK_LE(position, data_.data_length());
       index_ = position;
+      LogIndexAndData("SetPosition");
+      // base::OS::DebugBreak();
     }
 
     size_t RemainingBytes() const {
@@ -80,10 +82,19 @@ class BaseConsumedPreparseData : public ConsumedPreparseData {
       return index_ <= data_.data_length() && bytes <= RemainingBytes();
     }
 
+    void LogIndexAndData(const char* label) {
+      // printf("%s: index_ = %d\n", label, index_);
+      // printf("%s: data_[index_] = %d\n", label, data_.get(index_));
+      // for (int i = 0; i < data_.data_length() && i < 32; ++i) {
+      //   printf("data_[%d] = %x\n", i, data_.get(i));
+      // }
+    }
+
     int32_t ReadUint32() {
       DCHECK(has_data_);
       DCHECK(HasRemainingBytes(kUint32Size));
       // Check that there indeed is an integer following.
+      LogIndexAndData("ReadUint32");
       DCHECK_EQ(data_.get(index_++), kUint32Size);
       int32_t result = data_.get(index_) + (data_.get(index_ + 1) << 8) +
                        (data_.get(index_ + 2) << 16) +
@@ -94,6 +105,7 @@ class BaseConsumedPreparseData : public ConsumedPreparseData {
     }
 
     int32_t ReadVarint32() {
+      LogIndexAndData("ReadVarint32");
       DCHECK(HasRemainingBytes(kVarint32MinSize));
       DCHECK_EQ(data_.get(index_++), kVarint32MinSize);
       int32_t value = 0;
@@ -110,7 +122,18 @@ class BaseConsumedPreparseData : public ConsumedPreparseData {
       return value;
     }
 
+    base::Optional<int32_t> PeekVarint32() {
+      auto original_index = index_;
+      if (!HasRemainingBytes(kVarint32MinSize) || data_.get(index_) != kVarint32MinSize) {
+        return base::Optional<int32_t>();
+      }
+      auto result = ReadVarint32();
+      index_ = original_index;
+      return result;
+    }
+
     uint8_t ReadUint8() {
+      LogIndexAndData("ReadUint8");
       DCHECK(has_data_);
       DCHECK(HasRemainingBytes(kUint8Size));
       // Check that there indeed is a byte following.
@@ -120,6 +143,7 @@ class BaseConsumedPreparseData : public ConsumedPreparseData {
     }
 
     uint8_t ReadQuarter() {
+      LogIndexAndData("ReadQuarter");
       DCHECK(has_data_);
       if (stored_quarters_ == 0) {
         DCHECK(HasRemainingBytes(kUint8Size));
@@ -134,6 +158,10 @@ class BaseConsumedPreparseData : public ConsumedPreparseData {
       --stored_quarters_;
       stored_byte_ <<= 2;
       return result;
+    }
+
+    void ResetIndex() {
+      index_ = 0;
     }
 
    private:
@@ -157,9 +185,15 @@ class BaseConsumedPreparseData : public ConsumedPreparseData {
       int* function_length, int* num_inner_functions, bool* uses_super_property,
       LanguageMode* language_mode) final;
 
+  bool IsFunctionOffsetNextSkippable(int start_position);
+  int NextSkippableFunctionOffset();
+
+
   void RestoreScopeAllocationData(DeclarationScope* scope,
                                   AstValueFactory* ast_value_factory,
                                   Zone* zone) final;
+
+  void ResetIndex();
 
 #ifdef DEBUG
   bool VerifyDataStart();

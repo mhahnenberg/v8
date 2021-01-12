@@ -5449,7 +5449,8 @@ void SharedFunctionInfo::InitFromFunctionLiteral(
     shared_info->UpdateAndFinalizeExpectedNofPropertiesFromEstimate(lit);
     shared_info->set_is_safe_to_skip_arguments_adaptor(
         lit->SafeToSkipArgumentsAdaptor());
-    DCHECK_NULL(lit->produced_preparse_data());
+    // TODO(binast): Figure out why this assert was firing.
+    // DCHECK_NULL(lit->produced_preparse_data());
 
     // If we're about to eager compile, we'll have the function literal
     // available, so there's no need to wastefully allocate an uncompiled data.

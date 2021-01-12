@@ -198,6 +198,7 @@ RUNTIME_FUNCTION(Runtime_DeclareGlobals) {
 
     if (is_var) {
       name = Handle<String>::cast(decl);
+      // printf("Declaring a global var '%s'\n", name->ToCString().get());
       value = isolate->factory()->undefined_value();
     } else {
       Handle<SharedFunctionInfo> sfi = Handle<SharedFunctionInfo>::cast(decl);

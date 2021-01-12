@@ -175,6 +175,7 @@ class V8_EXPORT_PRIVATE Scope : public NON_EXPORTED_BASE(ZoneObject) {
     if (must_use_preparsed_scope_data_) {
       return;
     }
+    printf("SetMustUsePreparseData: %p\n", this);
     must_use_preparsed_scope_data_ = true;
     if (outer_scope_) {
       outer_scope_->SetMustUsePreparseData();

@@ -11,6 +11,10 @@
 #include "src/base/macros.h"
 
 namespace v8 {
+
+namespace internal {
+  class BinAstDeserializer;
+}
 namespace base {
 
 template <typename T>
@@ -27,6 +31,7 @@ struct ThreadedListTraits {
 template <typename T, typename BaseClass,
           typename TLTraits = ThreadedListTraits<T>>
 class ThreadedListBase final : public BaseClass {
+  friend class v8::internal::BinAstDeserializer;
  public:
   ThreadedListBase() : head_(nullptr), tail_(&head_) {}
   void Add(T* v) {
