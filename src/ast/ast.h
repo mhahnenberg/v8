@@ -2480,6 +2480,10 @@ class FunctionLiteral final : public Expression {
     return uncompiled_data_with_inner_bin_ast_parse_data_;
   }
 
+  bool has_uncompiled_data_with_inner_bin_ast_parse_data() const {
+    return !uncompiled_data_with_inner_bin_ast_parse_data_.is_null();
+  }
+
   void set_uncompiled_data_with_inner_bin_ast_parse_data(
       Handle<UncompiledDataWithInnerBinAstParseData> data) {
     uncompiled_data_with_inner_bin_ast_parse_data_ = data;
@@ -2556,6 +2560,7 @@ class FunctionLiteral final : public Expression {
   ProducedPreparseData* produced_preparse_data_;
   ProducedBinAstParseData* produced_binast_parse_data_;
 
+  // TODO(binast): Change this to raw zone pointer to more closely imitate the other preparse behavior.
   Handle<UncompiledDataWithInnerBinAstParseData>
       uncompiled_data_with_inner_bin_ast_parse_data_;
 };
