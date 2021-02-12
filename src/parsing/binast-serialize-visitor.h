@@ -956,6 +956,7 @@ inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_lit
   SerializeAstNodeHeader(object_literal);
 
   SerializeInt32(object_literal->properties()->length());
+  SerializeInt32(object_literal->properties_count()); // i.e. boilerplate_properties
 
   for (int i = 0; i < object_literal->properties()->length(); i++) {
     auto property = object_literal->properties()->at(i);
@@ -1011,7 +1012,12 @@ inline void BinAstSerializeVisitor::VisitTryCatchStatement(
     TryCatchStatement* try_catch_statement) {
   SerializeAstNodeHeader(try_catch_statement);
   VisitNode(try_catch_statement->try_block());
-  SerializeScope(try_catch_statement->scope());
+  if (try_catch_statement->scope()) {
+    SerializeUint8(1);
+    SerializeScope(try_catch_statement->scope());
+  } else {
+    SerializeUint8(0);
+  }
   VisitNode(try_catch_statement->catch_block());
 }
 
