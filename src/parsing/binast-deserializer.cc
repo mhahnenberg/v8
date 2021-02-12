@@ -448,10 +448,11 @@ BinAstDeserializer::DeserializeResult<ObjectLiteral*> BinAstDeserializer::Deseri
   auto properties_length = DeserializeInt32(serialized_binast, offset);
   offset = properties_length.new_offset;
 
+  auto boilerplate_properties = DeserializeInt32(serialized_binast, offset);
+  offset = boilerplate_properties.new_offset;
+
   std::vector<void*> pointer_buffer;
   ScopedPtrList<ObjectLiteral::Property> properties(&pointer_buffer);
-
-  int number_of_boilerplate_properties = 0;  // add increments for this
 
   for (int i = 0; i < properties_length.value; i++) {
     auto key = DeserializeAstNode(serialized_binast, offset);
@@ -472,17 +473,12 @@ BinAstDeserializer::DeserializeResult<ObjectLiteral*> BinAstDeserializer::Deseri
         static_cast<ObjectLiteral::Property::Kind>(kind.value),
         is_computed_name.value);
 
-    if (parser_->IsBoilerplateProperty(property) &&
-        !is_computed_name.value) {
-      number_of_boilerplate_properties++;
-    }
-
     properties.Add(property);
   }
 
   bool has_rest_property = false;
   ObjectLiteral* result = parser_->factory()->NewObjectLiteral(
-      properties, number_of_boilerplate_properties, position,
+      properties, boilerplate_properties.value, position,
       has_rest_property);
   result->bit_field_ = bit_field;
   return {result, offset};
@@ -575,23 +571,30 @@ BinAstDeserializer::DeserializeTryCatchStatement(uint8_t* serialized_binast,
   auto try_block = DeserializeAstNode(serialized_binast, offset);
   offset = try_block.new_offset;
 
-  auto scope = DeserializeScope(serialized_binast, offset);
-  offset = scope.new_offset;
+  auto has_scope = DeserializeUint8(serialized_binast, offset);
+  offset = has_scope.new_offset;
 
+  Scope* scope_ptr = nullptr;
   Block* catch_block = nullptr;
-  if (scope.value == nullptr) {
+  if (has_scope.value) {
+    auto scope = DeserializeScope(serialized_binast, offset);
+    offset = scope.new_offset;
+
+    DCHECK(scope.value != nullptr);
+    scope_ptr = scope.value;
+
+    Parser::BlockState catch_variable_block_state(&parser_->scope_, scope_ptr);
     auto catch_block_result = DeserializeAstNode(serialized_binast, offset);
     catch_block = static_cast<Block*>(catch_block_result.value);
     offset = catch_block_result.new_offset;
   } else {
-    Parser::BlockState catch_variable_block_state(&parser_->scope_, scope.value);
     auto catch_block_result = DeserializeAstNode(serialized_binast, offset);
     catch_block = static_cast<Block*>(catch_block_result.value);
     offset = catch_block_result.new_offset;
   }
 
   TryCatchStatement* result = parser_->factory()->NewTryCatchStatement(
-      static_cast<Block*>(try_block.value), scope.value,
+      static_cast<Block*>(try_block.value), scope_ptr,
       catch_block, position);
   result->bit_field_ = bit_field;
   return {result, offset};
