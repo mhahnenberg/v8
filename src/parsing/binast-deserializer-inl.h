@@ -27,24 +27,12 @@ inline Zone* BinAstDeserializer::zone() {
 
 // TODO(binast): Use templates to de-dupe some of these functions.
 inline BinAstDeserializer::DeserializeResult<uint64_t> BinAstDeserializer::DeserializeUint64(uint8_t* bytes, int offset) {
-  uint64_t result = 0;
-  for (int i = 0; i < 8; ++i) {
-    size_t shift = sizeof(uint8_t) * 8 * i;
-    uint64_t unshifted_value = bytes[offset + i];
-    uint64_t shifted_value = unshifted_value << shift;
-    result |= shifted_value;
-  }
+  uint64_t result = *reinterpret_cast<uint64_t*>(&bytes[offset]);
   return {result, offset + sizeof(uint64_t)};
 }
 
 inline BinAstDeserializer::DeserializeResult<uint32_t> BinAstDeserializer::DeserializeUint32(uint8_t* bytes, int offset) {
-  uint32_t result = 0;
-  for (int i = 0; i < 4; ++i) {
-    size_t shift = sizeof(uint8_t) * 8 * i;
-    uint32_t unshifted_value = bytes[offset + i];
-    uint32_t shifted_value = unshifted_value << shift;
-    result |= shifted_value;
-  }
+  uint32_t result = *reinterpret_cast<uint32_t*>(&bytes[offset]);
   return {result, offset + sizeof(uint32_t)};
 }
 
@@ -68,13 +56,7 @@ inline BinAstDeserializer::DeserializeResult<uint32_t> BinAstDeserializer::Deser
 }
 
 inline BinAstDeserializer::DeserializeResult<uint16_t> BinAstDeserializer::DeserializeUint16(uint8_t* bytes, int offset) {
-  uint16_t result = 0;
-  for (int i = 0; i < 2; ++i) {
-    size_t shift = sizeof(uint8_t) * 8 * i;
-    uint32_t unshifted_value = bytes[offset + i];
-    uint32_t shifted_value = unshifted_value << shift;
-    result |= shifted_value;
-  }
+  uint16_t result = *reinterpret_cast<uint16_t*>(&bytes[offset]);
   return {result, offset + sizeof(uint16_t)};
 }
 
@@ -95,13 +77,7 @@ inline BinAstDeserializer::DeserializeResult<uint8_t> BinAstDeserializer::Deseri
 }
 
 inline BinAstDeserializer::DeserializeResult<int32_t> BinAstDeserializer::DeserializeInt32(uint8_t* bytes, int offset) {
-  uint32_t result = 0;
-  for (int i = 0; i < 4; ++i) {
-    size_t shift = sizeof(uint8_t) * 8 * i;
-    uint32_t unshifted_value = bytes[offset + i];
-    uint32_t shifted_value = unshifted_value << shift;
-    result |= shifted_value;
-  }
+  int32_t result = *reinterpret_cast<int32_t*>(&bytes[offset]);
   return {result, offset + sizeof(int32_t)};
 }
 

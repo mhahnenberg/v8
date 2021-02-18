@@ -142,51 +142,32 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
 
 // TODO(binast): Maybe templatize these to reduce duplication?
 inline void BinAstSerializeVisitor::SerializeUint64(uint64_t value) {
-  for (size_t i = 0; i < sizeof(uint64_t) / sizeof(uint8_t); ++i) {
-    size_t shift = 8 * i;
-    uint64_t mask = 0xff;
-    mask <<= shift;
-    uint64_t masked_value = value & mask;
-    uint64_t final_value = masked_value >> shift;
-    if (final_value > 0xff) {
-      printf("ERROR: value not in range: %llu\n", final_value);
-      DCHECK(final_value <= 0xff);
-    }
-    uint8_t truncated_final_value = final_value;
-    byte_data_.push_back(truncated_final_value);
-  }
+  auto old_size = byte_data_.size();
+  byte_data_.resize(byte_data_.size() + sizeof(uint64_t));
+  uint8_t* store = &byte_data_[old_size];
+  *reinterpret_cast<uint64_t*>(store) = value;
 }
 
 inline void BinAstSerializeVisitor::SerializeUint32(
     uint32_t value, const base::Optional<size_t> index = base::nullopt) {
   DCHECK(!index.has_value() ||
          (index.value() >= 0 && index <= byte_data_.size()));
-  for (size_t i = 0; i < sizeof(uint32_t) / sizeof(uint8_t); ++i) {
-    size_t shift = sizeof(uint8_t) * 8 * i;
-    uint32_t mask = 0xff << shift;
-    uint32_t masked_value = value & mask;
-    uint32_t final_value = masked_value >> shift;
-    DCHECK(final_value <= 0xff);
-    uint8_t truncated_final_value = final_value;
-
-    if (!index.has_value()) {
-      byte_data_.push_back(truncated_final_value);
-    } else {
-      byte_data_[index.value() + i] = truncated_final_value;
-    }
+  uint8_t* store;
+  if (index.has_value()) {
+    store = &byte_data_[index.value()];
+  } else {
+    auto old_size = byte_data_.size();
+    byte_data_.resize(byte_data_.size() + sizeof(uint32_t));
+    store = &byte_data_[old_size];
   }
+  *reinterpret_cast<uint32_t*>(store) = value;
 }
 
 inline void BinAstSerializeVisitor::SerializeUint16(uint16_t value) {
-  for (size_t i = 0; i < sizeof(uint16_t) / sizeof(uint8_t); ++i) {
-    size_t shift = sizeof(uint8_t) * 8 * i;
-    uint32_t mask = 0xff << shift;
-    uint32_t masked_value = value & mask;
-    uint32_t final_value = masked_value >> shift;
-    DCHECK(final_value <= 0xff);
-    uint8_t truncated_final_value = final_value;
-    byte_data_.push_back(truncated_final_value);
-  }
+  auto old_size = byte_data_.size();
+  byte_data_.resize(byte_data_.size() + sizeof(uint16_t));
+  uint8_t* store = &byte_data_[old_size];
+  *reinterpret_cast<uint16_t*>(store) = value;
 }
 
 inline void BinAstSerializeVisitor::SerializeUint16Flags(const std::list<bool>& flags) {
@@ -212,15 +193,10 @@ inline void BinAstSerializeVisitor::SerializeUint8(uint8_t value) {
 }
 
 inline void BinAstSerializeVisitor::SerializeInt32(int32_t value) {
-  for (size_t i = 0; i < sizeof(uint32_t) / sizeof(uint8_t); ++i) {
-    size_t shift = sizeof(uint8_t) * 8 * i;
-    uint32_t mask = 0xff << shift;
-    uint32_t masked_value = value & mask;
-    uint32_t final_value = masked_value >> shift;
-    DCHECK(final_value <= 0xff);
-    uint8_t truncated_final_value = final_value;
-    byte_data_.push_back(truncated_final_value);
-  }
+  auto old_size = byte_data_.size();
+  byte_data_.resize(byte_data_.size() + sizeof(int32_t));
+  uint8_t* store = &byte_data_[old_size];
+  *reinterpret_cast<int32_t*>(store) = value;
 }
 
 inline void BinAstSerializeVisitor::SerializeDouble(double value) {
