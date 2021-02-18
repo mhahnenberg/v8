@@ -111,8 +111,6 @@ inline BinAstDeserializer::DeserializeResult<const char*> BinAstDeserializer::De
 }
 
 inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserializer::DeserializeRawString(uint8_t* serialized_ast, int offset) {
-  auto original_offset = offset;
-
   auto is_one_byte = DeserializeUint8(serialized_ast, offset);
   offset = is_one_byte.new_offset;
 
@@ -122,19 +120,15 @@ inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserial
   auto length = DeserializeUint32(serialized_ast, offset);
   offset = length.new_offset;
 
-  std::unique_ptr<uint8_t[]> raw_data(new uint8_t[length.value]);
-  memcpy(raw_data.get(), &serialized_ast[offset], length.value);
-  offset += sizeof(uint8_t) * length.value;
   const AstRawString* s = nullptr;
   if (length.value > 0) {
-    Vector<const byte> literal_bytes(raw_data.get(), length.value);
+    Vector<const byte> literal_bytes(&serialized_ast[offset], length.value);
     s = parser_->ast_value_factory()->GetString(hash_field.value, is_one_byte.value, literal_bytes);
   } else {
     Vector<const byte> literal_bytes;
     s = parser_->ast_value_factory()->GetString(hash_field.value, is_one_byte.value, literal_bytes);
   }
-  DCHECK(strings_by_offset_.count(original_offset) == 0);
-  strings_by_offset_[original_offset] = s;
+  offset += sizeof(uint8_t) * length.value;
   return {s, offset};
 }
 
@@ -142,15 +136,13 @@ inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserial
   auto raw_offset = DeserializeUint32(serialized_ast, offset);
   offset = raw_offset.new_offset;
 
-  {
-    auto result = strings_by_offset_.find(raw_offset.value);
-    if (result != strings_by_offset_.end()) {
-      return {result->second, offset};
-    }
+  auto& result = strings_by_offset_[raw_offset.value];
+  if (result == nullptr) {
+    auto deserialize_result = DeserializeRawString(serialized_ast, raw_offset.value);
+    result = deserialize_result.value;
   }
 
-  auto result = DeserializeRawString(serialized_ast, raw_offset.value);
-  return {result.value, offset};
+  return {result, offset};
 } 
 
 inline BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeStringTable(uint8_t* serialized_ast, int offset) {
