@@ -18,7 +18,8 @@ BinAstDeserializer::BinAstDeserializer(Isolate* isolate, Parser* parser,
                                        Handle<ByteArray> parse_data)
     : isolate_(isolate),
       parser_(parser),
-      parse_data_(parse_data) {}
+      parse_data_(parse_data),
+      string_table_base_offset_(0) {}
 
 AstNode* BinAstDeserializer::DeserializeAst(
     base::Optional<uint32_t> start_offset, base::Optional<uint32_t> length) {
@@ -287,6 +288,7 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
     case SCRIPT_SCOPE:
     case CATCH_SCOPE:
     case WITH_SCOPE: {
+      printf("Invalid scope type: %d\n", scope_type.value);
       UNREACHABLE();
     }
     case FUNCTION_SCOPE: {
@@ -355,8 +357,8 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
 
 BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::DeserializeFunctionLiteral(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
   // Swap in a new map for string offsets.
-  std::unordered_map<uint32_t, const AstRawString*> temp_strings_by_offset;
-  strings_by_offset_.swap(temp_strings_by_offset);
+  std::vector<const AstRawString*> temp_strings;
+  strings_.swap(temp_strings);
 
   auto proxy_string_table_offset = DeserializeUint32(serialized_binast, offset);
   offset = proxy_string_table_offset.new_offset;
@@ -377,7 +379,6 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
       DCHECK(s != nullptr);
       raw_name = s;
     }
-    DCHECK(raw_name != nullptr);
   }
 
   auto scope = DeserializeDeclarationScope(serialized_binast, offset);
@@ -439,7 +440,7 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   result->bit_field_ = bit_field;
 
   // Swap the string table back for the previous function.
-  strings_by_offset_.swap(temp_strings_by_offset);
+  strings_.swap(temp_strings);
 
   return {result, offset};
 }
