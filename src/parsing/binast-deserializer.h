@@ -124,10 +124,11 @@ class BinAstDeserializer {
   Isolate* isolate_;
   Parser* parser_;
   Handle<ByteArray> parse_data_;
-  std::unordered_map<uint32_t, const AstRawString*> strings_by_offset_;
+  std::vector<const AstRawString*> strings_;
   std::unordered_map<uint32_t, Variable*> variables_by_id_;
   std::unordered_map<uint32_t, AstNode*> nodes_by_offset_;
   std::unordered_map<uint32_t, std::vector<void**>> patchable_fields_by_offset_;
+  uint32_t string_table_base_offset_;
 };
 
 }  // namespace internal
