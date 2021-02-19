@@ -98,7 +98,8 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeDouble(double value);
   void SerializeNodeReference(const AstNode* node);
   void SerializeCString(const char* str);
-  void SerializeRawString(const AstRawString* s);
+  void SerializeRawStringHeader(const AstRawString* s);
+  void SerializeRawStringContents(const AstRawString* s, uint32_t table_index, size_t table_start_offset);
   void SerializeConsString(const AstConsString* cons_string);
   void SerializeRawStringReference(const AstRawString* s);
   void SerializeStringTable(const AstConsString* function_name);
@@ -124,13 +125,13 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void PatchPendingNodeReferences(const AstNode* node, size_t offset);
 
   AstValueFactory* ast_value_factory_;
-  std::unordered_map<const AstRawString*, uint32_t> string_offsets_;
+  std::unordered_map<const AstRawString*, uint32_t> string_indexes_;
   std::vector<uint8_t> byte_data_;
   std::unordered_map<Variable*, uint32_t> variable_ids_;
   std::unordered_map<VariableProxy*, int> var_proxy_ids;
   std::unordered_map<const AstNode*, uint32_t> node_offsets_;
   std::unordered_map<const AstNode*, std::vector<uint32_t>> patchable_node_reference_offsets_;
-  std::unordered_map<FunctionLiteral*, std::unordered_set<uint32_t>> used_string_offsets_by_function_;
+  std::unordered_map<FunctionLiteral*, std::unordered_map<uint32_t, uint32_t>> used_string_indexes_by_function_;
   FunctionLiteral* active_function_literal_;
   int encountered_unhandled_nodes_;
   int skipped_functions_;
@@ -233,53 +234,86 @@ inline void BinAstSerializeVisitor::SerializeVarUint32(uint32_t value) {
   }
 }
 
-inline void BinAstSerializeVisitor::SerializeRawString(const AstRawString* s) {
+
+// The size field of the table and the number of entries in the table (two uint32_t)
+#define STRING_TABLE_HEADER_SIZE (sizeof(uint32_t) * 2)
+#define RAW_STRING_HEADER_SIZE (sizeof(uint8_t) + 3 * sizeof(uint32_t))
+
+
+inline void BinAstSerializeVisitor::SerializeRawStringHeader(const AstRawString* s) {
   DCHECK(s != nullptr);
-  DCHECK(string_offsets_.count(s) == 0);
+  DCHECK(string_indexes_.count(s) == 0);
   DCHECK(s->byte_length() >= 0);
   uint32_t length = s->byte_length();
   bool is_one_byte = s->is_one_byte();
   uint32_t hash_field = s->hash_field();
 
-  uint32_t current_offset = static_cast<uint32_t>(byte_data_.size());
-  string_offsets_.insert({s, current_offset});
+  string_indexes_.insert({s, string_indexes_.size()});
 
   SerializeUint8(is_one_byte);
   SerializeUint32(hash_field);
   SerializeUint32(length);
-  if (length > 0) {
-    const uint8_t* bytes = s->raw_data();
-    for (uint32_t i = 0; i < length; ++i) {
-      SerializeUint8(bytes[i]);
-    }
+  // We will fill this in later when we serialize the contents of the strings at the end of the string table.
+  // Note that we can't skip this even if the length is 0 because all string headers must be a fixed size.
+  SerializeUint32(0);
+}
+
+inline void BinAstSerializeVisitor::SerializeRawStringContents(const AstRawString* s, uint32_t table_index, size_t table_start_offset) {
+  uint32_t length = s->byte_length();
+  if (length == 0) {
+    return;
   }
+
+  size_t string_start_offset = byte_data_.size();
+  const uint8_t* bytes = s->raw_data();
+  for (uint32_t i = 0; i < length; ++i) {
+    SerializeUint8(bytes[i]);
+  }
+
+  size_t content_pointer_offset = table_start_offset;
+  content_pointer_offset += STRING_TABLE_HEADER_SIZE;
+  content_pointer_offset += RAW_STRING_HEADER_SIZE * table_index;  // Index to the correct table entry.
+  content_pointer_offset += sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t);  // Skip other fields in table entry.
+  DCHECK(string_start_offset < UINT_MAX);
+  DCHECK(content_pointer_offset < UINT_MAX);
+  SerializeUint32(static_cast<uint32_t>(string_start_offset), static_cast<uint32_t>(content_pointer_offset));
 }
 
 inline void BinAstSerializeVisitor::SerializeRawStringReference(const AstRawString* s) {
-  auto lookup_result = string_offsets_.find(s);
-  if (lookup_result == string_offsets_.end()) {
+  CHECK(s != nullptr);
+  auto global_result = string_indexes_.find(s);
+  if (global_result == string_indexes_.end()) {
     printf("ERROR: Failed to find raw string reference for '%.*s'\n", s->byte_length(), s->raw_data());
     DCHECK(false);
   }
 
-  DCHECK(string_offsets_.count(s) != 0);
-  used_string_offsets_by_function_[active_function_literal_].insert(string_offsets_[s]);
-
-  uint32_t string_table_offset = lookup_result->second;
-  SerializeVarUint32(string_table_offset);
+  auto global_string_table_index = global_result->second;
+  uint32_t local_string_table_index = 0;
+  auto& local_map = used_string_indexes_by_function_[active_function_literal_];
+  auto local_result = local_map.find(global_string_table_index);
+  if (local_result == local_map.end()) {
+    DCHECK(local_map.size() < UINT_MAX);
+    local_string_table_index = static_cast<uint32_t>(local_map.size());
+    local_map[global_string_table_index] = local_string_table_index;
+  } else {
+    local_string_table_index = local_result->second;
+  }
+  SerializeVarUint32(local_string_table_index);
 }
 
 inline void BinAstSerializeVisitor::SerializeConsString(const AstConsString* cons_string) {
   if (cons_string == nullptr) {
-    // TODO(binast): This makes it impossible to distinguish between a nullptr and an empty AstConsString. Not sure if it will matter...
-    SerializeUint32(0);
+    SerializeUint8(0);
     return;
+  } else {
+    SerializeUint8(1);
   }
+
   std::forward_list<const AstRawString*> strings = cons_string->ToRawStrings();
   uint32_t length = 0;
   for (const AstRawString* string : strings) {
     DCHECK(string != nullptr);
-    DCHECK(string_offsets_.count(string) == 1);
+    DCHECK(string_indexes_.count(string) == 1);
     (void)string;
     length += 1;
   }
@@ -308,24 +342,31 @@ inline void BinAstSerializeVisitor::SerializeStringTable(const AstConsString* fu
   // Record the current offset to patch the total size of the string table later.
   size_t string_table_start_offset = byte_data_.size();
   SerializeUint32(0);
-
   SerializeUint32(num_entries);
   // Insert non-constant strings
   for (base::HashMap::Entry* entry = ast_value_factory_->string_table_.Start(); entry != nullptr; entry = ast_value_factory_->string_table_.Next(entry)) {
     const AstRawString* s = reinterpret_cast<const AstRawString*>(entry->key);
-    SerializeRawString(s);
+    SerializeRawStringHeader(s);
   }
 
   if (function_name != nullptr) {
     for (const AstRawString* s : function_name->ToRawStrings()) {
       void* key = const_cast<AstRawString*>(s);
       if (ast_value_factory_->string_table_.Lookup(key, s->Hash()) == nullptr) {
-        SerializeRawString(s);
+        SerializeRawStringHeader(s);
       }
     }
   }
 
-  DCHECK(string_offsets_.size() == num_entries);
+  DCHECK(string_indexes_.size() == num_entries);
+
+  // Serialize the contents and patch the pointers in the headers.
+  for (const auto& kv : string_indexes_) {
+    const AstRawString* s = kv.first;
+    uint32_t index = kv.second;
+    SerializeRawStringContents(s, index, string_table_start_offset);
+  }
+
   size_t string_table_end_offset = byte_data_.size();
   SerializeUint32(static_cast<uint32_t>(string_table_end_offset), static_cast<uint32_t>(string_table_start_offset));
 }
@@ -746,11 +787,20 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
 }
 
 inline void BinAstSerializeVisitor::SerializeProxyStringTable() {
-  std::unordered_set<uint32_t>& raw_string_offsets = used_string_offsets_by_function_[active_function_literal_];
+  std::unordered_map<uint32_t, uint32_t>& local_string_indexes = used_string_indexes_by_function_[active_function_literal_];
+  std::vector<std::pair<uint32_t, uint32_t>> sorted_by_local_index;
+  sorted_by_local_index.reserve(local_string_indexes.size());
 
-  SerializeUint32(static_cast<uint32_t>(raw_string_offsets.size()));
-  for (uint32_t offset : raw_string_offsets) {
-    SerializeUint32(offset);
+  for (const auto& kv : local_string_indexes) {
+    sorted_by_local_index.push_back({kv.second, kv.first});
+  }
+
+  std::sort(sorted_by_local_index.begin(), sorted_by_local_index.end());
+
+  SerializeUint32(static_cast<uint32_t>(local_string_indexes.size()));
+  for (const auto& kv : sorted_by_local_index) {
+    auto global_string_index = kv.second;
+    SerializeUint32(global_string_index);
   }
 }
 

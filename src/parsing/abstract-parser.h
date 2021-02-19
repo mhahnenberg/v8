@@ -2052,7 +2052,7 @@ void AbstractParser<Impl>::ParseFunction(
       deserialize_microseconds =
         std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
       int function_length = result->end_position() - result->start_position();
-      printf("PREPARSE++: Deserialize time for %sfunction (%d bytes) in %lld us", is_inner_binast ? "inner " : "", function_length, deserialize_microseconds);
+      printf("PREPARSE++: Deserialize time for %sfunction (%d bytes) in %lld us\n", is_inner_binast ? "inner " : "", function_length, deserialize_microseconds);
     }
   }
 
