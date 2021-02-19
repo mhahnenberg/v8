@@ -110,7 +110,11 @@ inline BinAstDeserializer::DeserializeResult<const char*> BinAstDeserializer::De
   return {result, offset};
 }
 
-inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserializer::DeserializeRawString(uint8_t* serialized_ast, int offset) {
+inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserializer::DeserializeRawString(uint8_t* serialized_ast, int header_index) {
+  auto header_offset = string_table_base_offset_ + STRING_TABLE_HEADER_SIZE + RAW_STRING_HEADER_SIZE * header_index;
+  DCHECK(header_offset < INT_MAX);
+  int offset = static_cast<int>(header_offset);
+
   auto is_one_byte = DeserializeUint8(serialized_ast, offset);
   offset = is_one_byte.new_offset;
 
@@ -120,11 +124,15 @@ inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserial
   auto length = DeserializeUint32(serialized_ast, offset);
   offset = length.new_offset;
 
+  auto contents_offset = DeserializeUint32(serialized_ast, offset);
+  offset = contents_offset.new_offset;
+
   const AstRawString* s = nullptr;
   if (length.value > 0) {
-    Vector<const byte> literal_bytes(&serialized_ast[offset], length.value);
+    Vector<const byte> literal_bytes(&serialized_ast[contents_offset.value], length.value);
     s = parser_->ast_value_factory()->GetString(hash_field.value, is_one_byte.value, literal_bytes);
   } else {
+    DCHECK(contents_offset.value == 0);
     Vector<const byte> literal_bytes;
     s = parser_->ast_value_factory()->GetString(hash_field.value, is_one_byte.value, literal_bytes);
   }
@@ -133,19 +141,17 @@ inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserial
 }
 
 inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserializer::DeserializeProxyString(uint8_t* serialized_ast, int offset) {
-  auto raw_offset = DeserializeUint32(serialized_ast, offset);
-  offset = raw_offset.new_offset;
+  auto raw_index = DeserializeUint32(serialized_ast, offset);
+  offset = raw_index.new_offset;
 
-  auto& result = strings_by_offset_[raw_offset.value];
-  if (result == nullptr) {
-    auto deserialize_result = DeserializeRawString(serialized_ast, raw_offset.value);
-    result = deserialize_result.value;
-  }
+  auto deserialize_result = DeserializeRawString(serialized_ast, raw_index.value);
+  // Note: we don't use the offset returned.
 
-  return {result, offset};
+  return {deserialize_result.value, offset};
 } 
 
 inline BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeStringTable(uint8_t* serialized_ast, int offset) {
+  string_table_base_offset_ = offset;
   auto end_offset = DeserializeUint32(serialized_ast, offset);
   return {nullptr, end_offset.value};
 }
@@ -154,35 +160,35 @@ inline BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer:
   auto num_proxy_strings = DeserializeUint32(serialized_ast, offset);
   offset = num_proxy_strings.new_offset;
 
-  strings_by_offset_.reserve(num_proxy_strings.value);
+  strings_.reserve(num_proxy_strings.value);
 
   for (uint32_t i = 0; i < num_proxy_strings.value; ++i) {
     auto string = DeserializeProxyString(serialized_ast, offset);
     offset = string.new_offset;
+    strings_.push_back(string.value);
   }
 
   return {nullptr, offset};
 }
 
 inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserializer::DeserializeRawStringReference(uint8_t* serialized_ast, int offset) {
-  auto string_table_offset = DeserializeVarUint32(serialized_ast, offset);
-  offset = string_table_offset.new_offset;
-  if (string_table_offset.value == 0) {
-    return {nullptr, offset};
-  }
+  auto local_string_table_index = DeserializeVarUint32(serialized_ast, offset);
+  offset = local_string_table_index.new_offset;
 
-  DCHECK(strings_by_offset_.count(string_table_offset.value) > 0);
-  const AstRawString* result = strings_by_offset_[string_table_offset.value];
+  const AstRawString* result = strings_[local_string_table_index.value];
   return {result, offset};
 }
 
 inline BinAstDeserializer::DeserializeResult<AstConsString*> BinAstDeserializer::DeserializeConsString(uint8_t* serialized_ast, int offset) {
-  auto raw_string_count = DeserializeUint32(serialized_ast, offset);
-  offset = raw_string_count.new_offset;
+  auto has_value = DeserializeUint8(serialized_ast, offset);
+  offset = has_value.new_offset;
 
-  if (raw_string_count.value == 0) {
+  if (!has_value.value) {
     return {nullptr, offset};
   }
+
+  auto raw_string_count = DeserializeUint32(serialized_ast, offset);
+  offset = raw_string_count.new_offset;
 
   AstConsString* cons_string = parser_->ast_value_factory()->NewConsString();
 
