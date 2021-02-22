@@ -86,6 +86,7 @@ extern class UncompiledDataWithPreparseData extends UncompiledData {
 @generateCppClass
 extern class UncompiledDataWithBinAstParseData extends UncompiledData {
   binast_parse_data: ByteArray;
+  preparse_data: Object;
 }
 
 @generateCppClass

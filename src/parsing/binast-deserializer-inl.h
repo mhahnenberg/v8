@@ -673,7 +673,7 @@ inline BinAstDeserializer::DeserializeResult<ExpressionStatement*> BinAstDeseria
   return {result, offset};
 }
 
-inline BinAstDeserializer::DeserializeResult<VariableProxy*> BinAstDeserializer::DeserializeVariableProxy(uint8_t* serialized_binast, int offset) {
+inline BinAstDeserializer::DeserializeResult<VariableProxy*> BinAstDeserializer::DeserializeVariableProxy(uint8_t* serialized_binast, int offset, bool add_unresolved) {
   auto position = DeserializeInt32(serialized_binast, offset);
   offset = position.new_offset;
 
@@ -696,7 +696,9 @@ inline BinAstDeserializer::DeserializeResult<VariableProxy*> BinAstDeserializer:
     // We use NORMAL_VARIABLE as a placeholder here.
     result = parser_->factory()->NewVariableProxy(raw_name.value, VariableKind::NORMAL_VARIABLE, position.value);
 
-    parser_->scope()->AddUnresolved(result);
+    if (add_unresolved) {
+      parser_->scope()->AddUnresolved(result);
+    }
   }
   result->bit_field_ = bit_field.value;
   return {result, offset};

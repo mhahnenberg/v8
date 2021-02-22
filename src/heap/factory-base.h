@@ -142,7 +142,7 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) FactoryBase {
 
   Handle<UncompiledDataWithBinAstParseData> NewUncompiledDataWithBinAstParseData(
       Handle<String> inferred_name, int32_t start_position,
-      int32_t end_position, Handle<ByteArray>);
+      int32_t end_position, Handle<ByteArray>, MaybeHandle<PreparseData>);
 
   Handle<UncompiledDataWithInnerBinAstParseData> NewUncompiledDataWithInnerBinAstParseData(
       Handle<String> inferred_name, int32_t start_position,

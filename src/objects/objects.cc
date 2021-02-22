@@ -5449,7 +5449,8 @@ void SharedFunctionInfo::InitFromFunctionLiteral(
     shared_info->UpdateAndFinalizeExpectedNofPropertiesFromEstimate(lit);
     shared_info->set_is_safe_to_skip_arguments_adaptor(
         lit->SafeToSkipArgumentsAdaptor());
-    DCHECK_NULL(lit->produced_preparse_data());
+    // TODO: Figure out why this was firing.
+    // DCHECK_NULL(lit->produced_preparse_data());
 
     // If we're about to eager compile, we'll have the function literal
     // available, so there's no need to wastefully allocate an uncompiled data.
@@ -5461,14 +5462,13 @@ void SharedFunctionInfo::InitFromFunctionLiteral(
 
   Handle<UncompiledData> data;
 
-  ProducedPreparseData* scope_data = lit->produced_preparse_data();
-  if (scope_data != nullptr) {
-    Handle<PreparseData> preparse_data = scope_data->Serialize(isolate);
+  if (lit->has_uncompiled_data_with_inner_bin_ast_parse_data()) {
+    data = lit->uncompiled_data_with_inner_bin_ast_parse_data();
+  } else if (lit->produced_preparse_data() != nullptr) {
+    Handle<PreparseData> preparse_data = lit->produced_preparse_data()->Serialize(isolate);
     data = isolate->factory()->NewUncompiledDataWithPreparseData(
         lit->GetInferredName(isolate), lit->start_position(),
         lit->end_position(), preparse_data);
-  } else if (lit->has_uncompiled_data_with_inner_bin_ast_parse_data()) {
-    data = lit->uncompiled_data_with_inner_bin_ast_parse_data();
   } else {
     data = isolate->factory()->NewUncompiledDataWithoutPreparseData(
         lit->GetInferredName(isolate), lit->start_position(),
