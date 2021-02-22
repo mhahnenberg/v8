@@ -131,6 +131,7 @@ class BinAstDeserializer {
   std::unordered_map<uint32_t, Variable*> variables_by_id_;
   std::unordered_map<uint32_t, AstNode*> nodes_by_offset_;
   std::unordered_map<uint32_t, std::vector<void**>> patchable_fields_by_offset_;
+  std::unordered_map<uint32_t, ProducedPreparseData*> produced_preparse_data_by_start_position_;
   uint32_t string_table_base_offset_;
   bool is_root_fn_;
 };

@@ -92,6 +92,7 @@ extern class UncompiledDataWithBinAstParseData extends UncompiledData {
 @generateCppClass
 extern class UncompiledDataWithInnerBinAstParseData extends UncompiledData {
   binast_parse_data: ByteArray;
+  preparse_data: Object;
   data_offset: uint32;
   data_length: uint32;
 }

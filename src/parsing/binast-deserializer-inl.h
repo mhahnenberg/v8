@@ -423,14 +423,24 @@ inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::Deser
         DeserializeUint32(serialized_binast, offset);
     offset = length.new_offset;
 
+    if (parser_->scope()->GetClosureScope()->is_skipped_function()) {
+      // printf("closure scope is skipped, returning nullptr\n");
+      return {nullptr, start_offset.value + length.value};
+    }
+
     auto result = DeserializeFunctionLiteral(serialized_binast, bit_field, position, offset);
 
     if (!is_toplevel) {
+      MaybeHandle<PreparseData> preparse_data;
+      if (result.value->produced_preparse_data() != nullptr) {
+        preparse_data = result.value->produced_preparse_data()->Serialize(isolate_);
+      }
+
       Handle<UncompiledDataWithInnerBinAstParseData> data =
           isolate_->factory()->NewUncompiledDataWithInnerBinAstParseData(
               result.value->GetInferredName(isolate_),
               result.value->start_position(), result.value->end_position(),
-              parse_data_, start_offset.value, length.value);
+              parse_data_, preparse_data, start_offset.value, length.value);
       result.value->set_uncompiled_data_with_inner_bin_ast_parse_data(data);
     }
 

@@ -193,7 +193,8 @@ class UncompiledDataWithInnerBinAstParseData
   template <typename LocalIsolate>
   inline void Init(LocalIsolate* isolate, String inferred_name,
                    int start_position, int end_position,
-                   ByteArray binast_parse_data, int32_t offset, int32_t length);
+                   ByteArray binast_parse_data, MaybeHandle<PreparseData>,
+                   int32_t offset, int32_t length);
 
   using BodyDescriptor = SubclassBodyDescriptor<
       UncompiledData::BodyDescriptor,

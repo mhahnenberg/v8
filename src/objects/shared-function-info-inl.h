@@ -766,10 +766,16 @@ void UncompiledDataWithInnerBinAstParseData::Init(LocalIsolate* isolate,
                                           String inferred_name,
                                           int start_position, int end_position,
                                           ByteArray binast_parse_data,
+                                          MaybeHandle<PreparseData> preparse_data,
                                           int32_t offset, int32_t length) {
   this->UncompiledData::Init(isolate, inferred_name, start_position,
                              end_position);
   set_binast_parse_data(binast_parse_data);
+  if (preparse_data.is_null()) {
+    set_preparse_data(*isolate->null_value());
+  } else {
+    set_preparse_data(*preparse_data.ToHandleChecked());
+  }
   set_data_offset(offset);
   set_data_length(length);
 }

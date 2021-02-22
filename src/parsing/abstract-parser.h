@@ -2008,11 +2008,11 @@ void AbstractParser<Impl>::ParseFunction(
   FunctionLiteral* result = nullptr;
   bool is_inner_binast = false;
   MaybeHandle<PreparseData> preparse_data;
-  bool try_deserialize = true;
+  bool try_deserialize = false;
   if (try_deserialize) {
     if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData() ||
                     shared_info->HasUncompiledDataWithInnerBinAstParseData())) {
-      for (int i = 0; i < 10000; ++i) {
+      for (int i = 0; i < 1; ++i) {
 
       RuntimeCallTimerScope runtime_timer(
           impl()->runtime_call_stats_, RuntimeCallCounterId::kDeserializeBinAst);
@@ -2027,9 +2027,12 @@ void AbstractParser<Impl>::ParseFunction(
                   isolate);
 
         binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
-        // if (!uncompiled_data->preparse_data().IsNull()) {
-        //   preparse_data = handle(PreparseData::cast(uncompiled_data->preparse_data()), isolate);
-        // }
+        if (!uncompiled_data->preparse_data().IsNull()) {
+          // printf("Got inner preparse data\n");
+          preparse_data = handle(PreparseData::cast(uncompiled_data->preparse_data()), isolate);
+        } else {
+          // printf("No inner preparse data\n");
+        }
 
         offset.emplace(uncompiled_data->data_offset());
         length.emplace(uncompiled_data->data_length());

@@ -294,6 +294,7 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
         ProducedPreparseData* preparse_data = parser_->info()->consumed_preparse_data()->GetDataForSkippableFunction(zone(), scope->start_position(), &end_position, &num_parameters, &preparse_function_length, &num_inner_functions, &uses_super_property, &language_mode);
         // ProducedPreparseData* preparse_data = preparse_data_result->second;
         if (preparse_data != nullptr) {
+          // printf("Got produced preparse data for skippable function\n");
           // DCHECK(end_position == result->end_position());
           // DCHECK(num_parameters == result->parameter_count());
           // DCHECK(preparse_function_length == result->function_length());
@@ -302,6 +303,7 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
           // uncompiled data later.
           // result->produced_preparse_data_ = preparse_data;
           DCHECK(scope->outer_scope()->must_use_preparsed_scope_data());
+          produced_preparse_data_by_start_position_[scope->start_position()] = preparse_data;
           // scope.value->outer_scope()->SetMustUsePreparseData();
           // scope.value->set_is_skipped_function(true);
         }
@@ -310,6 +312,7 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
         scope->AsDeclarationScope()->set_is_skipped_function(false);
       }
     } else {
+      // printf("can't skip function %d\n", scope->start_position());
       scope->AsDeclarationScope()->set_is_skipped_function(false);
     }
   }
@@ -537,6 +540,11 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   result->function_token_position_ = function_token_position.value;
   result->suspend_count_ = suspend_count.value;
   result->bit_field_ = bit_field;
+
+  auto preparse_data_result = produced_preparse_data_by_start_position_.find(scope.value->start_position());
+  if (preparse_data_result != produced_preparse_data_by_start_position_.end()) {
+    result->produced_preparse_data_ = preparse_data_result->second;
+  }
 
   // if (scope.value->is_skipped_function()) {
   //   int end_position;
