@@ -322,20 +322,36 @@ template <typename Impl>
 Handle<UncompiledDataWithBinAstParseData> 
 FactoryBase<Impl>::NewUncompiledDataWithBinAstParseData(
       Handle<String> inferred_name, int32_t start_position,
-      int32_t end_position, Handle<ByteArray> binast_parse_data) {
-  return TorqueGeneratedFactory<Impl>::NewUncompiledDataWithBinAstParseData(
-      inferred_name, start_position, end_position, binast_parse_data,
-      AllocationType::kOld);
+      int32_t end_position, Handle<ByteArray> binast_parse_data,
+      MaybeHandle<PreparseData> maybe_preparse_data) {
+  Handle<Object> preparse_data;
+  if (maybe_preparse_data.ToHandle(&preparse_data)) {
+    return TorqueGeneratedFactory<Impl>::NewUncompiledDataWithBinAstParseData(
+        inferred_name, start_position, end_position, binast_parse_data, preparse_data,
+        AllocationType::kOld);
+  } else {
+    return TorqueGeneratedFactory<Impl>::NewUncompiledDataWithBinAstParseData(
+        inferred_name, start_position, end_position, binast_parse_data, Handle<PreparseData>(),
+        AllocationType::kOld);
+  }
 }
 
 template <typename Impl>
 Handle<UncompiledDataWithInnerBinAstParseData>
 FactoryBase<Impl>::NewUncompiledDataWithInnerBinAstParseData(
     Handle<String> inferred_name, int32_t start_position, int32_t end_position,
-    Handle<ByteArray> binast_parse_data, uint32_t offset, uint32_t length) {
-  return TorqueGeneratedFactory<Impl>::NewUncompiledDataWithInnerBinAstParseData(
-      inferred_name, start_position, end_position, binast_parse_data, offset, length,
-      AllocationType::kOld);
+    Handle<ByteArray> binast_parse_data, MaybeHandle<PreparseData> maybe_preparse_data,
+    uint32_t offset, uint32_t length) {
+  Handle<Object> preparse_data;
+  if (maybe_preparse_data.ToHandle(&preparse_data)) {
+    return TorqueGeneratedFactory<Impl>::NewUncompiledDataWithInnerBinAstParseData(
+        inferred_name, start_position, end_position, binast_parse_data, preparse_data, offset, length,
+        AllocationType::kOld);
+  } else {
+    return TorqueGeneratedFactory<Impl>::NewUncompiledDataWithInnerBinAstParseData(
+        inferred_name, start_position, end_position, binast_parse_data, Handle<PreparseData>(), offset, length,
+        AllocationType::kOld);
+  }
 }
 
 template <typename Impl>
