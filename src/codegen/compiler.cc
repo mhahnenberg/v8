@@ -1658,8 +1658,6 @@ bool Compiler::Compile(Handle<SharedFunctionInfo> shared_info,
             PreparseData::cast(shared_info->uncompiled_data_with_binast_parse_data().preparse_data()),
             isolate)));
     }
-  // }
-  // TODO: Enable for inner inner functions
   } else if (shared_info->HasUncompiledDataWithInnerBinAstParseData()) {
     if (!shared_info->uncompiled_data_with_inner_bin_ast_parse_data().preparse_data().IsNull()) {
       parse_info.set_consumed_preparse_data(ConsumedPreparseData::For(

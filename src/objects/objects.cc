@@ -5449,7 +5449,10 @@ void SharedFunctionInfo::InitFromFunctionLiteral(
     shared_info->UpdateAndFinalizeExpectedNofPropertiesFromEstimate(lit);
     shared_info->set_is_safe_to_skip_arguments_adaptor(
         lit->SafeToSkipArgumentsAdaptor());
-    // TODO: Figure out why this was firing.
+    // TODO: When deserializing the AST we don't check ShouldEagerCompile before
+    // deciding whether to skip over the function (which assigns the produced_preparse_data)
+    // because we don't have that info at that point, so we should rearrange things
+    // such that we do so we can satisfy this assert.
     // DCHECK_NULL(lit->produced_preparse_data());
 
     // If we're about to eager compile, we'll have the function literal
