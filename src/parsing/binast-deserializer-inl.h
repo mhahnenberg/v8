@@ -423,14 +423,23 @@ inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::Deser
         DeserializeUint32(serialized_binast, offset);
     offset = length.new_offset;
 
+    if (parser_->scope()->GetClosureScope()->is_skipped_function()) {
+      return {nullptr, start_offset.value + length.value};
+    }
+
     auto result = DeserializeFunctionLiteral(serialized_binast, bit_field, position, offset);
 
     if (!is_toplevel) {
+      MaybeHandle<PreparseData> preparse_data;
+      if (result.value->produced_preparse_data() != nullptr) {
+        preparse_data = result.value->produced_preparse_data()->Serialize(isolate_);
+      }
+
       Handle<UncompiledDataWithInnerBinAstParseData> data =
           isolate_->factory()->NewUncompiledDataWithInnerBinAstParseData(
               result.value->GetInferredName(isolate_),
               result.value->start_position(), result.value->end_position(),
-              parse_data_, start_offset.value, length.value);
+              parse_data_, preparse_data, start_offset.value, length.value);
       result.value->set_uncompiled_data_with_inner_bin_ast_parse_data(data);
     }
 
@@ -673,7 +682,7 @@ inline BinAstDeserializer::DeserializeResult<ExpressionStatement*> BinAstDeseria
   return {result, offset};
 }
 
-inline BinAstDeserializer::DeserializeResult<VariableProxy*> BinAstDeserializer::DeserializeVariableProxy(uint8_t* serialized_binast, int offset) {
+inline BinAstDeserializer::DeserializeResult<VariableProxy*> BinAstDeserializer::DeserializeVariableProxy(uint8_t* serialized_binast, int offset, bool add_unresolved) {
   auto position = DeserializeInt32(serialized_binast, offset);
   offset = position.new_offset;
 
@@ -696,7 +705,9 @@ inline BinAstDeserializer::DeserializeResult<VariableProxy*> BinAstDeserializer:
     // We use NORMAL_VARIABLE as a placeholder here.
     result = parser_->factory()->NewVariableProxy(raw_name.value, VariableKind::NORMAL_VARIABLE, position.value);
 
-    parser_->scope()->AddUnresolved(result);
+    if (add_unresolved) {
+      parser_->scope()->AddUnresolved(result);
+    }
   }
   result->bit_field_ = bit_field.value;
   return {result, offset};

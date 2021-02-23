@@ -2004,55 +2004,68 @@ void AbstractParser<Impl>::ParseFunction(
   info->set_function_name(impl()->ast_value_factory()->GetString(name));
   scanner_.Initialize();
 
-  long long deserialize_microseconds = 0;
+  long long deserialize_nanoseconds = 0;
   FunctionLiteral* result = nullptr;
   bool is_inner_binast = false;
-  if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData() ||
-                  shared_info->HasUncompiledDataWithInnerBinAstParseData())) {
-    RuntimeCallTimerScope runtime_timer(
-        impl()->runtime_call_stats_, RuntimeCallCounterId::kDeserializeBinAst);
-    auto start = std::chrono::high_resolution_clock::now();
-    is_inner_binast = shared_info->HasUncompiledDataWithInnerBinAstParseData();
-    Handle<ByteArray> binast_parse_data;
-    base::Optional<uint32_t> offset;
-    base::Optional<uint32_t> length;
-    if (is_inner_binast) {
-      Handle<UncompiledDataWithInnerBinAstParseData> uncompiled_data =
-          handle(shared_info->uncompiled_data_with_inner_bin_ast_parse_data(),
-                isolate);
+  MaybeHandle<PreparseData> preparse_data;
+  bool try_deserialize = true;
+  if (try_deserialize) {
+    if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData() ||
+                    shared_info->HasUncompiledDataWithInnerBinAstParseData())) {
+      for (int i = 0; i < 1; ++i) {
 
-      binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
+      RuntimeCallTimerScope runtime_timer(
+          impl()->runtime_call_stats_, RuntimeCallCounterId::kDeserializeBinAst);
+      auto start = std::chrono::high_resolution_clock::now();
+      is_inner_binast = shared_info->HasUncompiledDataWithInnerBinAstParseData();
+      Handle<ByteArray> binast_parse_data;
+      base::Optional<uint32_t> offset;
+      base::Optional<uint32_t> length;
+      if (is_inner_binast) {
+        Handle<UncompiledDataWithInnerBinAstParseData> uncompiled_data =
+            handle(shared_info->uncompiled_data_with_inner_bin_ast_parse_data(),
+                  isolate);
 
-      offset.emplace(uncompiled_data->data_offset());
-      length.emplace(uncompiled_data->data_length());
-    } else {
-      Handle<UncompiledDataWithBinAstParseData> uncompiled_data = handle(
-          shared_info->uncompiled_data_with_binast_parse_data(), isolate);
+        binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
+        if (!uncompiled_data->preparse_data().IsNull()) {
+          preparse_data = handle(PreparseData::cast(uncompiled_data->preparse_data()), isolate);
+        }
 
-      binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
-    }
+        offset.emplace(uncompiled_data->data_offset());
+        length.emplace(uncompiled_data->data_length());
+      } else {
+        Handle<UncompiledDataWithBinAstParseData> uncompiled_data = handle(
+            shared_info->uncompiled_data_with_binast_parse_data(), isolate);
 
-    FunctionLiteral* literal;
-    {
-      // We need to setup the parser/initial outer scope before we can start
-      // deserialization.
-      Scope* outer = impl()->original_scope_;
-      DeclarationScope* outer_function = outer->GetClosureScope();
-      DCHECK(outer);
-      typename ParserBase<Impl>::FunctionState function_state(
-          &impl()->function_state_, &impl()->scope_, outer_function);
-      typename ParserBase<Impl>::BlockState block_state(&impl()->scope_, outer);
-      BinAstDeserializer deserializer(isolate, impl(), binast_parse_data);
-      AstNode* ast_node = deserializer.DeserializeAst(offset, length);
-      literal = ast_node->AsFunctionLiteral();
-      DCHECK(literal != nullptr);
-      result = literal;
+        binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
 
-      auto elapsed = std::chrono::high_resolution_clock::now() - start;
-      deserialize_microseconds =
-        std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-      int function_length = result->end_position() - result->start_position();
-      printf("PREPARSE++: Deserialize time for %sfunction (%d bytes) in %lld us\n", is_inner_binast ? "inner " : "", function_length, deserialize_microseconds);
+        if (!uncompiled_data->preparse_data().IsNull()) {
+          preparse_data = handle(PreparseData::cast(uncompiled_data->preparse_data()), isolate);
+        }
+      }
+      FunctionLiteral* literal;
+      {
+        // We need to setup the parser/initial outer scope before we can start
+        // deserialization.
+        Scope* outer = impl()->original_scope_;
+        DeclarationScope* outer_function = outer->GetClosureScope();
+        DCHECK(outer);
+        typename ParserBase<Impl>::FunctionState function_state(
+            &impl()->function_state_, &impl()->scope_, outer_function);
+        typename ParserBase<Impl>::BlockState block_state(&impl()->scope_, outer);
+        BinAstDeserializer deserializer(isolate, impl(), binast_parse_data, preparse_data);
+        AstNode* ast_node = deserializer.DeserializeAst(offset, length);
+        literal = ast_node->AsFunctionLiteral();
+        DCHECK(literal != nullptr);
+        result = literal;
+
+        auto elapsed = std::chrono::high_resolution_clock::now() - start;
+        deserialize_nanoseconds =
+          std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
+        int function_length = result->end_position() - result->start_position();
+        printf("PREPARSE++: Deserialize time for %sfunction (%d bytes) in %lld ns\n", is_inner_binast ? "inner " : "", function_length, deserialize_nanoseconds);
+      }
+      }
     }
   }
 
@@ -2070,10 +2083,10 @@ void AbstractParser<Impl>::ParseFunction(
     result = DoParseFunction(isolate, info, start_position, end_position,
                              function_literal_id, info->function_name());
     auto elapsed = std::chrono::high_resolution_clock::now() - start;
-    long long parse_microseconds =
-        std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+    long long parse_nanoseconds =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
     int function_length = result->end_position() - result->start_position();
-    printf("PREPARSE++: Parse time: %lld us for %d bytes\n", parse_microseconds, function_length);
+    printf("PREPARSE++: Parse time: %lld ns for %d bytes\n", parse_nanoseconds, function_length);
   }
   MaybeResetCharacterStream(info, result);
   MaybeProcessSourceRanges(info, result, impl()->stack_limit_);

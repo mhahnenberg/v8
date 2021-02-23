@@ -15,11 +15,14 @@ namespace v8 {
 namespace internal {
 
 BinAstDeserializer::BinAstDeserializer(Isolate* isolate, Parser* parser,
-                                       Handle<ByteArray> parse_data)
+                                       Handle<ByteArray> parse_data, MaybeHandle<PreparseData> preparse_data)
     : isolate_(isolate),
       parser_(parser),
       parse_data_(parse_data),
-      string_table_base_offset_(0) {}
+      preparse_data_(preparse_data),
+      string_table_base_offset_(0),
+      is_root_fn_(true) {
+}
 
 AstNode* BinAstDeserializer::DeserializeAst(
     base::Optional<uint32_t> start_offset, base::Optional<uint32_t> length) {
@@ -73,7 +76,7 @@ AstNode* BinAstDeserializer::DeserializeUncompressedAst(
   auto result = DeserializeAstNode(uncompressed_ast, offset, is_toplevel);
   // Check that we consumed all the bytes that were serialized.
   DCHECK(static_cast<size_t>(result.new_offset) ==
-         (length.value_or(uncompressed_size) + start_offset.value_or(0)));
+        (length.value_or(uncompressed_size) + start_offset.value_or(0)));
   return result.value;
 }
 
@@ -102,6 +105,26 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
         DeserializeNonLocalVariable(serialized_binast, offset, scope);
     variables_by_id_.insert({start_offset, new_variable.value});
     offset = new_variable.new_offset;
+  }
+
+  return {nullptr, offset};
+}
+
+BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeUnresolvedList(uint8_t* serialized_binast, int offset, Scope* scope) {
+  auto total_unresolved_variables = DeserializeUint32(serialized_binast, offset);
+  offset = total_unresolved_variables.new_offset;
+
+  bool add_unresolved = false;
+  for (uint32_t i = 0; i < total_unresolved_variables.value; ++i) {
+    auto variable_proxy = DeserializeVariableProxy(serialized_binast, offset, add_unresolved);
+    offset = variable_proxy.new_offset;
+
+    // Normally we add variable proxies to the unresolved_list_ when we encounter them inside
+    // the body of the function, but if we're skipping the function we won't encounter
+    // them so we need to add them here instead. Unfortunately, we don't know if
+    // we're skipping the function yet, so we unconditionally add them here and then clear
+    // the list later if we decide to deserialize the body of the function.
+    scope->AddUnresolved(variable_proxy.value);
   }
 
   return {nullptr, offset};
@@ -173,12 +196,59 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   return {nullptr, offset};
 }
 
-BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeCommonScopeFields(uint8_t* serialized_binast, int offset, Scope* scope) {
+void BinAstDeserializer::HandleFunctionSkipping(Scope* scope, bool can_skip_function) {
+  if (scope->scope_type() != FUNCTION_SCOPE) {
+    return;
+  }
+
+  DeclarationScope* decl_scope = scope->AsDeclarationScope();
+
+  if (!can_skip_function) {
+    decl_scope->set_is_skipped_function(false);
+    return;
+  }
+
+  // We skip FunctionLiterals before we even start deserializing the scope,
+  // so we should never encounter this condition.
+  DCHECK(!decl_scope->outer_scope()->GetClosureScope()->is_skipped_function());
+  if (!parser_->info()->consumed_preparse_data()->IsFunctionOffsetNextSkippable(decl_scope->start_position())) {
+    decl_scope->set_is_skipped_function(false);
+    return;
+  }
+
+  decl_scope->outer_scope()->SetMustUsePreparseData();
+  decl_scope->set_is_skipped_function(true);
+
+  int end_position;
+  int num_parameters;
+  int preparse_function_length;
+  int num_inner_functions;
+  bool uses_super_property;
+  LanguageMode language_mode;
+  // If we're skipping this function we need to consume the inner function
+  // data for it from the PreparseData.
+  ProducedPreparseData* preparse_data = parser_->info()->consumed_preparse_data()->GetDataForSkippableFunction(
+    zone(),
+    decl_scope->start_position(),
+    &end_position,
+    &num_parameters,
+    &preparse_function_length,
+    &num_inner_functions,
+    &uses_super_property,
+    &language_mode);
+
+  if (preparse_data != nullptr) {
+    DCHECK(decl_scope->outer_scope()->must_use_preparsed_scope_data());
+    produced_preparse_data_by_start_position_[decl_scope->start_position()] = preparse_data;
+  }
+}
+
+BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeCommonScopeFields(uint8_t* serialized_binast, int offset, Scope* scope, bool can_skip_function) {
   auto variable_map_result = DeserializeScopeVariableMap(serialized_binast, offset, scope);
   offset = variable_map_result.new_offset;
-  // unresolved_list_
-  auto declarations_result = DeserializeScopeDeclarations(serialized_binast, offset, scope);
-  offset = declarations_result.new_offset;
+
+  auto unresolved_list_result = DeserializeScopeUnresolvedList(serialized_binast, offset, scope);
+  offset = unresolved_list_result.new_offset;
 
   // scope_info_ TODO(binast): do we need this?
 #ifdef DEBUG
@@ -228,9 +298,20 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   scope->force_context_allocation_for_parameters_ = encoded_boolean_flags_result.value[7];
   scope->is_declaration_scope_ = encoded_boolean_flags_result.value[8];
   scope->private_name_lookup_skips_outer_class_ = encoded_boolean_flags_result.value[9];
-  scope->must_use_preparsed_scope_data_ = encoded_boolean_flags_result.value[10];
+  // We determine if we can use preparse data ourselves.
+  // scope->must_use_preparsed_scope_data_ = encoded_boolean_flags_result.value[10];
+  scope->must_use_preparsed_scope_data_ = false;
   scope->is_repl_mode_scope_ = encoded_boolean_flags_result.value[11];
   scope->deserialized_scope_uses_external_cache_ = encoded_boolean_flags_result.value[12];
+
+  // We now have the start_position of the scope so we can tell if we can skip the function.
+  // We need to do this before we deserialize any FunctionDeclarations so that
+  // we can end the recursion as early as possible and skip to the end of their
+  // associated FunctionLiteral.
+  HandleFunctionSkipping(scope, can_skip_function);
+
+  auto declarations_result = DeserializeScopeDeclarations(serialized_binast, offset, scope);
+  offset = declarations_result.new_offset;
 
   return {nullptr, offset};
 }
@@ -276,7 +357,7 @@ BinAstDeserializer::DeserializeResult<Scope*> BinAstDeserializer::DeserializeSco
 }
 
 
-BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::DeserializeDeclarationScope(uint8_t* serialized_binast, int offset) {
+BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::DeserializeDeclarationScope(uint8_t* serialized_binast, int offset, bool can_skip_function) {
   DeclarationScope* scope = nullptr;
   auto scope_type = DeserializeUint8(serialized_binast, offset);
   offset = scope_type.new_offset;
@@ -308,7 +389,7 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
   }
   DCHECK(scope_type.value == scope->scope_type());
 
-  auto common_fields_result = DeserializeCommonScopeFields(serialized_binast, offset, scope);
+  auto common_fields_result = DeserializeCommonScopeFields(serialized_binast, offset, scope, can_skip_function);
   offset = common_fields_result.new_offset;
 
   // DeclarationScope data:
@@ -323,7 +404,8 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
   scope->scope_uses_super_property_ = encoded_decl_scope_bool_flags_result.value[5];
   scope->should_eager_compile_ = encoded_decl_scope_bool_flags_result.value[6];
   scope->was_lazily_parsed_ = encoded_decl_scope_bool_flags_result.value[7];
-  scope->is_skipped_function_ = encoded_decl_scope_bool_flags_result.value[8];
+  // We compute this ourselves inside DeserializeCommonScopeFields.
+  // scope->is_skipped_function_ = encoded_decl_scope_bool_flags_result.value[8];
   scope->has_inferred_function_name_ = encoded_decl_scope_bool_flags_result.value[9];
   scope->has_checked_syntax_ = encoded_decl_scope_bool_flags_result.value[10];
   scope->has_this_reference_ = encoded_decl_scope_bool_flags_result.value[11];
@@ -356,6 +438,13 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
 }
 
 BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::DeserializeFunctionLiteral(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+  bool is_root_fn = is_root_fn_;
+  is_root_fn_ = false;
+  // If we have PreparseData and we're not deserializing the "root" function
+  // (i.e. the function we're currently compiling) then we can skip deserializing
+  // the current function.
+  bool can_skip_function = !(is_root_fn || preparse_data_.is_null());
+
   // Swap in a new map for string offsets.
   std::vector<const AstRawString*> temp_strings;
   strings_.swap(temp_strings);
@@ -381,7 +470,7 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
     }
   }
 
-  auto scope = DeserializeDeclarationScope(serialized_binast, offset);
+  auto scope = DeserializeDeclarationScope(serialized_binast, offset, can_skip_function);
   offset = scope.new_offset;
   
   auto expected_property_count = DeserializeInt32(serialized_binast, offset);
@@ -407,14 +496,17 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   FunctionLiteral::EagerCompileHint eager_compile_hint = scope.value->ShouldEagerCompile() ? FunctionLiteral::kShouldEagerCompile : FunctionLiteral::kShouldLazyCompile;
   bool has_braces = FunctionLiteral::HasBracesField::decode(bit_field);
 
-
   auto num_statements = DeserializeInt32(serialized_binast, offset);
   offset = num_statements.new_offset;
 
   std::vector<void*> pointer_buffer;
   pointer_buffer.reserve(num_statements.value);
   ScopedPtrList<Statement> body(&pointer_buffer);
-  {
+  if (!scope.value->is_skipped_function()) {
+    // Warning: leaky separation of concerns. We need to clear the Scope's unresolved_list_ so
+    // that the VariableProxy nodes we encounter during the deserialization of the
+    // body can/will be used and added to the unresolved_list_ instead.
+    scope.value->unresolved_list_.Clear();
     Parser::FunctionState function_state(&parser_->function_state_, &parser_->scope_, scope.value);
 
     for (int i = 0; i < num_statements.value; ++i) {
@@ -427,7 +519,7 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   }
 
   // Setting the offset now to advance past the proxy string table.
-  DCHECK(static_cast<uint32_t>(offset) == proxy_string_table_offset.value);
+  DCHECK(scope.value->is_skipped_function() || static_cast<uint32_t>(offset) == proxy_string_table_offset.value);
   offset = proxy_string_table.new_offset;
 
   FunctionLiteral* result = parser_->factory()->NewFunctionLiteral(
@@ -438,6 +530,11 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   result->function_token_position_ = function_token_position.value;
   result->suspend_count_ = suspend_count.value;
   result->bit_field_ = bit_field;
+
+  auto preparse_data_result = produced_preparse_data_by_start_position_.find(scope.value->start_position());
+  if (preparse_data_result != produced_preparse_data_by_start_position_.end()) {
+    result->produced_preparse_data_ = preparse_data_result->second;
+  }
 
   // Swap the string table back for the previous function.
   strings_.swap(temp_strings);

@@ -1369,13 +1369,23 @@ bool BackgroundBinAstParseTask::Finalize(Isolate* isolate, Handle<SharedFunction
   if (info()->literal()->produced_binast_parse_data() == nullptr) {
     return true;
   }
+  MaybeHandle<PreparseData> preparse_data;
+  if (info()->literal()->produced_preparse_data() != nullptr) {
+    // Serialize the ProducedPreparseData from parsing
+    // TODO: Do we create this when doing a full eager parse??? i.e. do we ever hit this branch?
+    preparse_data = info()->literal()->produced_preparse_data()->Serialize(isolate);
+  } else if (function->HasUncompiledDataWithPreparseData()) {
+    // Use the old PreparseData from the SFI
+    preparse_data = handle(function->uncompiled_data_with_preparse_data().preparse_data(), isolate);
+  }
   Handle<BinAstParseData> binast_parse_data = info()->literal()->produced_binast_parse_data()->Serialize(isolate);
   Handle<ByteArray> serialized_ast = handle(binast_parse_data->serialized_ast(), isolate);
   Handle<UncompiledData> data = isolate->factory()->NewUncompiledDataWithBinAstParseData(
         info()->literal()->GetInferredName(isolate),
         info()->literal()->start_position(),
         info()->literal()->end_position(),
-        serialized_ast);
+        serialized_ast,
+        preparse_data);
   function->set_uncompiled_data(*data);
   return true;
 }
@@ -1640,6 +1650,22 @@ bool Compiler::Compile(Handle<SharedFunctionInfo> shared_info,
         handle(
             shared_info->uncompiled_data_with_preparse_data().preparse_data(),
             isolate)));
+  } else if (shared_info->HasUncompiledDataWithBinAstParseData()) {
+    if (!shared_info->uncompiled_data_with_binast_parse_data().preparse_data().IsNull()) {
+      parse_info.set_consumed_preparse_data(ConsumedPreparseData::For(
+        isolate,
+        handle(
+            PreparseData::cast(shared_info->uncompiled_data_with_binast_parse_data().preparse_data()),
+            isolate)));
+    }
+  } else if (shared_info->HasUncompiledDataWithInnerBinAstParseData()) {
+    if (!shared_info->uncompiled_data_with_inner_bin_ast_parse_data().preparse_data().IsNull()) {
+      parse_info.set_consumed_preparse_data(ConsumedPreparseData::For(
+        isolate,
+        handle(
+            PreparseData::cast(shared_info->uncompiled_data_with_inner_bin_ast_parse_data().preparse_data()),
+            isolate)));
+    }
   }
 
   // Parse and update ParseInfo with the results.
