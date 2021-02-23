@@ -2008,7 +2008,7 @@ void AbstractParser<Impl>::ParseFunction(
   FunctionLiteral* result = nullptr;
   bool is_inner_binast = false;
   MaybeHandle<PreparseData> preparse_data;
-  bool try_deserialize = false;
+  bool try_deserialize = true;
   if (try_deserialize) {
     if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData() ||
                     shared_info->HasUncompiledDataWithInnerBinAstParseData())) {
@@ -2028,10 +2028,7 @@ void AbstractParser<Impl>::ParseFunction(
 
         binast_parse_data = handle(uncompiled_data->binast_parse_data(), isolate);
         if (!uncompiled_data->preparse_data().IsNull()) {
-          // printf("Got inner preparse data\n");
           preparse_data = handle(PreparseData::cast(uncompiled_data->preparse_data()), isolate);
-        } else {
-          // printf("No inner preparse data\n");
         }
 
         offset.emplace(uncompiled_data->data_offset());
@@ -2046,45 +2043,18 @@ void AbstractParser<Impl>::ParseFunction(
           preparse_data = handle(PreparseData::cast(uncompiled_data->preparse_data()), isolate);
         }
       }
-      // deserialize_nanoseconds =
-      //     std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - start).count();
-      // printf("PREPARSE++: setup time for %sfunction in %lld ns\n", is_inner_binast ? "inner " : "", deserialize_nanoseconds);
-
       FunctionLiteral* literal;
       {
         // We need to setup the parser/initial outer scope before we can start
         // deserialization.
         Scope* outer = impl()->original_scope_;
         DeclarationScope* outer_function = outer->GetClosureScope();
-        // deserialize_nanoseconds =
-        //   std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - start).count();
-        // printf("PREPARSE++: After outer function scope %lld ns\n", deserialize_nanoseconds);
-
         DCHECK(outer);
         typename ParserBase<Impl>::FunctionState function_state(
             &impl()->function_state_, &impl()->scope_, outer_function);
-
-        // deserialize_nanoseconds =
-        //   std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - start).count();
-        // printf("PREPARSE++: After funtion state %lld ns\n", deserialize_nanoseconds);
-
         typename ParserBase<Impl>::BlockState block_state(&impl()->scope_, outer);
-
-        // deserialize_nanoseconds =
-        //   std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - start).count();
-        // printf("PREPARSE++: After block state %lld ns\n", deserialize_nanoseconds);
-
         BinAstDeserializer deserializer(isolate, impl(), binast_parse_data, preparse_data);
-
-        // deserialize_nanoseconds =
-        //   std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - start).count();
-        // printf("PREPARSE++: After ctor %lld ns\n", deserialize_nanoseconds);
-
         AstNode* ast_node = deserializer.DeserializeAst(offset, length);
-        // deserialize_nanoseconds =
-        //   std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - start).count();
-        // printf("PREPARSE++: After deserialize %lld ns\n", deserialize_nanoseconds);
-
         literal = ast_node->AsFunctionLiteral();
         DCHECK(literal != nullptr);
         result = literal;

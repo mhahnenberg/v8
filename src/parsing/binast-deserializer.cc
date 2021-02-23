@@ -22,14 +22,6 @@ BinAstDeserializer::BinAstDeserializer(Isolate* isolate, Parser* parser,
       preparse_data_(preparse_data),
       string_table_base_offset_(0),
       is_root_fn_(true) {
-
-  // if (!preparse_data_.is_null()) {
-  //   consumed_preparse_data_ = ConsumedPreparseData::For(
-  //     isolate,
-  //     handle(
-  //         PreparseData::cast(*preparse_data_.ToHandleChecked()),
-  //         isolate));
-  // }
 }
 
 AstNode* BinAstDeserializer::DeserializeAst(
@@ -204,6 +196,53 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   return {nullptr, offset};
 }
 
+void BinAstDeserializer::HandleFunctionSkipping(Scope* scope, bool can_skip_function) {
+  if (scope->scope_type() != FUNCTION_SCOPE) {
+    return;
+  }
+
+  DeclarationScope* decl_scope = scope->AsDeclarationScope();
+
+  if (!can_skip_function) {
+    decl_scope->set_is_skipped_function(false);
+    return;
+  }
+
+  // We skip FunctionLiterals before we even start deserializing the scope,
+  // so we should never encounter this condition.
+  DCHECK(!decl_scope->outer_scope()->GetClosureScope()->is_skipped_function());
+  if (!parser_->info()->consumed_preparse_data()->IsFunctionOffsetNextSkippable(decl_scope->start_position())) {
+    decl_scope->set_is_skipped_function(false);
+    return;
+  }
+
+  decl_scope->outer_scope()->SetMustUsePreparseData();
+  decl_scope->set_is_skipped_function(true);
+
+  int end_position;
+  int num_parameters;
+  int preparse_function_length;
+  int num_inner_functions;
+  bool uses_super_property;
+  LanguageMode language_mode;
+  // If we're skipping this function we need to consume the inner function
+  // data for it from the PreparseData.
+  ProducedPreparseData* preparse_data = parser_->info()->consumed_preparse_data()->GetDataForSkippableFunction(
+    zone(),
+    decl_scope->start_position(),
+    &end_position,
+    &num_parameters,
+    &preparse_function_length,
+    &num_inner_functions,
+    &uses_super_property,
+    &language_mode);
+
+  if (preparse_data != nullptr) {
+    DCHECK(decl_scope->outer_scope()->must_use_preparsed_scope_data());
+    produced_preparse_data_by_start_position_[decl_scope->start_position()] = preparse_data;
+  }
+}
+
 BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeCommonScopeFields(uint8_t* serialized_binast, int offset, Scope* scope, bool can_skip_function) {
   auto variable_map_result = DeserializeScopeVariableMap(serialized_binast, offset, scope);
   offset = variable_map_result.new_offset;
@@ -259,63 +298,17 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   scope->force_context_allocation_for_parameters_ = encoded_boolean_flags_result.value[7];
   scope->is_declaration_scope_ = encoded_boolean_flags_result.value[8];
   scope->private_name_lookup_skips_outer_class_ = encoded_boolean_flags_result.value[9];
+  // We determine if we can use preparse data ourselves.
   // scope->must_use_preparsed_scope_data_ = encoded_boolean_flags_result.value[10];
   scope->must_use_preparsed_scope_data_ = false;
   scope->is_repl_mode_scope_ = encoded_boolean_flags_result.value[11];
   scope->deserialized_scope_uses_external_cache_ = encoded_boolean_flags_result.value[12];
 
-  // We now have the start_position of the scope we can tell if we can skip the function.
-  // We need to do this before we deserialize any FunctionDeclarations because
-  // we have to consume the PreparseData such that it's ready for the nested functions.
-  if (scope->scope_type() == FUNCTION_SCOPE) {
-    if (can_skip_function) {
-      if (scope->outer_scope()->GetClosureScope()->is_skipped_function()) {
-        // If we're visiting a DeclarationScope inside a skipped DeclarationScope 
-        // that must mean we're inside a FunctionDeclaration, which should have no
-        // intermediate Scopes between the closure Scope.
-        DCHECK(scope->outer_scope()->GetClosureScope() == scope->outer_scope());
-        scope->outer_scope()->SetMustUsePreparseData();
-        scope->AsDeclarationScope()->set_is_skipped_function(true);
-        // printf("set_is_skipped_function for scope of fn %d because outer scope is skipped\n", scope->start_position());
-      } else if (parser_->info()->consumed_preparse_data()->IsFunctionOffsetNextSkippable(scope->start_position())) {
-        scope->outer_scope()->SetMustUsePreparseData();
-        scope->AsDeclarationScope()->set_is_skipped_function(true);
-        // printf("set_is_skipped_function for scope of fn %d\n", scope->start_position());
-        int end_position;
-        int num_parameters;
-        int preparse_function_length;
-        int num_inner_functions;
-        bool uses_super_property;
-        LanguageMode language_mode;
-
-        // If we're skipping this function we need to consume the inner function data for it from the PreparseData.
-        // auto preparse_data_result = produced_preparse_data_by_offset_.find(scope.value->start_position());
-        // CHECK(preparse_data_result != produced_preparse_data_by_offset_.end());
-        ProducedPreparseData* preparse_data = parser_->info()->consumed_preparse_data()->GetDataForSkippableFunction(zone(), scope->start_position(), &end_position, &num_parameters, &preparse_function_length, &num_inner_functions, &uses_super_property, &language_mode);
-        // ProducedPreparseData* preparse_data = preparse_data_result->second;
-        if (preparse_data != nullptr) {
-          // printf("Got produced preparse data for skippable function\n");
-          // DCHECK(end_position == result->end_position());
-          // DCHECK(num_parameters == result->parameter_count());
-          // DCHECK(preparse_function_length == result->function_length());
-          // DCHECK(language_mode == result->language_mode());
-          // Set the produced preparse data so that we can pass it along to the
-          // uncompiled data later.
-          // result->produced_preparse_data_ = preparse_data;
-          DCHECK(scope->outer_scope()->must_use_preparsed_scope_data());
-          produced_preparse_data_by_start_position_[scope->start_position()] = preparse_data;
-          // scope.value->outer_scope()->SetMustUsePreparseData();
-          // scope.value->set_is_skipped_function(true);
-        }
-      } else {
-        // printf("can't skip function due to wrong position in preparsedata for fn %d\n", scope->start_position());
-        scope->AsDeclarationScope()->set_is_skipped_function(false);
-      }
-    } else {
-      // printf("can't skip function %d\n", scope->start_position());
-      scope->AsDeclarationScope()->set_is_skipped_function(false);
-    }
-  }
+  // We now have the start_position of the scope so we can tell if we can skip the function.
+  // We need to do this before we deserialize any FunctionDeclarations so that
+  // we can end the recursion as early as possible and skip to the end of their
+  // associated FunctionLiteral.
+  HandleFunctionSkipping(scope, can_skip_function);
 
   auto declarations_result = DeserializeScopeDeclarations(serialized_binast, offset, scope);
   offset = declarations_result.new_offset;
@@ -411,8 +404,8 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
   scope->scope_uses_super_property_ = encoded_decl_scope_bool_flags_result.value[5];
   scope->should_eager_compile_ = encoded_decl_scope_bool_flags_result.value[6];
   scope->was_lazily_parsed_ = encoded_decl_scope_bool_flags_result.value[7];
+  // We compute this ourselves inside DeserializeCommonScopeFields.
   // scope->is_skipped_function_ = encoded_decl_scope_bool_flags_result.value[8];
-  // scope->is_skipped_function_ = false;
   scope->has_inferred_function_name_ = encoded_decl_scope_bool_flags_result.value[9];
   scope->has_checked_syntax_ = encoded_decl_scope_bool_flags_result.value[10];
   scope->has_this_reference_ = encoded_decl_scope_bool_flags_result.value[11];
@@ -451,7 +444,6 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   // (i.e. the function we're currently compiling) then we can skip deserializing
   // the current function.
   bool can_skip_function = !(is_root_fn || preparse_data_.is_null());
-  // printf("can%s skip functionliteral (%d): is_root_fn: %d && preparse_data_.is_null(): %d\n", can_skip_function ? "" : "not", position, is_root_fn, preparse_data_.is_null());
 
   // Swap in a new map for string offsets.
   std::vector<const AstRawString*> temp_strings;
@@ -524,8 +516,6 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
       DCHECK(statement.value->AsStatement() != nullptr);
       body.Add(static_cast<Statement*>(statement.value));
     }
-  } else {
-    // printf("PREPARSE++: Skipping deserialization of function body\n");
   }
 
   // Setting the offset now to advance past the proxy string table.
@@ -545,33 +535,6 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   if (preparse_data_result != produced_preparse_data_by_start_position_.end()) {
     result->produced_preparse_data_ = preparse_data_result->second;
   }
-
-  // if (scope.value->is_skipped_function()) {
-  //   int end_position;
-  //   int num_parameters;
-  //   int preparse_function_length;
-  //   int num_inner_functions;
-  //   bool uses_super_property;
-  //   LanguageMode language_mode;
-
-  //   // If we're skipping this function we need to consume the inner function data for it from the PreparseData.
-  //   // auto preparse_data_result = produced_preparse_data_by_offset_.find(scope.value->start_position());
-  //   // CHECK(preparse_data_result != produced_preparse_data_by_offset_.end());
-  //   ProducedPreparseData* preparse_data = parser_->info()->consumed_preparse_data()->GetDataForSkippableFunction(zone(), scope.value->start_position(), &end_position, &num_parameters, &preparse_function_length, &num_inner_functions, &uses_super_property, &language_mode);
-  //   // ProducedPreparseData* preparse_data = preparse_data_result->second;
-  //   if (preparse_data != nullptr) {
-  //     DCHECK(end_position == result->end_position());
-  //     DCHECK(num_parameters == result->parameter_count());
-  //     DCHECK(preparse_function_length == result->function_length());
-  //     DCHECK(language_mode == result->language_mode());
-  //     // Set the produced preparse data so that we can pass it along to the
-  //     // uncompiled data later.
-  //     result->produced_preparse_data_ = preparse_data;
-  //     DCHECK(scope.value->outer_scope()->must_use_preparsed_scope_data());
-  //     // scope.value->outer_scope()->SetMustUsePreparseData();
-  //     // scope.value->set_is_skipped_function(true);
-  //   }
-  // }
 
   // Swap the string table back for the previous function.
   strings_.swap(temp_strings);

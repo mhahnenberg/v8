@@ -424,7 +424,6 @@ inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::Deser
     offset = length.new_offset;
 
     if (parser_->scope()->GetClosureScope()->is_skipped_function()) {
-      // printf("closure scope is skipped, returning nullptr\n");
       return {nullptr, start_offset.value + length.value};
     }
 
