@@ -179,6 +179,16 @@ inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserial
   return {result, offset};
 }
 
+inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserializer::DeserializeGlobalRawStringReference(uint8_t* serialized_ast, int offset) {
+  auto global_string_table_index = DeserializeUint32(serialized_ast, offset);
+  offset = global_string_table_index.new_offset;
+
+  auto raw_string = DeserializeRawString(serialized_ast, global_string_table_index.value);
+  // Note: we don't use the offset returned.
+
+  return {raw_string.value, offset};
+}
+
 inline BinAstDeserializer::DeserializeResult<AstConsString*> BinAstDeserializer::DeserializeConsString(uint8_t* serialized_ast, int offset) {
   auto has_value = DeserializeUint8(serialized_ast, offset);
   offset = has_value.new_offset;
@@ -223,8 +233,16 @@ inline Variable* BinAstDeserializer::CreateLocalNonTemporaryVariable(Scope* scop
   return variable;
 }
 
-inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeLocalVariable(uint8_t* serialized_binast, int offset, Scope* scope) {
-  auto name = DeserializeRawStringReference(serialized_binast, offset);
+inline BinAstDeserializer::DeserializeResult<RawVariableData> BinAstDeserializer::DeserializeGlobalVariableReference(uint8_t* serialized_binast, int offset) {
+  auto global_variable_index = DeserializeVarUint32(serialized_binast, offset);
+  // Note we don't use the next offset, instead jumping to the proper offset in the global variable table.
+
+  if (global_variable_index.value == 0) {
+    return {{0, nullptr, 0, 0, 0}, global_variable_index.new_offset};
+  }
+
+  offset = global_variable_table_base_offset_ + GLOBAL_VARIABLE_TABLE_HEADER_SIZE + GLOBAL_VARIABLE_TABLE_ENTRY_SIZE * (global_variable_index.value - 1);
+  auto name = DeserializeGlobalRawStringReference(serialized_binast, offset);
   offset = name.new_offset;
 
   // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
@@ -241,162 +259,95 @@ inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::Dese
   auto bit_field = DeserializeUint16(serialized_binast, offset);
   offset = bit_field.new_offset;
 
-  auto variable_mode = Variable::VariableModeField::decode(bit_field.value);
+  return {{global_variable_index.value, name.value, index, initializer_position, bit_field.value}, global_variable_index.new_offset};
+}
+
+inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeLocalVariable(uint8_t* serialized_binast, int offset, Scope* scope) {
+  auto raw_variable = DeserializeGlobalVariableReference(serialized_binast, offset);
+  offset = raw_variable.new_offset;
+
+  if (raw_variable.value.global_index == 0) {
+    return {nullptr, offset};
+  }
+
+  DCHECK(variables_by_global_index_.count(raw_variable.value.global_index - 1) == 0);
+
+  auto variable_mode = Variable::VariableModeField::decode(raw_variable.value.bit_field);
   if (variable_mode == VariableMode::kTemporary) {
-    auto variable = CreateLocalTemporaryVariable(scope, name.value, index, initializer_position, bit_field.value);
+    auto variable = CreateLocalTemporaryVariable(scope, raw_variable.value.name, raw_variable.value.index, raw_variable.value.initializer_position, raw_variable.value.bit_field);
+    variables_by_global_index_[raw_variable.value.global_index - 1] = variable;
     return {variable, offset};
   } else {
-    auto variable = CreateLocalNonTemporaryVariable(scope, name.value, index, initializer_position, bit_field.value);
+    auto variable = CreateLocalNonTemporaryVariable(scope, raw_variable.value.name, raw_variable.value.index, raw_variable.value.initializer_position, raw_variable.value.bit_field);
+    variables_by_global_index_[raw_variable.value.global_index - 1] = variable;
     return {variable, offset};
   }
 }
 
 inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeNonLocalVariable(uint8_t* serialized_binast, int offset, Scope* scope) {
-  auto name = DeserializeRawStringReference(serialized_binast, offset);
-  offset = name.new_offset;
+  auto raw_variable = DeserializeGlobalVariableReference(serialized_binast, offset);
+  offset = raw_variable.new_offset;
 
-  if (name.value == nullptr) {
+  if (raw_variable.value.global_index == 0) {
     return {nullptr, offset};
   }
 
-  // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
-  // next_
-  auto index_and_initializer_position = DeserializeUint64(serialized_binast, offset);
-  offset = index_and_initializer_position.new_offset;
-
-  Uint64TwoFieldConverter<int32_t, int32_t> index_and_initializer_position_convertor;
-  index_and_initializer_position_convertor.raw_value = index_and_initializer_position.value;
-
-  int32_t index = index_and_initializer_position_convertor.fields.first;
-  int32_t initializer_position = index_and_initializer_position_convertor.fields.second;
-
-  auto bit_field = DeserializeUint16(serialized_binast, offset);
-  offset = bit_field.new_offset;
+  DCHECK(variables_by_global_index_.count(raw_variable.value.global_index - 1) == 0);
 
   // We just use bogus values for mode, etc. since they're already encoded in the bit field
   bool was_added = false;
   // The main difference between local and non-local is whether the Variable appeared in the locals_ list when the Scope was serialized.
-  Variable* variable = scope->variables_.Declare(parser_->zone(), scope, name.value, VariableMode::kVar, NORMAL_VARIABLE, kCreatedInitialized, kMaybeAssigned, IsStaticFlag::kNotStatic, &was_added);
-  variable->index_ = index;
-  variable->initializer_position_ = initializer_position;
-  variable->bit_field_ = bit_field.value;
+  Variable* variable = scope->variables_.Declare(parser_->zone(), scope, raw_variable.value.name, VariableMode::kVar, NORMAL_VARIABLE, kCreatedInitialized, kMaybeAssigned, IsStaticFlag::kNotStatic, &was_added);
+  variable->index_ = raw_variable.value.index;
+  variable->initializer_position_ = raw_variable.value.initializer_position;
+  variable->bit_field_ = raw_variable.value.bit_field;
+  variables_by_global_index_[raw_variable.value.global_index - 1] = variable;
   return {variable, offset};
 }
 
 inline BinAstDeserializer::DeserializeResult<Variable*>
 BinAstDeserializer::DeserializeVariableReference(uint8_t* serialized_binast,
                                                  int offset, Scope* scope) {
-  auto variable_reference = DeserializeVarUint32(serialized_binast, offset);
-  offset = variable_reference.new_offset;
-
-  if (variable_reference.value == 0) {
-    return {nullptr, offset};
-  }
-
-  auto variable_result = variables_by_id_.find(variable_reference.value);
-  DCHECK(variable_result != variables_by_id_.end() || scope);
-
-  if (variable_result != variables_by_id_.end()) {
-    return {variable_result->second, offset};
-  } else {
-    // When using an offset to deserialize inner functions, we may encounter variable references that are serialized earlier in the data.
-    // To deal with this noncontiguous data, jump there to deserialize the variable, but do not follow the resulting offset.
-    return {
-      DeserializeScopeVariable(serialized_binast, variable_reference.value, scope).value,
-      offset
-    };
-  }
-}
-
-inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeScopeVariable(uint8_t* serialized_binast, int offset, Scope* scope) {
+  // If we discover that we haven't encountered this Variable reference before,
+  // we restart from the initial offset.
   auto original_offset = offset;
-  auto variable_result = DeserializeNonLocalVariable(serialized_binast, offset, scope);
-  offset = variable_result.new_offset;
-  
-  Variable* variable = variable_result.value;
-  if (variable == nullptr) {
+  auto global_variable_index = DeserializeVarUint32(serialized_binast, offset);
+  offset = global_variable_index.new_offset;
+
+  if (global_variable_index.value == 0) {
     return {nullptr, offset};
   }
-  variables_by_id_.insert({original_offset, variable});
-  return {variable, offset};
+
+  auto variable_result = variables_by_global_index_.find(global_variable_index.value - 1);
+  DCHECK(variable_result != variables_by_global_index_.end() || scope);
+
+  if (variable_result != variables_by_global_index_.end()) {
+    return {variable_result->second, offset};
+  } else if (scope == nullptr) {
+    return DeserializeNonScopeVariable(serialized_binast, original_offset);
+  } else {
+    return DeserializeNonLocalVariable(serialized_binast, original_offset, scope);
+  }
 }
 
 // This is for Variables that didn't belong to any particular Scope, i.e. their scope_ field was null.
 inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeNonScopeVariable(uint8_t* serialized_binast, int offset) {
-  auto name = DeserializeRawStringReference(serialized_binast, offset);
-  offset = name.new_offset;
+  auto raw_variable = DeserializeGlobalVariableReference(serialized_binast, offset);
+  offset = raw_variable.new_offset;
 
-  if (name.value == nullptr) {
+  if (raw_variable.value.global_index == 0) {
     return {nullptr, offset};
   }
 
-  // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
-  // next_
-
-  auto index = DeserializeInt32(serialized_binast, offset);
-  offset = index.new_offset;
-
-  auto initializer_position = DeserializeInt32(serialized_binast, offset);
-  offset = initializer_position.new_offset;
-
-  auto bit_field = DeserializeUint16(serialized_binast, offset);
-  offset = bit_field.new_offset;
+  DCHECK(variables_by_global_index_.count(raw_variable.value.global_index - 1) == 0);
 
   // We just use bogus values for mode, etc. since they're already encoded in the bit field
-  Variable* variable = zone()->New<Variable>(nullptr, name.value, VariableMode::kVar, NORMAL_VARIABLE, kCreatedInitialized, kMaybeAssigned, IsStaticFlag::kNotStatic);
-  variable->index_ = index.value;
-  variable->initializer_position_ = initializer_position.value;
-  variable->bit_field_ = bit_field.value;
+  Variable* variable = zone()->New<Variable>(nullptr, raw_variable.value.name, VariableMode::kVar, NORMAL_VARIABLE, kCreatedInitialized, kMaybeAssigned, IsStaticFlag::kNotStatic);
+  variable->index_ = raw_variable.value.index;
+  variable->initializer_position_ = raw_variable.value.initializer_position;
+  variable->bit_field_ = raw_variable.value.bit_field;
+  variables_by_global_index_[raw_variable.value.global_index - 1] = variable;
   return {variable, offset};
-}
-
-
-inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeScopeVariableOrReference(uint8_t* serialized_binast, int offset, Scope* scope) {
-  auto marker_result = DeserializeUint8(serialized_binast, offset);
-  offset = marker_result.new_offset;
-
-  switch (marker_result.value) {
-    case ScopeVariableKind::Null: {
-      return {nullptr, offset};
-    }
-    case ScopeVariableKind::Definition: {
-      auto scope_result = DeserializeScopeVariable(serialized_binast, offset, scope);
-      offset = scope_result.new_offset;
-      return {scope_result.value, offset};
-    }
-    case ScopeVariableKind::Reference: {
-      auto scope_result = DeserializeVariableReference(serialized_binast, offset, scope);
-      offset = scope_result.new_offset;
-      return {scope_result.value, offset};
-    }
-    default: {
-      UNREACHABLE();
-    }
-  }
-}
-
-inline BinAstDeserializer::DeserializeResult<Variable*> BinAstDeserializer::DeserializeNonScopeVariableOrReference(uint8_t* serialized_binast, int offset) {
-  auto marker_result = DeserializeUint8(serialized_binast, offset);
-  offset = marker_result.new_offset;
-
-  switch (marker_result.value) {
-    case ScopeVariableKind::Null: {
-      return {nullptr, offset};
-    }
-    case ScopeVariableKind::Definition: {
-      auto scope_result = DeserializeNonScopeVariable(serialized_binast, offset);
-      offset = scope_result.new_offset;
-      return {scope_result.value, offset};
-    }
-    case ScopeVariableKind::Reference: {
-      auto scope_result = DeserializeVariableReference(serialized_binast, offset);
-      offset = scope_result.new_offset;
-      return {scope_result.value, offset};
-    }
-    default: {
-      UNREACHABLE();
-    }
-  }
 }
 
 inline BinAstDeserializer::DeserializeResult<AstNode*> BinAstDeserializer::DeserializeAstNode(uint8_t* serialized_binast, int offset, bool is_toplevel) {
@@ -697,7 +648,7 @@ inline BinAstDeserializer::DeserializeResult<VariableProxy*> BinAstDeserializer:
     // The resolved Variable should either be a reference (i.e. currently visible in scope) or should be a 
     // NonScope Variable definition (i.e. it's a Variable that is outside the current Scope boundaries, 
     // e.g. inside an eval).
-    auto variable = DeserializeNonScopeVariableOrReference(serialized_binast, offset);
+    auto variable = DeserializeVariableReference(serialized_binast, offset);
     offset = variable.new_offset;
     result = parser_->factory()->NewVariableProxy(variable.value, position.value);
   } else {

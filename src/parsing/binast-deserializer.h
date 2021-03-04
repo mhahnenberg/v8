@@ -22,6 +22,15 @@ class Parser;
 class VariableProxy;
 class VariableProxyExpression;
 
+
+struct RawVariableData {
+  uint32_t global_index;
+  const AstRawString* name;
+  int32_t index;
+  int32_t initializer_position;
+  uint16_t bit_field;
+};
+
 class BinAstDeserializer {
  public:
   BinAstDeserializer(Isolate* isolate, Parser* parser, Handle<ByteArray> parse_data, MaybeHandle<PreparseData> preparse_data);
@@ -68,6 +77,7 @@ class BinAstDeserializer {
   DeserializeResult<std::nullptr_t> DeserializeStringTable(uint8_t* bytes, int offset);
   DeserializeResult<std::nullptr_t> DeserializeProxyStringTable(uint8_t* serialized_ast, int offset);
   DeserializeResult<const AstRawString*> DeserializeRawStringReference(uint8_t* bytes, int offset);
+  DeserializeResult<const AstRawString*> DeserializeGlobalRawStringReference(uint8_t* serialized_ast, int offset);
   DeserializeResult<AstConsString*> DeserializeConsString(uint8_t* bytes, int offset);
 
   Variable* CreateLocalTemporaryVariable(Scope* scope, const AstRawString* name, int index, int initializer_position, uint32_t bit_field);
@@ -75,12 +85,12 @@ class BinAstDeserializer {
 
   void HandleFunctionSkipping(Scope* scope, bool can_skip_function);
 
+  DeserializeResult<RawVariableData> DeserializeGlobalVariableReference(uint8_t* serialized_binast, int offset);
   DeserializeResult<Variable*> DeserializeLocalVariable(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeNonLocalVariable(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeVariableReference(uint8_t* serialized_binast, int offset, Scope* scope = nullptr);
   DeserializeResult<Variable*> DeserializeScopeVariable(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeNonScopeVariable(uint8_t* serialized_binast, int offset);
-  DeserializeResult<Variable*> DeserializeScopeVariableOrReference(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeNonScopeVariableOrReference(uint8_t* serialized_binast, int offset);
   DeserializeResult<std::nullptr_t> DeserializeScopeVariableMap(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<std::nullptr_t> DeserializeScopeUnresolvedList(uint8_t* serialized_binast, int offset, Scope* scope);
@@ -133,11 +143,12 @@ class BinAstDeserializer {
   MaybeHandle<PreparseData> preparse_data_;
   std::unique_ptr<ConsumedPreparseData> consumed_preparse_data_;
   std::vector<const AstRawString*> strings_;
-  std::unordered_map<uint32_t, Variable*> variables_by_id_;
+  std::unordered_map<uint32_t, Variable*> variables_by_global_index_;
   std::unordered_map<uint32_t, AstNode*> nodes_by_offset_;
   std::unordered_map<uint32_t, std::vector<void**>> patchable_fields_by_offset_;
   std::unordered_map<uint32_t, ProducedPreparseData*> produced_preparse_data_by_start_position_;
   uint32_t string_table_base_offset_;
+  uint32_t global_variable_table_base_offset_;
   bool is_root_fn_;
 };
 
