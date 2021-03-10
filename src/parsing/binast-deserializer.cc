@@ -21,6 +21,7 @@ BinAstDeserializer::BinAstDeserializer(Isolate* isolate, Parser* parser,
       parse_data_(parse_data),
       preparse_data_(preparse_data),
       string_table_base_offset_(0),
+      global_variable_table_base_offset_(0),
       is_root_fn_(true) {
 }
 
@@ -64,6 +65,10 @@ AstNode* BinAstDeserializer::DeserializeUncompressedAst(
   auto string_table_result = DeserializeStringTable(uncompressed_ast, offset);
   offset = string_table_result.new_offset;
 
+  auto variable_table_base_offset = DeserializeUint32(uncompressed_ast, offset);
+  offset = variable_table_base_offset.new_offset;
+  global_variable_table_base_offset_ = variable_table_base_offset.value;
+
   // Note: we don't deserialize the string table here because we rely on the
   // proxy string table within the FunctionLiteral, which references offsets in
   // the actual string table, even if we're deserializing a top-level function.
@@ -74,9 +79,20 @@ AstNode* BinAstDeserializer::DeserializeUncompressedAst(
   }
 
   auto result = DeserializeAstNode(uncompressed_ast, offset, is_toplevel);
+  offset = result.new_offset;
+
+  DCHECK(start_offset ? 
+      (static_cast<size_t>(offset) == start_offset.value() + length.value()) 
+    : (static_cast<size_t>(offset) == global_variable_table_base_offset_));
+
+  // Skip ahead to global variable table.
+  offset = global_variable_table_base_offset_;
+  auto variable_table_length = DeserializeUint32(uncompressed_ast, offset);
+  offset = variable_table_length.new_offset;
+
+  offset += GLOBAL_VARIABLE_TABLE_ENTRY_SIZE * variable_table_length.value;
   // Check that we consumed all the bytes that were serialized.
-  DCHECK(static_cast<size_t>(result.new_offset) ==
-        (length.value_or(uncompressed_size) + start_offset.value_or(0)));
+  DCHECK(static_cast<size_t>(offset) == uncompressed_size);
   return result.value;
 }
 
@@ -84,26 +100,18 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   auto total_local_variables = DeserializeUint32(serialized_binast, offset);
   offset = total_local_variables.new_offset;
 
-  variables_by_id_.reserve(total_local_variables.value);
-
   for (uint32_t i = 0; i < total_local_variables.value; ++i) {
-    auto start_offset = offset;
     auto new_variable =
         DeserializeLocalVariable(serialized_binast, offset, scope);
-    variables_by_id_.insert({start_offset, new_variable.value});
     offset = new_variable.new_offset;
   }
 
   auto total_nonlocal_variables = DeserializeUint32(serialized_binast, offset);
   offset = total_nonlocal_variables.new_offset;
 
-  variables_by_id_.reserve(total_local_variables.value + total_nonlocal_variables.value);
-
   for (uint32_t i = 0; i < total_nonlocal_variables.value; ++i) {
-    auto start_offset = offset;
     auto new_variable =
         DeserializeNonLocalVariable(serialized_binast, offset, scope);
-    variables_by_id_.insert({start_offset, new_variable.value});
     offset = new_variable.new_offset;
   }
 
@@ -417,19 +425,19 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
 
   // TODO(binast): sloppy_block_functions_ (needed for non-strict mode support)
 
-  auto receiver_result = DeserializeScopeVariableOrReference(serialized_binast, offset, scope);
+  auto receiver_result = DeserializeVariableReference(serialized_binast, offset, scope);
   offset = receiver_result.new_offset;
   scope->receiver_ = receiver_result.value;
 
-  auto function_result = DeserializeScopeVariableOrReference(serialized_binast, offset, scope);
+  auto function_result = DeserializeVariableReference(serialized_binast, offset, scope);
   offset = function_result.new_offset;
   scope->function_ = function_result.value;
 
-  auto new_target_result = DeserializeScopeVariableOrReference(serialized_binast, offset, scope);
+  auto new_target_result = DeserializeVariableReference(serialized_binast, offset, scope);
   offset = new_target_result.new_offset;
   scope->new_target_ = new_target_result.value;
 
-  auto arguments_result = DeserializeScopeVariableOrReference(serialized_binast, offset, scope);
+  auto arguments_result = DeserializeVariableReference(serialized_binast, offset, scope);
   offset = arguments_result.new_offset;
   scope->arguments_ = arguments_result.value;
 
