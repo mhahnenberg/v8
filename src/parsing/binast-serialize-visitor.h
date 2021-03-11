@@ -95,11 +95,12 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void SerializeRawStringHeader(const AstRawString* s);
   void SerializeRawStringContents(const AstRawString* s, uint32_t table_index, size_t table_start_offset);
   void SerializeConsString(const AstConsString* cons_string);
-  void SerializeRawStringReference(const AstRawString* s);
+  void SerializeRawStringReference(const AstRawString* s, bool fixed_size = false);
   void SerializeGlobalRawStringReference(const AstRawString* s);
   void SerializeStringTable(const AstConsString* function_name);
   void SerializeProxyStringTable();
   void SerializeVariableTable();
+  void SerializeProxyVariableTable();
   void SerializeVariable(Variable* variable);
   void SerializeVariableReference(Variable* variable);
   void SerializeScopeVariableMap(Scope* scope);
@@ -128,6 +129,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   std::unordered_map<const AstNode*, uint32_t> node_offsets_;
   std::unordered_map<const AstNode*, std::vector<uint32_t>> patchable_node_reference_offsets_;
   std::unordered_map<FunctionLiteral*, std::unordered_map<uint32_t, uint32_t>> used_string_indexes_by_function_;
+  std::unordered_map<FunctionLiteral*, std::unordered_map<Variable*, uint32_t>> used_variable_indexes_by_function_;
   FunctionLiteral* active_function_literal_;
   int encountered_unhandled_nodes_;
   int skipped_functions_;
@@ -275,7 +277,7 @@ inline void BinAstSerializeVisitor::SerializeRawStringContents(const AstRawStrin
   SerializeUint32(static_cast<uint32_t>(string_start_offset), static_cast<uint32_t>(content_pointer_offset));
 }
 
-inline void BinAstSerializeVisitor::SerializeRawStringReference(const AstRawString* s) {
+inline void BinAstSerializeVisitor::SerializeRawStringReference(const AstRawString* s, bool fixed_size) {
   CHECK(s != nullptr);
   auto global_result = string_indexes_.find(s);
   if (global_result == string_indexes_.end()) {
@@ -294,7 +296,12 @@ inline void BinAstSerializeVisitor::SerializeRawStringReference(const AstRawStri
   } else {
     local_string_table_index = local_result->second;
   }
-  SerializeVarUint32(local_string_table_index);
+
+  if (fixed_size) {
+    SerializeUint32(local_string_table_index);
+  } else {
+    SerializeVarUint32(local_string_table_index);
+  }
 }
 
 inline void BinAstSerializeVisitor::SerializeGlobalRawStringReference(const AstRawString* s) {
@@ -453,11 +460,9 @@ inline bool BinAstSerializeVisitor::SerializeAst(AstNode* root) {
 }
 
 #define GLOBAL_VARIABLE_TABLE_HEADER_SIZE (sizeof(uint32_t))
-#define GLOBAL_VARIABLE_TABLE_ENTRY_SIZE (sizeof(uint32_t) + 2 * sizeof(int32_t) + sizeof(uint16_t))
+#define GLOBAL_VARIABLE_TABLE_ENTRY_SIZE (2 * sizeof(int32_t) + sizeof(uint16_t))
 
 inline void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
-  SerializeGlobalRawStringReference(variable->raw_name());
-
   // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
   if (variable->has_local_if_not_shadowed()) {
     printf("BinAstSerializeVisitor encountered unsupported variable with local_if_not_shadowed field set\n");
@@ -474,17 +479,29 @@ inline void BinAstSerializeVisitor::SerializeVariableReference(Variable* variabl
     SerializeVarUint32(0);
     return;
   }
-  auto var_id_result = global_variable_indexes_.find(variable);
+
+  auto global_var_id_result = global_variable_indexes_.find(variable);
   uint32_t global_var_id = 0;
-  if (var_id_result == global_variable_indexes_.end()) {
+  if (global_var_id_result == global_variable_indexes_.end()) {
     // + 1 to reserve 0 for nullptr
     DCHECK(global_variable_indexes_.size() < UINT_MAX);
     global_var_id = static_cast<uint32_t>(global_variable_indexes_.size()) + 1;
     global_variable_indexes_[variable] = global_var_id;
   } else {
-    global_var_id = var_id_result->second;
+    global_var_id = global_var_id_result->second;
   }
-  SerializeVarUint32(global_var_id);
+
+  auto& local_variable_indexes = used_variable_indexes_by_function_[active_function_literal_];
+  auto local_var_id_result = local_variable_indexes.find(variable);
+  uint32_t local_var_id = 0;
+  if (local_var_id_result == local_variable_indexes.end()) {
+    // + 1 to reserve 0 for nullptr
+    local_var_id = static_cast<uint32_t>(local_variable_indexes.size()) + 1;
+    local_variable_indexes[variable] = local_var_id;
+  } else {
+    local_var_id = local_var_id_result->second;
+  }
+  SerializeVarUint32(local_var_id);
 }
 
 inline void BinAstSerializeVisitor::SerializeScopeVariableMap(Scope* scope) {
@@ -798,6 +815,9 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
   size_t proxy_string_table_offset_index = byte_data_.size();
   SerializeUint32(0);
 
+  size_t proxy_variable_table_offset_index = byte_data_.size();
+  SerializeUint32(0);
+
   const AstConsString* name = function_literal->raw_name();
   SerializeConsString(name);
   SerializeDeclarationScope(function_literal->scope());
@@ -814,6 +834,10 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
     VisitNode(statement);
   }
 
+  // We serialize the variables first so any string references are recorded for when we serialize the proxy string table.
+  SerializeUint32(static_cast<uint32_t>(byte_data_.size()), static_cast<uint32_t>(proxy_variable_table_offset_index));
+  SerializeProxyVariableTable();
+
   SerializeUint32(static_cast<uint32_t>(byte_data_.size()), static_cast<uint32_t>(proxy_string_table_offset_index));
   SerializeProxyStringTable();
 
@@ -826,6 +850,30 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
   auto length = byte_data_.size() - start;
   DCHECK(length <= UINT32_MAX);
   SerializeUint32(static_cast<uint32_t>(length), length_index.value());
+}
+
+#define PROXY_VARIABLE_TABLE_HEADER_SIZE (sizeof(uint32_t))
+#define PROXY_VARIABLE_TABLE_ENTRY_SIZE (2 * sizeof(uint32_t))
+
+inline void BinAstSerializeVisitor::SerializeProxyVariableTable() {
+  std::unordered_map<Variable*, uint32_t>& local_variable_indexes = used_variable_indexes_by_function_[active_function_literal_];
+  std::vector<std::pair<uint32_t, Variable*>> sorted_by_local_index;
+  sorted_by_local_index.reserve(local_variable_indexes.size());
+
+  for (const auto& kv : local_variable_indexes) {
+    sorted_by_local_index.push_back({kv.second, kv.first});
+  }
+
+  std::sort(sorted_by_local_index.begin(), sorted_by_local_index.end());
+
+  bool fixed_size = true;
+  SerializeUint32(static_cast<uint32_t>(local_variable_indexes.size()));
+  for (const auto& kv : sorted_by_local_index) {
+    Variable* variable = kv.second;
+    auto global_variable_index = global_variable_indexes_.at(variable);
+    SerializeRawStringReference(variable->raw_name(), fixed_size);
+    SerializeUint32(global_variable_index);
+  }
 }
 
 inline void BinAstSerializeVisitor::SerializeProxyStringTable() {

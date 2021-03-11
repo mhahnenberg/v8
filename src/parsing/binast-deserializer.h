@@ -21,7 +21,7 @@ class Parser;
 
 
 struct RawVariableData {
-  uint32_t global_index;
+  uint32_t local_index;
   const AstRawString* name;
   int32_t index;
   int32_t initializer_position;
@@ -73,7 +73,7 @@ class BinAstDeserializer {
   DeserializeResult<const AstRawString*> DeserializeProxyString(uint8_t* serialized_ast, int offset);
   DeserializeResult<std::nullptr_t> DeserializeStringTable(uint8_t* bytes, int offset);
   DeserializeResult<std::nullptr_t> DeserializeProxyStringTable(uint8_t* serialized_ast, int offset);
-  DeserializeResult<const AstRawString*> DeserializeRawStringReference(uint8_t* bytes, int offset);
+  DeserializeResult<const AstRawString*> DeserializeRawStringReference(uint8_t* bytes, int offset, bool fixed_size = false);
   DeserializeResult<const AstRawString*> DeserializeGlobalRawStringReference(uint8_t* serialized_ast, int offset);
   DeserializeResult<AstConsString*> DeserializeConsString(uint8_t* bytes, int offset);
 
@@ -82,7 +82,9 @@ class BinAstDeserializer {
 
   void HandleFunctionSkipping(Scope* scope, bool can_skip_function);
 
+  DeserializeResult<std::nullptr_t> DeserializeProxyVariableTable(uint8_t* serialized_ast, int offset);
   DeserializeResult<RawVariableData> DeserializeGlobalVariableReference(uint8_t* serialized_binast, int offset);
+  DeserializeResult<RawVariableData> DeserializeProxyVariableReference(uint8_t* serialized_binast, int offset);
   DeserializeResult<Variable*> DeserializeLocalVariable(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeNonLocalVariable(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Variable*> DeserializeVariableReference(uint8_t* serialized_binast, int offset, Scope* scope = nullptr);
@@ -140,11 +142,12 @@ class BinAstDeserializer {
   MaybeHandle<PreparseData> preparse_data_;
   std::unique_ptr<ConsumedPreparseData> consumed_preparse_data_;
   std::vector<const AstRawString*> strings_;
-  std::unordered_map<uint32_t, Variable*> variables_by_global_index_;
+  std::vector<Variable*> variables_;
   std::unordered_map<uint32_t, AstNode*> nodes_by_offset_;
   std::unordered_map<uint32_t, std::vector<void**>> patchable_fields_by_offset_;
   std::unordered_map<uint32_t, ProducedPreparseData*> produced_preparse_data_by_start_position_;
   uint32_t string_table_base_offset_;
+  uint32_t proxy_variable_table_base_offset_;
   uint32_t global_variable_table_base_offset_;
   bool is_root_fn_;
 };
