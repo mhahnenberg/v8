@@ -15,12 +15,14 @@ namespace v8 {
 namespace internal {
 
 BinAstDeserializer::BinAstDeserializer(Isolate* isolate, Parser* parser,
-                                       Handle<ByteArray> parse_data, MaybeHandle<PreparseData> preparse_data)
+                                       Handle<ByteArray> parse_data,
+                                       MaybeHandle<PreparseData> preparse_data)
     : isolate_(isolate),
       parser_(parser),
       parse_data_(parse_data),
       preparse_data_(preparse_data),
       string_table_base_offset_(0),
+      proxy_variable_table_base_offset_(0),
       global_variable_table_base_offset_(0),
       is_root_fn_(true) {
 }
@@ -463,6 +465,17 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   auto proxy_string_table = DeserializeProxyStringTable(serialized_binast, proxy_string_table_offset.value);
   // Note: We set the offset after processing the body of the function.
 
+  std::vector<Variable*> temp_variables;
+  variables_.swap(temp_variables);
+
+  auto proxy_variable_table_offset = DeserializeUint32(serialized_binast, offset);
+  offset = proxy_variable_table_offset.new_offset;
+
+  auto previous_proxy_variable_table_base_offset = proxy_variable_table_base_offset_;
+  proxy_variable_table_base_offset_ = proxy_variable_table_offset.value;
+  auto proxy_variable_table = DeserializeProxyVariableTable(serialized_binast, proxy_variable_table_offset.value);
+  // Note: We set the offset after processing the body of the function.
+
   // TODO(binast): Kind of silly that we serialize a cons string only to deserialized into a raw string
   auto name = DeserializeConsString(serialized_binast, offset);
   offset = name.new_offset;
@@ -526,8 +539,12 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
     }
   }
 
+  // Setting the offset now to advance past the proxy variable table.
+  DCHECK(scope.value->is_skipped_function() || static_cast<uint32_t>(offset) == proxy_variable_table_offset.value);
+  offset = proxy_variable_table.new_offset;
+
   // Setting the offset now to advance past the proxy string table.
-  DCHECK(scope.value->is_skipped_function() || static_cast<uint32_t>(offset) == proxy_string_table_offset.value);
+  DCHECK(static_cast<uint32_t>(offset) == proxy_string_table_offset.value);
   offset = proxy_string_table.new_offset;
 
   FunctionLiteral* result = parser_->factory()->NewFunctionLiteral(
@@ -543,6 +560,10 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   if (preparse_data_result != produced_preparse_data_by_start_position_.end()) {
     result->produced_preparse_data_ = preparse_data_result->second;
   }
+
+  // Swap the variable table back for the previous function.
+  proxy_variable_table_base_offset_ = previous_proxy_variable_table_base_offset;
+  variables_.swap(temp_variables);
 
   // Swap the string table back for the previous function.
   strings_.swap(temp_strings);
