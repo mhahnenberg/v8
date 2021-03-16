@@ -253,13 +253,10 @@ inline Variable* BinAstDeserializer::CreateLocalNonTemporaryVariable(Scope* scop
 }
 
 inline BinAstDeserializer::DeserializeResult<RawVariableData> BinAstDeserializer::DeserializeGlobalVariableReference(uint8_t* serialized_binast, int offset) {
-  auto global_variable_index = DeserializeVarUint32(serialized_binast, offset);
+  auto global_variable_index = DeserializeUint32(serialized_binast, offset);
   // Note we don't use the next offset, instead jumping to the proper offset in the global variable table.
 
-  if (global_variable_index.value == 0) {
-    return {{0, nullptr, 0, 0, 0}, global_variable_index.new_offset};
-  }
-
+  DCHECK(global_variable_index.value != 0);
   offset = global_variable_table_base_offset_ + GLOBAL_VARIABLE_TABLE_HEADER_SIZE + GLOBAL_VARIABLE_TABLE_ENTRY_SIZE * (global_variable_index.value - 1);
   // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
   // next_
