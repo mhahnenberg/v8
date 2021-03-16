@@ -303,8 +303,6 @@ class ConsumedPreparseData {
       int* function_length, int* num_inner_functions, bool* uses_super_property,
       LanguageMode* language_mode) = 0;
 
-  virtual bool IsFunctionOffsetNextSkippable(int start_position) = 0;
-
   // Restores the information needed for allocating the Scope's (and its
   // subscopes') variables.
   virtual void RestoreScopeAllocationData(DeclarationScope* scope,

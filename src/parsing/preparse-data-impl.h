@@ -107,16 +107,6 @@ class BaseConsumedPreparseData : public ConsumedPreparseData {
       return value;
     }
 
-    base::Optional<int32_t> PeekVarint32() {
-      auto original_index = index_;
-      if (!HasRemainingBytes(kVarint32MinSize) || data_.get(index_) != kVarint32MinSize) {
-        return base::Optional<int32_t>();
-      }
-      auto result = ReadVarint32();
-      index_ = original_index;
-      return result;
-    }
-
     uint8_t ReadUint8() {
       DCHECK(has_data_);
       DCHECK(HasRemainingBytes(kUint8Size));
@@ -165,8 +155,6 @@ class BaseConsumedPreparseData : public ConsumedPreparseData {
       Zone* zone, int start_position, int* end_position, int* num_parameters,
       int* function_length, int* num_inner_functions, bool* uses_super_property,
       LanguageMode* language_mode) final;
-
-  bool IsFunctionOffsetNextSkippable(int start_position);
 
   void RestoreScopeAllocationData(DeclarationScope* scope,
                                   AstValueFactory* ast_value_factory,
