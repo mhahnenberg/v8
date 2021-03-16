@@ -634,6 +634,9 @@ inline void BinAstSerializeVisitor::SerializeCommonScopeFields(Scope* scope) {
     scope->must_use_preparsed_scope_data_,
     scope->is_repl_mode_scope_,
     scope->deserialized_scope_uses_external_cache_,
+    // Note: If this is a DeclarationScope for a function, we need to know if the Preparser skipped this function before we visit the Declarations,
+    // which is why we store this flag here rather than in SerializeDeclarationScope.
+    scope->scope_type() == FUNCTION_SCOPE ? scope->AsDeclarationScope()->is_skipped_function() : false,
   });
   SerializeScopeDeclarations(scope);
 }

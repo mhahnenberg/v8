@@ -80,7 +80,7 @@ class BinAstDeserializer {
   Variable* CreateLocalTemporaryVariable(Scope* scope, const AstRawString* name, int index, int initializer_position, uint32_t bit_field);
   Variable* CreateLocalNonTemporaryVariable(Scope* scope, const AstRawString* name, int index, int initializer_position, uint32_t bit_field);
 
-  void HandleFunctionSkipping(Scope* scope, bool can_skip_function);
+  void HandleFunctionSkipping(Scope* scope);
 
   DeserializeResult<std::nullptr_t> DeserializeProxyVariableTable(uint8_t* serialized_ast, int offset);
   DeserializeResult<RawVariableData> DeserializeGlobalVariableReference(uint8_t* serialized_binast, int offset);
@@ -96,9 +96,9 @@ class BinAstDeserializer {
   DeserializeResult<Declaration*> DeserializeDeclaration(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<std::nullptr_t> DeserializeScopeDeclarations(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<std::nullptr_t> DeserializeScopeParameters(uint8_t* serialized_binast, int offset, DeclarationScope* scope);
-  DeserializeResult<std::nullptr_t> DeserializeCommonScopeFields(uint8_t* serialized_binast, int offset, Scope* scope, bool can_skip_function = false);
+  DeserializeResult<std::nullptr_t> DeserializeCommonScopeFields(uint8_t* serialized_binast, int offset, Scope* scope);
   DeserializeResult<Scope*> DeserializeScope(uint8_t* serialized_binast, int offset);
-  DeserializeResult<DeclarationScope*> DeserializeDeclarationScope(uint8_t* serialized_binast, int offset, bool can_skip_function);
+  DeserializeResult<DeclarationScope*> DeserializeDeclarationScope(uint8_t* serialized_binast, int offset);
 
   DeserializeResult<AstNode*> DeserializeAstNode(uint8_t* serialized_ast, int offset, bool is_toplevel = false);
   DeserializeResult<FunctionLiteral*> DeserializeFunctionLiteral(uint8_t* serialized_ast, uint32_t bit_field, int32_t position, int offset);
@@ -149,7 +149,6 @@ class BinAstDeserializer {
   uint32_t string_table_base_offset_;
   uint32_t proxy_variable_table_base_offset_;
   uint32_t global_variable_table_base_offset_;
-  bool is_root_fn_;
 };
 
 }  // namespace internal
