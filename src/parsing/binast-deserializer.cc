@@ -530,7 +530,7 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   FunctionLiteral* result = parser_->factory()->NewFunctionLiteral(
     raw_name, scope.value, body, expected_property_count.value, parameter_count.value,
     function_length.value, has_duplicate_parameters, function_syntax_kind,
-    eager_compile_hint, position, has_braces, function_literal_id.value);
+    eager_compile_hint, position, has_braces, function_literal_id.value, SpeculativeParseFailureReason::kSucceeded);
 
   result->function_token_position_ = function_token_position.value;
   result->suspend_count_ = suspend_count.value;

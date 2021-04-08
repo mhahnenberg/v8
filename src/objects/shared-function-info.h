@@ -312,6 +312,8 @@ class SharedFunctionInfo
   // called without using argument adaptor frames.
   inline void DontAdaptArguments();
 
+  DECL_INT32_ACCESSORS(speculative_parse_failure_reason)
+
   // [function data]: This field holds some additional data for function.
   // Currently it has one of:
   //  - a FunctionTemplateInfo to make benefit the API [IsApiFunction()].

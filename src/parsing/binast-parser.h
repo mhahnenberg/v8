@@ -48,6 +48,8 @@ class BinAstParser : public AbstractParser<BinAstParser> {
     int function_token_position, FunctionSyntaxKind type,
     LanguageMode language_mode,
     ZonePtrList<const AstRawString>* arguments_for_wrapped_function);
+
+  SpeculativeParseFailureReason speculative_parse_failure_reason() const { return SpeculativeParseFailureReason::kUnknown; }
 };
 
 }  // namespace internal
