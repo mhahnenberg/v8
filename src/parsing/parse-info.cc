@@ -104,7 +104,8 @@ UnoptimizedCompileFlags UnoptimizedCompileFlags::ForToplevelCompile(
 UnoptimizedCompileFlags UnoptimizedCompileFlags::ForToplevelFunction(
     const UnoptimizedCompileFlags toplevel_flags,
     const FunctionLiteral* literal) {
-  DCHECK(toplevel_flags.is_toplevel());
+  // TODO(binast): Figure out how to properly solve this issue for background parsing.
+  // DCHECK(toplevel_flags.is_toplevel());
   DCHECK(!literal->is_toplevel());
 
   // Replicate the toplevel flags, then setup the function-specific flags.
@@ -191,6 +192,7 @@ ParseInfo::ParseInfo(const UnoptimizedCompileFlags flags,
       runtime_call_stats_(nullptr),
       source_range_map_(nullptr),
       literal_(nullptr),
+      speculative_parse_failure_reason_(SpeculativeParseFailureReason::kUnknown),
       allow_eval_cache_(false),
       contains_asm_module_(false),
       language_mode_(flags.outer_language_mode()) {

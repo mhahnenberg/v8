@@ -4350,6 +4350,7 @@ ParserBase<Impl>::ParseArrowFunctionLiteral(
   bool is_lazy_top_level_function =
       can_preparse && impl()->AllowsLazyParsingWithoutUnresolvedVariables();
   bool has_braces = true;
+  bool did_preparse_successfully = false;
   ProducedPreparseData* produced_preparse_data = nullptr;
   StatementListT body(pointer_buffer());
   {
@@ -4379,7 +4380,7 @@ ParserBase<Impl>::ParseArrowFunctionLiteral(
         int dummy_num_parameters = -1;
         int dummy_function_length = -1;
         DCHECK_NE(kind & FunctionKind::kArrowFunction, 0);
-        bool did_preparse_successfully = impl()->SkipFunction(
+        did_preparse_successfully = impl()->SkipFunction(
             nullptr, kind, FunctionSyntaxKind::kAnonymousExpression,
             formal_parameters.scope, &dummy_num_parameters,
             &dummy_function_length, &produced_preparse_data);
@@ -4460,7 +4461,9 @@ ParserBase<Impl>::ParseArrowFunctionLiteral(
       FunctionLiteral::kNoDuplicateParameters,
       FunctionSyntaxKind::kAnonymousExpression, eager_compile_hint,
       formal_parameters.scope->start_position(), has_braces,
-      function_literal_id, produced_preparse_data);
+      function_literal_id,
+      is_lazy_top_level_function ? SpeculativeParseFailureReason::kTopLevelArrowFunction : impl()->speculative_parse_failure_reason(),
+      produced_preparse_data);
 
   function_literal->set_suspend_count(suspend_count);
   function_literal->set_function_token_position(

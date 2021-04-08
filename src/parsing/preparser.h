@@ -677,6 +677,7 @@ class PreParserFactory {
       FunctionSyntaxKind function_syntax_kind,
       FunctionLiteral::EagerCompileHint eager_compile_hint, int position,
       bool has_braces, int function_literal_id,
+      SpeculativeParseFailureReason speculative_parse_failure_reason,
       ProducedPreparseData* produced_preparse_data = nullptr) {
     DCHECK_NULL(produced_preparse_data);
     return PreParserExpression::Default();
@@ -969,6 +970,8 @@ class PreParser : public ParserBase<PreParser> {
   std::vector<void*>* preparse_data_builder_buffer() {
     return &preparse_data_builder_buffer_;
   }
+
+  SpeculativeParseFailureReason speculative_parse_failure_reason() const { return SpeculativeParseFailureReason::kUnknown; }
 
  private:
   friend class i::ExpressionScope<ParserTypes<PreParser>>;

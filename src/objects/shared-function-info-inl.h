@@ -14,6 +14,7 @@
 #include "src/objects/feedback-vector-inl.h"
 #include "src/objects/scope-info.h"
 #include "src/objects/templates.h"
+#include "src/ast/ast.h"
 #include "src/wasm/wasm-objects-inl.h"
 
 // Has to be the last include (doesn't have include guards):
@@ -111,6 +112,7 @@ ACCESSORS(SharedFunctionInfo, script_or_debug_info, HeapObject,
 INT32_ACCESSORS(SharedFunctionInfo, function_literal_id,
                 kFunctionLiteralIdOffset)
 
+INT32_ACCESSORS(SharedFunctionInfo, speculative_parse_failure_reason, kSpeculativeParseFailureReasonOffset)
 #if V8_SFI_HAS_UNIQUE_ID
 INT_ACCESSORS(SharedFunctionInfo, unique_id, kUniqueIdOffset)
 #endif
@@ -683,6 +685,8 @@ void SharedFunctionInfo::ClearBinAstParseData() {
           UncompiledDataWithoutPreparseData::kSize,
       ClearRecordedSlots::kYes);
 
+  set_speculative_parse_failure_reason(SpeculativeParseFailureReason::kSFIFlushed);
+
   // Ensure that the clear was successful.
   DCHECK(HasUncompiledDataWithoutPreparseData());
   DCHECK(!HasUncompiledDataWithBinAstParseData());
@@ -710,6 +714,8 @@ void SharedFunctionInfo::ClearInnerBinAstParseData() {
       UncompiledDataWithInnerBinAstParseData::kSize -
           UncompiledDataWithoutPreparseData::kSize,
       ClearRecordedSlots::kYes);
+
+  set_speculative_parse_failure_reason(SpeculativeParseFailureReason::kSFIFlushed);
 
   // Ensure that the clear was successful.
   DCHECK(HasUncompiledDataWithoutPreparseData());

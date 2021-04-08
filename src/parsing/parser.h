@@ -18,6 +18,8 @@ class V8_EXPORT_PRIVATE Parser
  public:
   Parser(ParseInfo* info) : AbstractParser<Parser>(info) {}
 
+  SpeculativeParseFailureReason speculative_parse_failure_reason() const { return info()->speculative_parse_failure_reason(); }
+
  private:
   friend class AbstractParser<Parser>;
   

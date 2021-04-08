@@ -18,11 +18,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   BinAstSerializeVisitor(AstValueFactory* ast_value_factory)
     : BinAstVisitor(),
       ast_value_factory_(ast_value_factory),
-      active_function_literal_(nullptr),
-      encountered_unhandled_nodes_(0),
-      skipped_functions_(0),
-      serialized_functions_(0) {
-  }
+      active_function_literal_(nullptr) {}
 
   uint8_t* serialized_bytes() const {
     if (UseCompression()) {
@@ -39,7 +35,7 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
     }
   }
 
-  bool SerializeAst(AstNode* root);
+  SpeculativeParseFailureReason SerializeAst(AstNode* root);
 
   virtual void VisitFunctionLiteral(FunctionLiteral* function_literal) override;
   virtual void VisitBlock(Block* block) override;
@@ -121,6 +117,8 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   void RecordBreakableStatement(BreakableStatement* node);
   void PatchPendingNodeReferences(const AstNode* node, size_t offset);
 
+  void RecordParseFailureReason(SpeculativeParseFailureReason reason, const char* message);
+
   AstValueFactory* ast_value_factory_;
   std::unordered_map<const AstRawString*, uint32_t> string_indexes_;
   std::vector<uint8_t> byte_data_;
@@ -131,10 +129,8 @@ class BinAstSerializeVisitor final : public BinAstVisitor {
   std::unordered_map<FunctionLiteral*, std::unordered_map<uint32_t, uint32_t>> used_string_indexes_by_function_;
   std::unordered_map<FunctionLiteral*, std::unordered_map<Variable*, uint32_t>> used_variable_indexes_by_function_;
   FunctionLiteral* active_function_literal_;
-  int encountered_unhandled_nodes_;
-  int skipped_functions_;
-  int serialized_functions_;
 
+  std::unordered_map<SpeculativeParseFailureReason, uint32_t> failure_reasons_;
   std::unique_ptr<uint8_t[]> compressed_byte_data_;
   size_t compressed_byte_data_length_;
 };
@@ -404,8 +400,7 @@ inline void BinAstSerializeVisitor::SerializeVariableTable() {
   }
 }
 
-inline bool BinAstSerializeVisitor::SerializeAst(AstNode* root) {
-  auto start = std::chrono::high_resolution_clock::now();
+inline SpeculativeParseFailureReason BinAstSerializeVisitor::SerializeAst(AstNode* root) {
   FunctionLiteral* literal = root->AsFunctionLiteral();
   DCHECK(literal != nullptr);
   SerializeStringTable(literal->raw_name());
@@ -422,17 +417,18 @@ inline bool BinAstSerializeVisitor::SerializeAst(AstNode* root) {
   // Make sure we eventually patched everything.
   DCHECK(patchable_node_reference_offsets_.empty());
 
-  if (encountered_unhandled_nodes_ > 0) {
-    printf("Failed to serialize function: '");
-    for (const AstRawString* s : literal->raw_name()->ToRawStrings()) {
-      printf("%.*s", s->byte_length(), s->raw_data());
+  if (!failure_reasons_.empty()) {
+    uint32_t max_failures = 0;
+    SpeculativeParseFailureReason max_failure_reason = kUnknown;
+    for (auto& kv : failure_reasons_) {
+      auto reason = kv.first;
+      auto count = kv.second;
+      if (count > max_failures) {
+        max_failures = count;
+        max_failure_reason = reason;
+      }
     }
-    printf(
-        "'. Successfully serialized %d functions, and skipped serialization due to %d "
-        "functions containing a total of %d unsupported nodes \n",
-        serialized_functions_, skipped_functions_,
-        encountered_unhandled_nodes_);
-    return false;
+    return max_failure_reason;
   }
 
   if (UseCompression()) {
@@ -444,19 +440,11 @@ inline bool BinAstSerializeVisitor::SerializeAst(AstNode* root) {
       *reinterpret_cast<size_t*>(compressed_byte_data_.get()) = byte_data_.size();
     } else {
       printf("\nError compressing serialized AST: %s\n", zError(compress_result));
-      return false;
+      return kCompressionFailure;
     }
   }
 
-
-  auto elapsed = std::chrono::high_resolution_clock::now() - start;
-  long long microseconds = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-  printf("Serialized function: '");
-  for (const AstRawString* s : literal->raw_name()->ToRawStrings()) {
-    printf("%.*s", s->byte_length(), s->raw_data());
-  }
-  printf("' in %lld us\n", microseconds);
-  return true;
+  return kSucceeded;
 }
 
 #define GLOBAL_VARIABLE_TABLE_HEADER_SIZE (sizeof(uint32_t))
@@ -465,8 +453,9 @@ inline bool BinAstSerializeVisitor::SerializeAst(AstNode* root) {
 inline void BinAstSerializeVisitor::SerializeVariable(Variable* variable) {
   // local_if_not_shadowed_: TODO(binast): how to reference other local variables like this? index?
   if (variable->has_local_if_not_shadowed()) {
-    printf("BinAstSerializeVisitor encountered unsupported variable with local_if_not_shadowed field set\n");
-    encountered_unhandled_nodes_++;
+    RecordParseFailureReason(
+      SpeculativeParseFailureReason::kUnsupportedAstNode,
+      "Encountered unsupported variable with local_if_not_shadowed field set");
   }
 
   SerializeInt32(variable->index());
@@ -563,8 +552,9 @@ inline void BinAstSerializeVisitor::SerializeDeclaration(Scope* scope, Declarati
     case Declaration::DeclType::VariableDecl: {
       // TODO(binast): Add support for nested variable declarations.
       if (decl->AsVariableDeclaration()->is_nested()) {
-        encountered_unhandled_nodes_++;
-        printf("BinAstSerializeVisitor encountered unhandled nested variable declaration, skipping function\n");
+        RecordParseFailureReason(
+          SpeculativeParseFailureReason::kUnsupportedNestedVarDecl, 
+          "Encountered unhandled nested variable declaration, skipping function");
       }
       SerializeUint8(decl->AsVariableDeclaration()->is_nested());
       break;
@@ -665,17 +655,17 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
   });
 
   if (scope->has_rest_) {
-    printf(
-        "BinAstSerializeVisitor encountered unsupported rest parameter on "
-        "DeclarationScope\n");
-    encountered_unhandled_nodes_++;
+    RecordParseFailureReason(
+      SpeculativeParseFailureReason::kUnsupportedAstNode,
+      "Encountered unsupported rest parameter on DeclarationScope");
   }
 
   SerializeScopeParameters(scope);
   // TODO(binast): sloppy_block_functions_ (needed for non-strict mode support)
   if (!scope->sloppy_block_functions_.is_empty()) {
-    printf("BinAstSerializeVisitor encountered unsupported sloppy block functions on DeclarationScope\n");
-    encountered_unhandled_nodes_++;
+    RecordParseFailureReason(
+      SpeculativeParseFailureReason::kUnsupportedAstNode,
+      "Encountered unsupported sloppy block functions on DeclarationScope");
   }
 
   SerializeVariableReference(scope->receiver_);
@@ -685,8 +675,9 @@ inline void BinAstSerializeVisitor::SerializeDeclarationScope(DeclarationScope* 
 
   // TODO(binast): rare_data_ (needed for > ES5.1 feature support)
   if (scope->rare_data_ != nullptr) {
-    printf("BinAstSerializeVisitor encountered unsupported rare data on DeclarationScope\n");
-    encountered_unhandled_nodes_++;
+    RecordParseFailureReason(
+      SpeculativeParseFailureReason::kUnsupportedAstNode,
+      "Encountered unsupported rare data on DeclarationScope");
   }
 }
 
@@ -767,9 +758,14 @@ inline void BinAstSerializeVisitor::VisitMaybeNode(AstNode* maybe_node) {
 
 inline void BinAstSerializeVisitor::ToDoBinAst(AstNode* node) {
   // TODO(binast): Delete this function when it's no longer needed.
-  printf("BinAstSerializeVisitor encountered unhandled node type: %s\n", node->node_type_name());
-  // UNREACHABLE();
-  encountered_unhandled_nodes_++;
+  RecordParseFailureReason(
+    SpeculativeParseFailureReason::kUnsupportedAstNode,
+    "Encountered unhandled node type");
+}
+
+inline void BinAstSerializeVisitor::RecordParseFailureReason(SpeculativeParseFailureReason reason, const char* message) {
+  printf("BinAstSerializeVisitor: %s\n", message);
+  failure_reasons_[reason] += 1;
 }
 
 inline void BinAstSerializeVisitor::RecordBreakableStatement(BreakableStatement* node) {
@@ -799,8 +795,6 @@ class ActiveFunctionLiteralScope {
 inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* function_literal) {
   ActiveFunctionLiteralScope function_literal_scope(&active_function_literal_, function_literal);
   size_t start = byte_data_.size();
-
-  int original_unsupported_nodes = encountered_unhandled_nodes_;
 
   SerializeAstNodeHeader(function_literal);
 
@@ -843,11 +837,6 @@ inline void BinAstSerializeVisitor::VisitFunctionLiteral(FunctionLiteral* functi
 
   SerializeUint32(static_cast<uint32_t>(byte_data_.size()), static_cast<uint32_t>(proxy_string_table_offset_index));
   SerializeProxyStringTable();
-
-  int unhandled_inner_nodes = encountered_unhandled_nodes_ - original_unsupported_nodes;
-  if (unhandled_inner_nodes > 0) {
-    skipped_functions_++;
-  }
 
   // Calculate length and insert at length_index
   auto length = byte_data_.size() - start;
@@ -1092,10 +1081,9 @@ inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_lit
     SerializeUint8(property->kind());
 
     if (property->kind() == ObjectLiteral::Property::SPREAD) {
-      printf(
-          "BinAstSerializeVisitor encountered unhandled spread in object "
-          "literal, skipping function\n");
-      encountered_unhandled_nodes_++;
+      RecordParseFailureReason(
+        SpeculativeParseFailureReason::kUnsupportedAstNode, 
+        "Encountered unhandled spread in object literal");
     }
 
     SerializeUint8(property->is_computed_name());
@@ -1106,8 +1094,9 @@ inline void BinAstSerializeVisitor::VisitArrayLiteral(ArrayLiteral* array_litera
   SerializeAstNodeHeader(array_literal);
 
   if (array_literal->first_spread_index() != -1) {
-    printf("BinAstSerializeVisitor encountered unhandled array spread, skipping function\n");
-    encountered_unhandled_nodes_++;
+    RecordParseFailureReason(
+      SpeculativeParseFailureReason::kUnsupportedAstNode,
+      "Encountered unhandled array spread");
   }
 
   SerializeInt32(array_literal->values()->length());

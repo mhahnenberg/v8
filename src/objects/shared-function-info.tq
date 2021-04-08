@@ -63,6 +63,7 @@ extern class SharedFunctionInfo extends HeapObject {
   flags2: SharedFunctionInfoFlags2;
   flags: SharedFunctionInfoFlags;
   function_literal_id: int32;
+  speculative_parse_failure_reason: int32;
   @if(V8_SFI_HAS_UNIQUE_ID) unique_id: int32;
 }
 

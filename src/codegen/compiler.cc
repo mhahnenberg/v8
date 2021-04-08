@@ -1365,6 +1365,8 @@ void BackgroundBinAstParseTask::Run() {
 
 bool BackgroundBinAstParseTask::Finalize(Isolate* isolate, Handle<SharedFunctionInfo> function) {
   HandleScope scope(isolate);
+  DCHECK(info()->speculative_parse_failure_reason() != SpeculativeParseFailureReason::kUnknown);
+  function->set_speculative_parse_failure_reason(info()->speculative_parse_failure_reason());
   // We gave up during serialization, so the task successfully completed but there's no result so just return.
   if (info()->literal()->produced_binast_parse_data() == nullptr) {
     return true;
@@ -1644,6 +1646,13 @@ bool Compiler::Compile(Handle<SharedFunctionInfo> shared_info,
     }
   }
 
+  // At this point, we must have either failed or succeeded at speculative parsing, so we can indicate this on the ParseInfo.
+  parse_info.set_speculative_parse_failure_reason(static_cast<SpeculativeParseFailureReason>(shared_info->speculative_parse_failure_reason()));
+
+  TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
+                         "V8.SpeculativeParseResult", TRACE_EVENT_SCOPE_THREAD,
+                         "failure-reason", parse_info.speculative_parse_failure_reason());
+
   if (shared_info->HasUncompiledDataWithPreparseData()) {
     parse_info.set_consumed_preparse_data(ConsumedPreparseData::For(
         isolate,
@@ -1672,6 +1681,9 @@ bool Compiler::Compile(Handle<SharedFunctionInfo> shared_info,
   if (!parsing::ParseAny(&parse_info, shared_info, isolate)) {
     return FailWithPendingException(isolate, script, &parse_info, flag);
   }
+
+  // Make sure top-level function literal result matches what the ParseInfo says.
+  parse_info.literal()->set_speculative_parse_failure_reason(parse_info.speculative_parse_failure_reason());
 
   // Generate the unoptimized bytecode or asm-js data.
   FinalizeUnoptimizedCompilationDataList

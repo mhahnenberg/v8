@@ -39,6 +39,7 @@ class Logger;
 class SourceRangeMap;
 class Utf16CharacterStream;
 class Zone;
+enum SpeculativeParseFailureReason : uint8_t;
 
 // The flags for a parse + unoptimized compile operation.
 #define FLAG_FIELDS(V, _)                                \
@@ -305,6 +306,9 @@ class V8_EXPORT_PRIVATE ParseInfo {
   FunctionLiteral* literal() const { return literal_; }
   void set_literal(FunctionLiteral* literal) { literal_ = literal; }
 
+  SpeculativeParseFailureReason speculative_parse_failure_reason() const { return speculative_parse_failure_reason_; }
+  void set_speculative_parse_failure_reason(SpeculativeParseFailureReason reason) { speculative_parse_failure_reason_ = reason; }
+
   DeclarationScope* scope() const;
 
   int parameters_end_pos() const { return parameters_end_pos_; }
@@ -357,6 +361,7 @@ class V8_EXPORT_PRIVATE ParseInfo {
 
   //----------- Output of parsing and scope analysis ------------------------
   FunctionLiteral* literal_;
+  SpeculativeParseFailureReason speculative_parse_failure_reason_;
   bool allow_eval_cache_ : 1;
   bool contains_asm_module_ : 1;
   LanguageMode language_mode_ : 1;

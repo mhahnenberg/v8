@@ -267,7 +267,7 @@ TEST_F(OffThreadFactoryTest, EmptyScript) {
 
     shared = off_thread_isolate()->TransferHandle(
         off_thread_factory()->NewSharedFunctionInfoForLiteral(program, script(),
-                                                              true));
+                                                              true, SpeculativeParseFailureReason::kUnknown));
 
     off_thread_isolate()->FinishOffThread();
   }
@@ -292,7 +292,7 @@ TEST_F(OffThreadFactoryTest, LazyFunction) {
 
     shared = off_thread_isolate()->TransferHandle(
         off_thread_factory()->NewSharedFunctionInfoForLiteral(lazy, script(),
-                                                              true));
+                                                              true, SpeculativeParseFailureReason::kUnknown));
 
     off_thread_isolate()->FinishOffThread();
   }
@@ -323,7 +323,7 @@ TEST_F(OffThreadFactoryTest, EagerFunction) {
 
     shared = off_thread_isolate()->TransferHandle(
         off_thread_factory()->NewSharedFunctionInfoForLiteral(eager, script(),
-                                                              true));
+                                                              true, SpeculativeParseFailureReason::kUnknown));
 
     off_thread_isolate()->FinishOffThread();
   }
@@ -358,7 +358,7 @@ TEST_F(OffThreadFactoryTest, ImplicitNameFunction) {
 
     shared = off_thread_isolate()->TransferHandle(
         off_thread_factory()->NewSharedFunctionInfoForLiteral(implicit_name,
-                                                              script(), true));
+                                                              script(), true, SpeculativeParseFailureReason::kUnknown));
 
     off_thread_isolate()->FinishOffThread();
   }
@@ -390,7 +390,7 @@ TEST_F(OffThreadFactoryTest, GCDuringPublish) {
 
     shared = off_thread_isolate()->TransferHandle(
         off_thread_factory()->NewSharedFunctionInfoForLiteral(implicit_name,
-                                                              script(), true));
+                                                              script(), true, SpeculativeParseFailureReason::kUnknown));
 
     off_thread_isolate()->FinishOffThread();
   }

@@ -26,6 +26,24 @@
 namespace v8 {
 namespace internal {
 
+enum SpeculativeParseFailureReason : uint8_t {
+  kUnknown,
+  kUnclonableOnHeapStream,
+  kUncloneableExternalStringStream,
+  kUncloneableTestingStream,
+  kUncloneableChunkedStream,
+  kUncloneableExternalUtf8Stream,
+  kScannerStreamHeapAccess,
+  kNoTaskEnqueued,
+  kTopLevelArrowFunction,
+  kEagerParsed,
+  kUnsupportedAstNode,
+  kUnsupportedNestedVarDecl,
+  kCompressionFailure,
+  kSFIFlushed,
+  kSucceeded,
+};
+
 // The abstract syntax tree is an intermediate, light-weight
 // representation of the parsed JavaScript code suitable for
 // compilation to native code.
@@ -2491,6 +2509,11 @@ class FunctionLiteral final : public Expression {
     uncompiled_data_with_inner_bin_ast_parse_data_ = data;
   }
 
+  SpeculativeParseFailureReason speculative_parse_failure_reason() const { return speculative_parse_failure_reason_; }
+  void set_speculative_parse_failure_reason(SpeculativeParseFailureReason reason) {
+    speculative_parse_failure_reason_ = reason;
+  }
+
  private:
   friend class AstNodeFactory;
   friend class BinAstSerializeVisitor;
@@ -2504,6 +2527,7 @@ class FunctionLiteral final : public Expression {
                   ParameterFlag has_duplicate_parameters,
                   EagerCompileHint eager_compile_hint, int position,
                   bool has_braces, int function_literal_id,
+                  SpeculativeParseFailureReason speculative_parse_failure_reason,
                   ProducedPreparseData* produced_preparse_data = nullptr)
       : Expression(position, kFunctionLiteral),
         expected_property_count_(expected_property_count),
@@ -2517,7 +2541,8 @@ class FunctionLiteral final : public Expression {
         body_(0, nullptr),
         raw_inferred_name_(ast_value_factory->empty_cons_string()),
         produced_preparse_data_(produced_preparse_data),
-        produced_binast_parse_data_(nullptr) {
+        produced_binast_parse_data_(nullptr),
+        speculative_parse_failure_reason_(speculative_parse_failure_reason) {
     bit_field_ |= FunctionSyntaxKindBits::encode(function_syntax_kind) |
                   Pretenure::encode(false) |
                   HasDuplicateParameters::encode(has_duplicate_parameters ==
@@ -2565,6 +2590,7 @@ class FunctionLiteral final : public Expression {
   // TODO(binast): Change this to raw zone pointer to more closely imitate the other preparse behavior.
   Handle<UncompiledDataWithInnerBinAstParseData>
       uncompiled_data_with_inner_bin_ast_parse_data_;
+  SpeculativeParseFailureReason speculative_parse_failure_reason_;
 };
 
 // Property is used for passing information
@@ -3390,13 +3416,14 @@ class AstNodeFactory final {
       FunctionSyntaxKind function_syntax_kind,
       FunctionLiteral::EagerCompileHint eager_compile_hint, int position,
       bool has_braces, int function_literal_id,
+      SpeculativeParseFailureReason speculative_parse_failure_reason,
       ProducedPreparseData* produced_preparse_data = nullptr) {
     return new (zone_) FunctionLiteral(
         zone_, name ? ast_value_factory_->NewConsString(name) : nullptr,
         ast_value_factory_, scope, body, expected_property_count,
         parameter_count, function_length, function_syntax_kind,
         has_duplicate_parameters, eager_compile_hint, position, has_braces,
-        function_literal_id, produced_preparse_data);
+        function_literal_id, speculative_parse_failure_reason, produced_preparse_data);
   }
 
   // Creates a FunctionLiteral representing a top-level script, the
@@ -3411,7 +3438,7 @@ class AstNodeFactory final {
         FunctionSyntaxKind::kAnonymousExpression,
         FunctionLiteral::kNoDuplicateParameters,
         FunctionLiteral::kShouldLazyCompile, 0, /* has_braces */ false,
-        kFunctionLiteralIdTopLevel);
+        kFunctionLiteralIdTopLevel, SpeculativeParseFailureReason::kUnknown);
   }
 
   ClassLiteral::Property* NewClassLiteralProperty(
