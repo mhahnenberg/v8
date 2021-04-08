@@ -99,7 +99,7 @@ class CompilerDispatcherTest : public TestWithNativeContext {
             FunctionLiteral::kNoDuplicateParameters,
             FunctionSyntaxKind::kAnonymousExpression,
             FunctionLiteral::kShouldEagerCompile, shared->StartPosition(), true,
-            shared->function_literal_id(), nullptr);
+            shared->function_literal_id(), shared->speculative_parse_failure_reason(), nullptr);
 
     return dispatcher->Enqueue(outer_parse_info.get(), function_name,
                                function_literal);

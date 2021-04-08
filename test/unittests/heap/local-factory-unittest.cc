@@ -219,7 +219,7 @@ TEST_F(LocalFactoryTest, EmptyScript) {
 
     shared = local_isolate()->heap()->NewPersistentHandle(
         local_factory()->NewSharedFunctionInfoForLiteral(program, script(),
-                                                         true));
+                                                         true, SpeculativeParseFailureReason::kUnknown));
   }
   Handle<SharedFunctionInfo> root_sfi = shared;
 
@@ -239,7 +239,7 @@ TEST_F(LocalFactoryTest, LazyFunction) {
     LocalHandleScope handle_scope(local_isolate());
 
     shared = local_isolate()->heap()->NewPersistentHandle(
-        local_factory()->NewSharedFunctionInfoForLiteral(lazy, script(), true));
+        local_factory()->NewSharedFunctionInfoForLiteral(lazy, script(), true, SpeculativeParseFailureReason::kUnknown));
   }
   Handle<SharedFunctionInfo> lazy_sfi = shared;
 
@@ -266,7 +266,7 @@ TEST_F(LocalFactoryTest, EagerFunction) {
 
     shared = local_isolate()->heap()->NewPersistentHandle(
         local_factory()->NewSharedFunctionInfoForLiteral(eager, script(),
-                                                         true));
+                                                         true, SpeculativeParseFailureReason::kUnknown));
   }
   Handle<SharedFunctionInfo> eager_sfi = shared;
 
@@ -297,7 +297,7 @@ TEST_F(LocalFactoryTest, ImplicitNameFunction) {
 
     shared = local_isolate()->heap()->NewPersistentHandle(
         local_factory()->NewSharedFunctionInfoForLiteral(implicit_name,
-                                                         script(), true));
+                                                         script(), true, SpeculativeParseFailureReason::kUnknown));
   }
   Handle<SharedFunctionInfo> implicit_name_sfi = shared;
 
@@ -325,7 +325,7 @@ TEST_F(LocalFactoryTest, GCDuringPublish) {
 
     shared = local_isolate()->heap()->NewPersistentHandle(
         local_factory()->NewSharedFunctionInfoForLiteral(implicit_name,
-                                                         script(), true));
+                                                         script(), true, SpeculativeParseFailureReason::kUnknown));
   }
   Handle<SharedFunctionInfo> implicit_name_sfi = shared;
 

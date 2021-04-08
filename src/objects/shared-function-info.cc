@@ -49,6 +49,7 @@ void SharedFunctionInfo::Init(ReadOnlyRoots ro_roots, int unique_id) {
 #if V8_SFI_HAS_UNIQUE_ID
   set_unique_id(unique_id);
 #endif
+  set_speculative_parse_failure_reason(SpeculativeParseFailureReason::kUnknown);
 
   // Set integer fields (smi or int, depending on the architecture).
   set_length(0);
@@ -527,6 +528,7 @@ void SharedFunctionInfo::InitFromFunctionLiteral(
     // because we don't have that info at that point, so we should rearrange things
     // such that we do so we can satisfy this assert.
     // DCHECK_NULL(lit->produced_preparse_data());
+    shared_info->set_speculative_parse_failure_reason(SpeculativeParseFailureReason::kEagerParsed);
 
     // If we're about to eager compile, we'll have the function literal
     // available, so there's no need to wastefully allocate an uncompiled data.
@@ -534,6 +536,9 @@ void SharedFunctionInfo::InitFromFunctionLiteral(
   }
 
   shared_info->UpdateExpectedNofPropertiesFromEstimate(lit);
+
+  DCHECK(!lit->has_uncompiled_data_with_inner_bin_ast_parse_data() || lit->speculative_parse_failure_reason() == SpeculativeParseFailureReason::kSucceeded);
+  shared_info->set_speculative_parse_failure_reason(lit->speculative_parse_failure_reason());
 
   Handle<UncompiledData> data;
 

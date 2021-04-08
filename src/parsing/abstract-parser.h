@@ -1230,7 +1230,7 @@ FunctionLiteral* AbstractParser<Impl>::DefaultConstructor(
       name, function_scope, body, expected_property_count, parameter_count,
       parameter_count, FunctionLiteral::kNoDuplicateParameters,
       FunctionSyntaxKind::kAnonymousExpression, impl()->default_eager_compile_hint(),
-      pos, true, impl()->GetNextFunctionLiteralId());
+      pos, true, impl()->GetNextFunctionLiteralId(), impl()->speculative_parse_failure_reason());
   return function_literal;
 }
 
@@ -2007,6 +2007,11 @@ void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* info,
     maybe_wrapped_arguments_ = handle(script->wrapped_arguments(), isolate);
   }
 
+  // Handle<String> fn_source = Object::ToString(isolate, SharedFunctionInfo::GetSourceCode(shared_info)).ToHandleChecked();
+  // std::unique_ptr<char[]> raw_fn_source = fn_source->ToCString();
+  // printf("Source: '%s'\n", raw_fn_source.get());
+  // std::size_t source_hash = std::hash<std::string>{}(raw_fn_source.get());
+
   int start_position = shared_info->StartPosition();
   int end_position = shared_info->EndPosition();
   int function_literal_id = shared_info->function_literal_id();
@@ -2033,7 +2038,8 @@ void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* info,
   if (try_deserialize) {
     if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData() ||
                     shared_info->HasUncompiledDataWithInnerBinAstParseData())) {
-      for (int i = 0; i < 1; ++i) {
+
+      TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"), "V8.DeserializeFunction");
 
       RuntimeCallTimerScope runtime_timer(
           impl()->runtime_call_stats_, RuntimeCallCounterId::kDeserializeBinAst);
@@ -2083,10 +2089,12 @@ void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* info,
         auto elapsed = std::chrono::high_resolution_clock::now() - start;
         deserialize_nanoseconds =
           std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
-        int function_length = result->end_position() - result->start_position();
-        printf("PREPARSE++: Deserialize time for %sfunction (%d bytes) in %lld ns\n", is_inner_binast ? "inner " : "", function_length, deserialize_nanoseconds);
+        // int function_length = result->end_position() - result->start_position();
+        // printf("PREPARSE++: Deserialize time for %sfunction (%d bytes) in %lld ns\n", is_inner_binast ? "inner " : "", function_length, deserialize_nanoseconds);
+        // printf("PREPARSE++: %zu: %lld\n", source_hash, deserialize_nanoseconds);
+        printf("PREPARSE++: %lld\n", deserialize_nanoseconds);
       }
-      }
+      // }
     }
   }
 
@@ -2106,8 +2114,12 @@ void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* info,
     auto elapsed = std::chrono::high_resolution_clock::now() - start;
     long long parse_nanoseconds =
         std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
-    int function_length = result->end_position() - result->start_position();
-    printf("PREPARSE++: Parse time: %lld ns for %d bytes\n", parse_nanoseconds, function_length);
+    // int function_length = result->end_position() - result->start_position();
+    // printf("PREPARSE++: Parse time: %lld ns for %d bytes\n", parse_nanoseconds, function_length);
+    if (!try_deserialize) {
+      // printf("PREPARSE++: %zu: %lld\n", source_hash, parse_nanoseconds);
+      printf("PREPARSE++: %lld\n", parse_nanoseconds);
+    }
   }
   MaybeResetCharacterStream(info, result);
   MaybeProcessSourceRanges(info, result, impl()->stack_limit_);
@@ -3976,13 +3988,17 @@ FunctionLiteral* AbstractParser<Impl>::ParseFunctionLiteral(
   // parse_lazily() && is_eager_top_level_function &&
   // FLAG_parallel_compile_tasks && info()->parallel_tasks() &&
   // impl()->scanner()->stream()->can_be_cloned_for_parallel_access();
-  bool should_post_parallel_binast_task =
-      parse_lazily() && is_top_level && info()->parallel_tasks() &&
-      impl()->scanner()->stream()->can_be_cloned_for_parallel_access();
+ 
   // This may be modified later to reflect preparsing decision taken
   bool should_preparse = (parse_lazily() && is_lazy_top_level_function) ||
-                         should_preparse_inner || should_post_parallel_task ||
-                         should_post_parallel_binast_task;
+                         should_preparse_inner || should_post_parallel_task;
+
+  bool should_post_parallel_binast_task =
+      should_preparse && 
+      info()->parallel_tasks() &&
+      impl()->scanner()->stream()->can_be_cloned_for_parallel_access();
+
+  
 
   // printf("\nfunction name: '%.*s'\n", function_name->byte_length(),
   // function_name->raw_data()); printf("parse_lazily: %d\n", parse_lazily());
@@ -4081,6 +4097,7 @@ FunctionLiteral* AbstractParser<Impl>::ParseFunctionLiteral(
       function_name, scope, body, expected_property_count, num_parameters,
       function_length, duplicate_parameters, function_syntax_kind,
       eager_compile_hint, pos, true, function_literal_id,
+      impl()->speculative_parse_failure_reason(),
       produced_preparse_data);
   function_literal->set_function_token_position(function_token_pos);
   function_literal->set_suspend_count(suspend_count);
@@ -4097,6 +4114,40 @@ FunctionLiteral* AbstractParser<Impl>::ParseFunctionLiteral(
     // Start a parallel binAST parse task on the compiler dispatcher.
     info()->parallel_tasks()->EnqueueBinAstParseTask(info(), function_name,
                                                      function_literal);
+  } else {
+    auto reason = SpeculativeParseFailureReason::kNoTaskEnqueued;
+  
+    if (!impl()->scanner()->stream()->can_be_cloned()) {
+      switch (impl()->scanner()->stream()->stream_kind()) {
+        case kOnHeapStream: {
+          reason = SpeculativeParseFailureReason::kUnclonableOnHeapStream;
+          break;
+        }
+        case kExternalStringStream: {
+          reason = SpeculativeParseFailureReason::kUncloneableExternalStringStream;
+          break;
+        }
+        case kTestingStream: {
+          reason = SpeculativeParseFailureReason::kUncloneableTestingStream;
+          break;
+        }
+        case kChunkedStream: {
+          reason = SpeculativeParseFailureReason::kUncloneableChunkedStream;
+          break;
+        }
+        case kExternalUtf8Stream: {
+          reason = SpeculativeParseFailureReason::kUncloneableExternalUtf8Stream;
+          break;
+        }
+        default: {
+          UNREACHABLE();
+          break;
+        }
+      }
+    } else if (impl()->scanner()->stream()->can_access_heap()) {
+      reason = SpeculativeParseFailureReason::kScannerStreamHeapAccess;
+    }
+    function_literal->set_speculative_parse_failure_reason(reason);
   }
 
   if (should_infer_name) {
@@ -4549,7 +4600,7 @@ FunctionLiteral* AbstractParser<Impl>::CreateInitializerFunction(
       FunctionLiteral::kNoDuplicateParameters,
       FunctionSyntaxKind::kAccessorOrMethod,
       FunctionLiteral::kShouldEagerCompile, scope->start_position(), false,
-      impl()->GetNextFunctionLiteralId());
+      impl()->GetNextFunctionLiteralId(), impl()->speculative_parse_failure_reason());
 
   RecordFunctionLiteralSourceRange(result);
 

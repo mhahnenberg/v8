@@ -15,7 +15,7 @@
 #include "src/objects/scope-info.h"
 #include "src/objects/shared-function-info.h"
 #include "src/objects/templates.h"
-
+#include "src/ast/ast.h"
 #if V8_ENABLE_WEBASSEMBLY
 #include "src/wasm/wasm-module.h"
 #include "src/wasm/wasm-objects-inl.h"
@@ -125,6 +125,7 @@ RENAME_UINT16_TORQUE_ACCESSORS(SharedFunctionInfo,
 RENAME_UINT16_TORQUE_ACCESSORS(SharedFunctionInfo, raw_function_token_offset,
                                function_token_offset)
 
+INT32_ACCESSORS(SharedFunctionInfo, speculative_parse_failure_reason, kSpeculativeParseFailureReasonOffset)
 RELAXED_INT32_ACCESSORS(SharedFunctionInfo, flags, kFlagsOffset)
 UINT8_ACCESSORS(SharedFunctionInfo, flags2, kFlags2Offset)
 
@@ -816,6 +817,8 @@ void SharedFunctionInfo::ClearBinAstParseData() {
           UncompiledDataWithoutPreparseData::kSize,
       ClearRecordedSlots::kYes);
 
+  set_speculative_parse_failure_reason(SpeculativeParseFailureReason::kSFIFlushed);
+
   // Ensure that the clear was successful.
   DCHECK(HasUncompiledDataWithoutPreparseData());
   DCHECK(!HasUncompiledDataWithBinAstParseData());
@@ -843,6 +846,8 @@ void SharedFunctionInfo::ClearInnerBinAstParseData() {
       UncompiledDataWithInnerBinAstParseData::kSize -
           UncompiledDataWithoutPreparseData::kSize,
       ClearRecordedSlots::kYes);
+
+  set_speculative_parse_failure_reason(SpeculativeParseFailureReason::kSFIFlushed);
 
   // Ensure that the clear was successful.
   DCHECK(HasUncompiledDataWithoutPreparseData());

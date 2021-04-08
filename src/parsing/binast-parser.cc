@@ -136,12 +136,14 @@ void BinAstParser::PostProcessParseResult(Isolate* isolate, ParseInfo* info, Fun
   // Try to serialize the result for use during de-lazification.
   RuntimeCallTimerScope runtime_timer(impl()->runtime_call_stats_,
                                       RuntimeCallCounterId::kSerializeBinAst);
-  ZoneBinAstParseData* zone_binast_parse_data = ZoneBinAstParseDataBuilder::Serialize(zone(), ast_value_factory(), literal);
+  SpeculativeParseFailureReason failure_reason = SpeculativeParseFailureReason::kUnknown;
+  ZoneBinAstParseData* zone_binast_parse_data = ZoneBinAstParseDataBuilder::Serialize(zone(), ast_value_factory(), literal, &failure_reason);
   if (zone_binast_parse_data != nullptr) {
     ProducedBinAstParseData* produced_binast_parse_data = ProducedBinAstParseData::For(zone_binast_parse_data, zone());
     literal->set_produced_binast_parse_data(produced_binast_parse_data);
   }
 
+  info->set_speculative_parse_failure_reason(failure_reason);
   info->set_literal(literal);
   info->set_language_mode(literal->language_mode());
 
@@ -347,7 +349,7 @@ FunctionLiteral* BinAstParser::ParseFunctionLiteral(
   FunctionLiteral* function_literal = factory()->NewFunctionLiteral(
       function_name, scope, body, expected_property_count, num_parameters,
       function_length, duplicate_parameters, function_syntax_kind,
-      eager_compile_hint, pos, true, function_literal_id,
+      eager_compile_hint, pos, true, function_literal_id, impl()->speculative_parse_failure_reason(),
       produced_preparse_data);
   function_literal->set_function_token_position(function_token_pos);
   function_literal->set_suspend_count(suspend_count);

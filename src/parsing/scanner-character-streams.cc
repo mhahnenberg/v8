@@ -83,6 +83,7 @@ class OnHeapStream {
 
   static const bool kCanBeCloned = false;
   static const bool kCanAccessHeap = true;
+  static const StreamKind kStreamKind = kOnHeapStream;
 
  private:
   Handle<String> string_;
@@ -117,6 +118,7 @@ class ExternalStringStream {
 
   static const bool kCanBeCloned = true;
   static const bool kCanAccessHeap = false;
+  static const StreamKind kStreamKind = kExternalStringStream;
 
  private:
   ScopedExternalStringLock lock_;
@@ -139,6 +141,7 @@ class TestingStream {
 
   static const bool kCanBeCloned = true;
   static const bool kCanAccessHeap = false;
+  static const StreamKind kStreamKind = kTestingStream;
 
  private:
   const Char* const data_;
@@ -173,6 +176,7 @@ class ChunkedStream {
 
   static const bool kCanBeCloned = false;
   static const bool kCanAccessHeap = false;
+  static const StreamKind kStreamKind = kChunkedStream;
 
  private:
   struct Chunk {
@@ -248,6 +252,10 @@ class BufferedCharacterStream : public Utf16CharacterStream {
         new BufferedCharacterStream<ByteStream>(*this));
   }
 
+  StreamKind stream_kind() const override {
+    return ByteStream<uint16_t>::kStreamKind;
+  }
+
  protected:
   bool ReadBlock() final {
     size_t position = pos();
@@ -303,6 +311,10 @@ class UnbufferedCharacterStream : public Utf16CharacterStream {
   std::unique_ptr<Utf16CharacterStream> Clone() const override {
     return std::unique_ptr<Utf16CharacterStream>(
         new UnbufferedCharacterStream<ByteStream>(*this));
+  }
+
+  StreamKind stream_kind() const override {
+    return ByteStream<uint16_t>::kStreamKind;
   }
 
  protected:
@@ -473,6 +485,10 @@ class Windows1252CharacterStream final : public Utf16CharacterStream {
         new Windows1252CharacterStream(*this));
   }
 
+  StreamKind stream_kind() const override {
+    return kWindows1252Stream;
+  }
+
  protected:
   bool ReadBlock() final {
     size_t position = pos();
@@ -534,7 +550,11 @@ class Utf8ExternalStreamingStream final : public BufferedUtf16CharacterStream {
   bool can_be_cloned() const final { return false; }
 
   std::unique_ptr<Utf16CharacterStream> Clone() const override {
-    UNREACHABLE();
+    return std::unique_ptr<Utf16CharacterStream>(new Utf8ExternalStreamingStream(*this));
+  }
+
+  StreamKind stream_kind() const override {
+    return kExternalUtf8Stream;
   }
 
  protected:
@@ -934,8 +954,10 @@ Utf16CharacterStream* ScannerStream::For(
                                             source_stream);
     case v8::ScriptCompiler::StreamedSource::UTF8:
       return new Utf8ExternalStreamingStream(source_stream);
+    default: {
+      UNREACHABLE();
+    }
   }
-  UNREACHABLE();
 }
 
 }  // namespace internal

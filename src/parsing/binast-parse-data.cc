@@ -75,10 +75,13 @@ ProducedBinAstParseData* ProducedBinAstParseData::For(ZoneBinAstParseData* data,
   return zone->New<ZoneProducedBinAstParseData>(data);
 }
 
-ZoneBinAstParseData* ZoneBinAstParseDataBuilder::Serialize(Zone* zone, AstValueFactory* ast_value_factory, FunctionLiteral* function_literal) {
+ZoneBinAstParseData* ZoneBinAstParseDataBuilder::Serialize(Zone* zone, AstValueFactory* ast_value_factory, FunctionLiteral* function_literal, SpeculativeParseFailureReason* failure_reason_ptr) {
   BinAstSerializeVisitor visitor(ast_value_factory);
-  bool success = visitor.SerializeAst(function_literal);
-  if (!success) {
+  SpeculativeParseFailureReason failure_reason = visitor.SerializeAst(function_literal);
+  if (failure_reason_ptr != nullptr) {
+    *failure_reason_ptr = failure_reason;
+  }
+  if (failure_reason != kSucceeded) {
     return nullptr;
   }
   Vector<uint8_t> vector_byte_data(visitor.serialized_bytes(), visitor.serialized_bytes_length());

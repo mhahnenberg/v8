@@ -14,6 +14,7 @@ class FunctionLiteral;
 class ZoneBinAstParseData;
 class BinAstParseData;
 class AstValueFactory;
+enum SpeculativeParseFailureReason : uint8_t;
 
 class ProducedBinAstParseData : public ZoneObject {
  public:
@@ -30,7 +31,7 @@ class ProducedBinAstParseData : public ZoneObject {
 
 class ZoneBinAstParseDataBuilder {
  public:
-  static ZoneBinAstParseData* Serialize(Zone* zone, AstValueFactory* ast_value_factory, FunctionLiteral* function_literal);
+  static ZoneBinAstParseData* Serialize(Zone* zone, AstValueFactory* ast_value_factory, FunctionLiteral* function_literal, SpeculativeParseFailureReason* failure_reason_ptr);
 };
 
 }  // namespace internal

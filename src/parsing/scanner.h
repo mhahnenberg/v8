@@ -33,6 +33,15 @@ class ParserRecorder;
 class RuntimeCallStats;
 class Zone;
 
+enum StreamKind : uint8_t {
+    kOnHeapStream,
+    kExternalStringStream,
+    kTestingStream,
+    kChunkedStream,
+    kExternalUtf8Stream,
+    kWindows1252Stream,
+};
+
 // ---------------------------------------------------------------------
 // Buffered stream of UTF-16 code units, using an internal UTF-16 buffer.
 // A code unit is a 16 bit value representing either a 16 bit code point
@@ -131,6 +140,9 @@ class Utf16CharacterStream {
   // Clones the character stream to enable another independent scanner to access
   // the same underlying stream.
   virtual std::unique_ptr<Utf16CharacterStream> Clone() const = 0;
+
+  // Returns the kind of the underlying stream.
+  virtual StreamKind stream_kind() const = 0;
 
   // Returns true if the stream could access the V8 heap after construction.
   virtual bool can_access_heap() const = 0;
