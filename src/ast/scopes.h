@@ -1159,38 +1159,7 @@ class V8_EXPORT_PRIVATE DeclarationScope : public Scope {
   template <typename Impl>
   void AnalyzePartially(AbstractParser<Impl>* parser,
                         AstNodeFactory* ast_node_factory,
-                        bool maybe_in_arrowhead) {
-    DCHECK(!force_eager_compilation_);
-    UnresolvedList new_unresolved_list;
-    if (!IsArrowFunction(function_kind_) &&
-        (!outer_scope_->is_script_scope() || maybe_in_arrowhead ||
-         (preparse_data_builder_ != nullptr &&
-          preparse_data_builder_->HasInnerFunctions()))) {
-      // Try to resolve unresolved variables for this Scope and migrate those
-      // which cannot be resolved inside. It doesn't make sense to try to
-      // resolve them in the outer Scopes here, because they are incomplete.
-      Scope::AnalyzePartially(this, ast_node_factory, &new_unresolved_list,
-                              maybe_in_arrowhead);
-
-      // Migrate function_ to the right Zone.
-      if (function_ != nullptr) {
-        function_ = ast_node_factory->CopyVariable(function_);
-      }
-
-      SavePreparseData(parser);
-    }
-
-#ifdef DEBUG
-    if (FLAG_print_scopes) {
-      PrintF("Inner function scope:\n");
-      Print();
-    }
-#endif
-
-    ResetAfterPreparsing(ast_node_factory->ast_value_factory(), false);
-
-    unresolved_list_ = std::move(new_unresolved_list);
-  }
+                        bool maybe_in_arrowhead);
 
   // Allocate ScopeInfos for top scope and any inner scopes that need them.
   // Does nothing if ScopeInfo is already allocated.
@@ -1477,22 +1446,7 @@ class V8_EXPORT_PRIVATE ClassScope : public Scope {
 
   Variable* DeclareBrandVariable(const AstRawString* dot_brand_string,
                                  IsStaticFlag is_static_flag,
-                                 int class_token_pos)
-  {
-    DCHECK_IMPLIES(GetRareData() != nullptr, GetRareData()->brand == nullptr);
-    bool was_added;
-    Variable* brand = Declare(zone(), dot_brand_string,
-                              VariableMode::kConst, NORMAL_VARIABLE,
-                              InitializationFlag::kNeedsInitialization,
-                              MaybeAssignedFlag::kNotAssigned, &was_added);
-    DCHECK(was_added);
-    brand->set_is_static_flag(is_static_flag);
-    brand->ForceContextAllocation();
-    brand->set_is_used();
-    EnsureRareData()->brand = brand;
-    brand->set_initializer_position(class_token_pos);
-    return brand;
-  }
+                                 int class_token_pos);
 
   Variable* DeclareClassVariable(AstValueFactory* ast_value_factory,
                                  const AstRawString* name, int class_token_pos);
@@ -1582,7 +1536,7 @@ class V8_EXPORT_PRIVATE ClassScope : public Scope {
 };
 
 template <typename Impl>
-void Scope::SavePreparseData(AbstractParser<Impl>* parser) {
+inline void Scope::SavePreparseData(AbstractParser<Impl>* parser) {
   this->ForEach([parser](Scope* scope) {
     if (scope->IsSkippableFunctionScope()) {
       scope->AsDeclarationScope()->SavePreparseDataForDeclarationScope(parser);
@@ -1592,14 +1546,50 @@ void Scope::SavePreparseData(AbstractParser<Impl>* parser) {
 }
 
 template <typename Impl>
-void DeclarationScope::SavePreparseDataForDeclarationScope(
+inline void DeclarationScope::SavePreparseDataForDeclarationScope(
     AbstractParser<Impl>* parser) {
   if (preparse_data_builder_ == nullptr) return;
   preparse_data_builder_->SaveScopeAllocationData(this, parser);
 }
 
+template <typename Impl>
+inline void DeclarationScope::AnalyzePartially(AbstractParser<Impl>* parser,
+                                        AstNodeFactory* ast_node_factory,
+                                        bool maybe_in_arrowhead) {
+  DCHECK(!force_eager_compilation_);
+  UnresolvedList new_unresolved_list;
+  if (!IsArrowFunction(function_kind_) &&
+      (!outer_scope_->is_script_scope() || maybe_in_arrowhead ||
+       (preparse_data_builder_ != nullptr &&
+        preparse_data_builder_->HasInnerFunctions()))) {
+    // Try to resolve unresolved variables for this Scope and migrate those
+    // which cannot be resolved inside. It doesn't make sense to try to resolve
+    // them in the outer Scopes here, because they are incomplete.
+    Scope::AnalyzePartially(this, ast_node_factory, &new_unresolved_list,
+                            maybe_in_arrowhead);
+
+    // Migrate function_ to the right Zone.
+    if (function_ != nullptr) {
+      function_ = ast_node_factory->CopyVariable(function_);
+    }
+
+    SavePreparseData(parser);
+  }
+
+#ifdef DEBUG
+  if (FLAG_print_scopes) {
+    PrintF("Inner function scope:\n");
+    Print();
+  }
+#endif
+
+  ResetAfterPreparsing(ast_node_factory->ast_value_factory(), false);
+
+  unresolved_list_ = std::move(new_unresolved_list);
+}
+
 template <typename FunctionType>
-void Scope::ForEach(FunctionType callback) {
+inline void Scope::ForEach(FunctionType callback) {
   Scope* scope = this;
   while (true) {
     Iteration iteration = callback(scope);

@@ -297,7 +297,9 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   scope->must_use_preparsed_scope_data_ = false;
   scope->is_repl_mode_scope_ = encoded_boolean_flags_result.value[11];
   scope->deserialized_scope_uses_external_cache_ = encoded_boolean_flags_result.value[12];
-  bool is_skipped_function = encoded_boolean_flags_result.value[13];
+  scope->needs_home_object_ = encoded_boolean_flags_result.value[13];
+  scope->is_block_scope_for_object_literal_ = encoded_boolean_flags_result.value[14];
+  bool is_skipped_function = encoded_boolean_flags_result.value[15];
 
   // We now have the start_position of the scope so we can tell if we can skip the function.
   // We need to do this before we deserialize any FunctionDeclarations so that
@@ -583,10 +585,13 @@ BinAstDeserializer::DeserializeResult<ObjectLiteral*> BinAstDeserializer::Deseri
     properties.Add(property);
   }
 
+  auto home_object = DeserializeVariableReference(serialized_binast, offset);
+  offset = home_object.new_offset;
+
   bool has_rest_property = false;
   ObjectLiteral* result = parser_->factory()->NewObjectLiteral(
       properties, boilerplate_properties.value, position,
-      has_rest_property);
+      has_rest_property, home_object.value);
   result->bit_field_ = bit_field;
   return {result, offset};
 }

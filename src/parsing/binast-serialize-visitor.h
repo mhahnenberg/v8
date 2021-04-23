@@ -425,6 +425,7 @@ inline SpeculativeParseFailureReason BinAstSerializeVisitor::SerializeAst(AstNod
         max_failure_reason = reason;
       }
     }
+    DCHECK(max_failure_reason != kUnknown);
     return max_failure_reason;
   }
 
@@ -592,6 +593,7 @@ inline void BinAstSerializeVisitor::SerializeScopeParameters(DeclarationScope* s
 inline void BinAstSerializeVisitor::SerializeCommonScopeFields(Scope* scope) {
   SerializeScopeVariableMap(scope);
   SerializeScopeUnresolvedList(scope);
+  DCHECK(scope->scope_info_.is_null());
 #ifdef DEBUG
   if (scope->scope_name_ == nullptr) {
     SerializeUint8(0);
@@ -621,6 +623,8 @@ inline void BinAstSerializeVisitor::SerializeCommonScopeFields(Scope* scope) {
     scope->must_use_preparsed_scope_data_,
     scope->is_repl_mode_scope_,
     scope->deserialized_scope_uses_external_cache_,
+    scope->needs_home_object_,
+    scope->is_block_scope_for_object_literal_,
     // Note: If this is a DeclarationScope for a function, we need to know if the Preparser skipped this function before we visit the Declarations,
     // which is why we store this flag here rather than in SerializeDeclarationScope.
     scope->scope_type() == FUNCTION_SCOPE ? scope->AsDeclarationScope()->is_skipped_function() : false,
@@ -1081,6 +1085,8 @@ inline void BinAstSerializeVisitor::VisitObjectLiteral(ObjectLiteral* object_lit
 
     SerializeUint8(property->is_computed_name());
   }
+
+  SerializeVariableReference(object_literal->home_object());
 }
 
 inline void BinAstSerializeVisitor::VisitArrayLiteral(ArrayLiteral* array_literal) {

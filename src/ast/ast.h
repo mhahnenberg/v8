@@ -37,6 +37,7 @@ enum SpeculativeParseFailureReason : uint8_t {
   kScannerStreamHeapAccess,
   kNoTaskEnqueued,
   kTopLevelArrowFunction,
+  kFunctionDisallowsLazyCompilation,
   kEagerParsed,
   kUnsupportedAstNode,
   kUnsupportedNestedVarDecl,

@@ -15,11 +15,28 @@ function makeThing() {
   return t;
 }
 
+function testblah(d,e,f){d=a.call(this,d,e,f);d&&(-1<d.indexOf("\u2028")&&(d=d.replace(b,"\\u2028")),-1<d.indexOf("\u2029")&&(d=d.replace(c,"\\u2029")));return d}
+
 function explode2(a,b,c,d,e,f){"use strict";e.exports=a;function a(){return b;}}
 
 function defaultParam(interimText, opt_finalText = 'a') {
   return opt_finalText;
 };
+
+class Foo {
+  static x = 43;
+  constructor() {
+    this.x = 42;
+  }
+}
+Foo.x = 44;
+
+class Bar extends Foo {
+  constructor() {
+    super()
+    this.y = super.x;
+  }
+}
 
 var double = function(x) { return x * 2; }
 function triple(x) { return x * 3; }
@@ -215,6 +232,8 @@ setTimeout(function testCallback2() {
   console.log(e);
   console.log(e.exports());
   console.log(defaultParam());
-}, 5000);
+  console.log("new Bar", new Bar().y);
+  console.log("testblah", testblah());
+}, 3000);
 
 tickRunLoop();
