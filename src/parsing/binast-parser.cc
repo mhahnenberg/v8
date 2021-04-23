@@ -5,6 +5,7 @@
 #include "src/parsing/binast-parser.h"
 #include "src/parsing/parse-info.h"
 #include "src/zone/zone-list-inl.h"
+#include "src/parsing/abstract-parser-inl.h"
 #include "src/parsing/binast-parse-data.h"
 
 #include <stdio.h>
@@ -247,9 +248,8 @@ FunctionLiteral* BinAstParser::ParseFunctionLiteral(
   // const bool is_lazy_top_level_function = is_lazy && is_top_level;
   // const bool is_lazy_inner_function = is_lazy && !is_top_level;
 
-  RuntimeCallTimerScope runtime_timer(
-      runtime_call_stats_, RuntimeCallCounterId::kParseFunctionLiteral,
-      RuntimeCallStats::kThreadSpecific);
+  RCS_SCOPE(runtime_call_stats_, RuntimeCallCounterId::kParseFunctionLiteral,
+            RuntimeCallStats::kThreadSpecific);
   base::ElapsedTimer timer;
   if (V8_UNLIKELY(FLAG_log_function_events)) timer.Start();
 

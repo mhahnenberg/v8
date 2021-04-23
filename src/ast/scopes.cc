@@ -2828,23 +2828,23 @@ VariableProxy* ClassScope::ResolvePrivateNamesPartially() {
   return nullptr;
 }
 
-// Variable* ClassScope::DeclareBrandVariable(AstValueFactory* ast_value_factory,
-//                                            IsStaticFlag is_static_flag,
-//                                            int class_token_pos) {
-//   DCHECK_IMPLIES(GetRareData() != nullptr, GetRareData()->brand == nullptr);
-//   bool was_added;
-//   Variable* brand = Declare(zone(), ast_value_factory->dot_brand_string(),
-//                             VariableMode::kConst, NORMAL_VARIABLE,
-//                             InitializationFlag::kNeedsInitialization,
-//                             MaybeAssignedFlag::kNotAssigned, &was_added);
-//   DCHECK(was_added);
-//   brand->set_is_static_flag(is_static_flag);
-//   brand->ForceContextAllocation();
-//   brand->set_is_used();
-//   EnsureRareData()->brand = brand;
-//   brand->set_initializer_position(class_token_pos);
-//   return brand;
-// }
+Variable* ClassScope::DeclareBrandVariable(const AstRawString* dot_brand_string,
+                                           IsStaticFlag is_static_flag,
+                                           int class_token_pos) {
+  DCHECK_IMPLIES(GetRareData() != nullptr, GetRareData()->brand == nullptr);
+  bool was_added;
+  Variable* brand = Declare(zone(), dot_brand_string,
+                            VariableMode::kConst, NORMAL_VARIABLE,
+                            InitializationFlag::kNeedsInitialization,
+                            MaybeAssignedFlag::kNotAssigned, &was_added);
+  DCHECK(was_added);
+  brand->set_is_static_flag(is_static_flag);
+  brand->ForceContextAllocation();
+  brand->set_is_used();
+  EnsureRareData()->brand = brand;
+  brand->set_initializer_position(class_token_pos);
+  return brand;
+}
 
 Variable* ClassScope::DeclareClassVariable(AstValueFactory* ast_value_factory,
                                            const AstRawString* name,

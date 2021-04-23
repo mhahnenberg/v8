@@ -50,6 +50,7 @@
 #include "src/objects/object-list-macros.h"
 #include "src/objects/shared-function-info.h"
 #include "src/objects/string.h"
+#include "src/parsing/abstract-parser-inl.h"
 #include "src/parsing/binast-parser.h"
 #include "src/parsing/binast-parse-data.h"
 #include "src/parsing/parse-info.h"
@@ -1608,6 +1609,11 @@ BackgroundBinAstParseTask::BackgroundBinAstParseTask(
       outer_parse_info->character_stream()->Clone();
   character_stream->Seek(start_position_);
   info_->set_character_stream(std::move(character_stream));
+
+  // TODO(binast): Grabbing the preparse data from the function literal crashes 
+  // when running during lazy compilation because the produced_preparse_data 
+  // lives on the Heap, which doesn't support serializing into a Zone.
+  // If we got this to work we could potentially speed up background parsing.
 }
 
 BackgroundBinAstParseTask::~BackgroundBinAstParseTask() = default;
@@ -2033,7 +2039,7 @@ bool Compiler::Compile(Isolate* isolate, Handle<SharedFunctionInfo> shared_info,
             shared_info->uncompiled_data_with_preparse_data().preparse_data(),
             isolate)));
   } else if (shared_info->HasUncompiledDataWithBinAstParseData()) {
-    if (!shared_info->uncompiled_data_with_binast_parse_data().preparse_data().IsNull()) {
+    if (!shared_info->uncompiled_data_with_binast_parse_data().preparse_data().IsUndefined()) {
       parse_info.set_consumed_preparse_data(ConsumedPreparseData::For(
         isolate,
         handle(
@@ -2041,7 +2047,7 @@ bool Compiler::Compile(Isolate* isolate, Handle<SharedFunctionInfo> shared_info,
             isolate)));
     }
   } else if (shared_info->HasUncompiledDataWithInnerBinAstParseData()) {
-    if (!shared_info->uncompiled_data_with_inner_bin_ast_parse_data().preparse_data().IsNull()) {
+    if (!shared_info->uncompiled_data_with_inner_bin_ast_parse_data().preparse_data().IsUndefined()) {
       parse_info.set_consumed_preparse_data(ConsumedPreparseData::For(
         isolate,
         handle(

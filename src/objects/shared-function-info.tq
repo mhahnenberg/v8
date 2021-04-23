@@ -111,14 +111,14 @@ class UncompiledDataWithPreparseData extends UncompiledData {
 @customCppClass
 class UncompiledDataWithBinAstParseData extends UncompiledData {
   binast_parse_data: ByteArray;
-  preparse_data: Object;
+  preparse_data: PreparseData|Undefined;
 }
 
 @export
 @customCppClass
 class UncompiledDataWithInnerBinAstParseData extends UncompiledData {
   binast_parse_data: ByteArray;
-  preparse_data: Object;
+  preparse_data: PreparseData|Undefined;
   data_offset: uint32;
   data_length: uint32;
 }

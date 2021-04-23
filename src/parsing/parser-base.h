@@ -4739,7 +4739,7 @@ typename ParserBase<Impl>::ExpressionT ParserBase<Impl>::ParseClassLiteral(
     class_info.home_object_variable =
         class_scope->DeclareHomeObjectVariable(ast_value_factory()->dot_home_object_string());
     class_info.static_home_object_variable =
-        class_scope->DeclareStaticHomeObjectVariable(ast_value_factory()->dot_home_object_string());
+        class_scope->DeclareStaticHomeObjectVariable(ast_value_factory()->dot_static_home_object_string());
   }
 
   bool should_save_class_variable_index =

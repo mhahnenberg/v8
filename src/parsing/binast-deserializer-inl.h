@@ -129,8 +129,17 @@ inline BinAstDeserializer::DeserializeResult<const AstRawString*> BinAstDeserial
 
   const AstRawString* s = nullptr;
   if (length.value > 0) {
-    Vector<const byte> literal_bytes(&serialized_ast[contents_offset.value], length.value);
-    s = parser_->ast_value_factory()->GetString(hash_field.value, is_one_byte.value, literal_bytes);
+    // TODO(binast): We're causing a re-hash of each string here since the hash seed in this isolate
+    // could be different. If this turns out to be a bottleneck we could potentially shift this 
+    // re-hashing to the main-thread finalization step (or even the serialization step if we 
+    // passed the hash seed to the background parse task).
+    if (is_one_byte.value) {
+      Vector<const uint8_t> literal_bytes(&serialized_ast[contents_offset.value], length.value);
+      s = parser_->ast_value_factory()->GetOneByteString(literal_bytes);
+    } else {
+      Vector<const uint16_t> literal_bytes((const uint16_t*)&serialized_ast[contents_offset.value], length.value / 2);
+      s = parser_->ast_value_factory()->GetTwoByteString(literal_bytes);
+    }
   } else {
     DCHECK(contents_offset.value == 0);
     Vector<const byte> literal_bytes;
