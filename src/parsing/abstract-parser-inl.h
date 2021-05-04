@@ -895,7 +895,7 @@ inline void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* inf
   FunctionLiteral* result = nullptr;
   bool is_inner_binast = false;
   MaybeHandle<PreparseData> preparse_data;
-  bool try_deserialize = false;
+  bool try_deserialize = true;
   if (try_deserialize) {
     if (V8_UNLIKELY(shared_info->HasUncompiledDataWithBinAstParseData() ||
                     shared_info->HasUncompiledDataWithInnerBinAstParseData())) {
@@ -952,13 +952,13 @@ inline void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* inf
         // int function_length = result->end_position() - result->start_position();
         // printf("PREPARSE++: Deserialize time for %sfunction (%d bytes) in %lld ns\n", is_inner_binast ? "inner " : "", function_length, deserialize_nanoseconds);
         // printf("PREPARSE++: %zu: %lld\n", source_hash, deserialize_nanoseconds);
-        printf("PREPARSE++ deserialize: %lld\n", deserialize_nanoseconds);
+        //printf("PREPARSE++ deserialize: %lld\n", deserialize_nanoseconds);
       }
       // }
     }
   }
 
-  if (V8_UNLIKELY(shared_info->private_name_lookup_skips_outer_class() &&
+  if (result == nullptr && V8_UNLIKELY(shared_info->private_name_lookup_skips_outer_class() &&
                   impl()->original_scope_->is_class_scope())) {
     // If the function skips the outer class and the outer scope is a class, the
     // function is in heritage position. Otherwise the function scope's skip bit
@@ -967,17 +967,17 @@ inline void AbstractParser<Impl>::ParseFunction(Isolate* isolate, ParseInfo* inf
     result = DoParseFunction(isolate, info, start_position, end_position,
                              function_literal_id, info->function_name());
   } else if (result == nullptr) {
-    auto start = std::chrono::high_resolution_clock::now();
+    //auto start = std::chrono::high_resolution_clock::now();
     result = DoParseFunction(isolate, info, start_position, end_position,
                              function_literal_id, info->function_name());
-    auto elapsed = std::chrono::high_resolution_clock::now() - start;
-    long long parse_nanoseconds =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
+    //auto elapsed = std::chrono::high_resolution_clock::now() - start;
+    //long long parse_nanoseconds =
+    //    std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
     // int function_length = result->end_position() - result->start_position();
     // printf("PREPARSE++: Parse time: %lld ns for %d bytes\n", parse_nanoseconds, function_length);
     //if (!try_deserialize) {
       // printf("PREPARSE++: %zu: %lld\n", source_hash, parse_nanoseconds);
-      printf("PREPARSE++ parse: %lld\n", parse_nanoseconds);
+      //printf("PREPARSE++ parse: %lld\n", parse_nanoseconds);
     //}
   }
   MaybeResetCharacterStream(info, result);
@@ -2762,6 +2762,7 @@ inline FunctionLiteral* AbstractParser<Impl>::ParseFunctionLiteral(
 
   bool should_post_parallel_binast_task = 
       should_preparse && /* is_top_level &&*/
+      impl()->original_scope_->scope_type() == SCRIPT_SCOPE &&
       info()->parallel_tasks() &&
       impl()->scanner()->stream()->can_be_cloned_for_parallel_access();
 
