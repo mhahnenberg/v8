@@ -502,9 +502,8 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   auto num_statements = DeserializeInt32(serialized_binast, offset);
   offset = num_statements.new_offset;
 
-  std::vector<void*> pointer_buffer;
-  pointer_buffer.reserve(num_statements.value);
-  ScopedPtrList<Statement> body(&pointer_buffer);
+  ScopedPtrList<Statement> body(pointer_buffer());
+  body.Reserve(num_statements.value);
   if (!scope.value->is_skipped_function()) {
     // Warning: leaky separation of concerns. We need to clear the Scope's unresolved_list_ so
     // that the VariableProxy nodes we encounter during the deserialization of the
@@ -560,8 +559,8 @@ BinAstDeserializer::DeserializeResult<ObjectLiteral*> BinAstDeserializer::Deseri
   auto boilerplate_properties = DeserializeInt32(serialized_binast, offset);
   offset = boilerplate_properties.new_offset;
 
-  std::vector<void*> pointer_buffer;
-  ScopedPtrList<ObjectLiteral::Property> properties(&pointer_buffer);
+  ScopedPtrList<ObjectLiteral::Property> properties(pointer_buffer());
+  properties.Reserve(properties_length.value);
 
   for (int i = 0; i < properties_length.value; i++) {
     auto key = DeserializeAstNode(serialized_binast, offset);
@@ -608,9 +607,8 @@ BinAstDeserializer::DeserializeArrayLiteral(uint8_t* serialized_binast,
 
   DCHECK(first_spread_index.value == -1);
 
-  std::vector<void*> pointer_buffer;
-  pointer_buffer.reserve(array_length.value);
-  ScopedPtrList<Expression> values(&pointer_buffer);
+  ScopedPtrList<Expression> values(pointer_buffer());
+  values.Reserve(array_length.value);
 
   for (int i = 0; i < array_length.value; i++) {
     auto value = DeserializeAstNode(serialized_binast, offset);
@@ -759,9 +757,8 @@ BinAstDeserializer::DeserializeSwitchStatement(uint8_t* serialized_binast,
     auto statements_length = DeserializeInt32(serialized_binast, offset);
     offset = statements_length.new_offset;
 
-    std::vector<void*> pointer_buffer;
-    pointer_buffer.reserve(statements_length.value);
-    ScopedPtrList<Statement> statements(&pointer_buffer);
+    ScopedPtrList<Statement> statements(pointer_buffer());
+    statements.Reserve(statements_length.value);
 
     for (int i = 0; i < statements_length.value; i++) {
       auto statement = DeserializeAstNode(serialized_binast, offset);

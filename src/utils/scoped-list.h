@@ -87,6 +87,10 @@ class V8_NODISCARD ScopedList final {
     end_ += list.length();
   }
 
+  void Reserve(size_t length) {
+    buffer_.reserve(buffer_.size() + length);
+  }
+
   using iterator = T*;
   using const_iterator = const T*;
 
