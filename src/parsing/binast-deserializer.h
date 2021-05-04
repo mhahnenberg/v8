@@ -46,6 +46,7 @@ class BinAstDeserializer {
   };
 
   Zone* zone();
+  std::vector<void*>* pointer_buffer() { return &pointer_buffer_; }
   static bool UseCompression() { return false; }
 
   AstNode* DeserializeCompressedAst(base::Optional<uint32_t> start_offset,
@@ -144,6 +145,7 @@ class BinAstDeserializer {
   Handle<ByteArray> parse_data_;
   MaybeHandle<PreparseData> preparse_data_;
   std::unique_ptr<ConsumedPreparseData> consumed_preparse_data_;
+  std::vector<void*> pointer_buffer_;
   std::vector<const AstRawString*> strings_;
   std::vector<Variable*> variables_;
   std::unordered_map<uint32_t, AstNode*> nodes_by_offset_;

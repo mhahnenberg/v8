@@ -729,9 +729,8 @@ inline BinAstDeserializer::DeserializeResult<Call*> BinAstDeserializer::Deserial
   auto params_count = DeserializeInt32(serialized_binast, offset);
   offset = params_count.new_offset;
 
-  std::vector<void*> pointer_buffer;
-  pointer_buffer.reserve(params_count.value);
-  ScopedPtrList<Expression> params(&pointer_buffer);
+  ScopedPtrList<Expression> params(pointer_buffer());
+  params.Reserve(params_count.value);
   for (int i = 0; i < params_count.value; ++i) {
     auto param = DeserializeAstNode(serialized_binast, offset);
     offset = param.new_offset;
@@ -752,9 +751,8 @@ inline BinAstDeserializer::DeserializeResult<CallNew*> BinAstDeserializer::Deser
   auto params_count = DeserializeInt32(serialized_binast, offset);
   offset = params_count.new_offset;
 
-  std::vector<void*> pointer_buffer;
-  pointer_buffer.reserve(params_count.value);
-  ScopedPtrList<Expression> params(&pointer_buffer);
+  ScopedPtrList<Expression> params(pointer_buffer());
+  params.Reserve(params_count.value);
   for (int i = 0; i < params_count.value; ++i) {
     auto param = DeserializeAstNode(serialized_binast, offset);
     offset = param.new_offset;
@@ -797,9 +795,8 @@ inline BinAstDeserializer::DeserializeResult<Block*> BinAstDeserializer::Deseria
   auto statement_count = DeserializeInt32(serialized_binast, offset);
   offset = statement_count.new_offset;
 
-  std::vector<void*> pointer_buffer;
-  pointer_buffer.reserve(statement_count.value);
-  ScopedPtrList<Statement> statements(&pointer_buffer);
+  ScopedPtrList<Statement> statements(pointer_buffer());
+  statements.Reserve(statement_count.value);
   if (scope != nullptr) {
     Parser::BlockState block_state(&parser_->scope_, scope);
     for (int i = 0; i < statement_count.value; ++i) {
