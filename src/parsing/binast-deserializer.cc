@@ -21,6 +21,7 @@ BinAstDeserializer::BinAstDeserializer(Isolate* isolate, Parser* parser,
       parser_(parser),
       parse_data_(parse_data),
       preparse_data_(preparse_data),
+      serialized_ast_(nullptr),
       string_table_base_offset_(0),
       proxy_variable_table_base_offset_(0),
       global_variable_table_base_offset_(0) {
@@ -62,11 +63,12 @@ AstNode* BinAstDeserializer::DeserializeUncompressedAst(
     base::Optional<uint32_t> start_offset, base::Optional<uint32_t> length, uint8_t* uncompressed_ast, size_t uncompressed_size) {
   int offset = 0;
   bool is_toplevel = true;
+  serialized_ast_ = uncompressed_ast;
 
-  auto string_table_result = DeserializeStringTable(uncompressed_ast, offset);
+  auto string_table_result = DeserializeStringTable(offset);
   offset = string_table_result.new_offset;
 
-  auto variable_table_base_offset = DeserializeUint32(uncompressed_ast, offset);
+  auto variable_table_base_offset = DeserializeUint32(offset);
   offset = variable_table_base_offset.new_offset;
   global_variable_table_base_offset_ = variable_table_base_offset.value;
 
@@ -79,7 +81,7 @@ AstNode* BinAstDeserializer::DeserializeUncompressedAst(
     offset = start_offset.value();
   }
 
-  auto result = DeserializeAstNode(uncompressed_ast, offset, is_toplevel);
+  auto result = DeserializeAstNode(offset, is_toplevel);
   offset = result.new_offset;
 
   DCHECK(start_offset ? 
@@ -88,7 +90,7 @@ AstNode* BinAstDeserializer::DeserializeUncompressedAst(
 
   // Skip ahead to global variable table.
   offset = global_variable_table_base_offset_;
-  auto variable_table_length = DeserializeUint32(uncompressed_ast, offset);
+  auto variable_table_length = DeserializeUint32(offset);
   offset = variable_table_length.new_offset;
 
   offset += GLOBAL_VARIABLE_TABLE_ENTRY_SIZE * variable_table_length.value;
@@ -97,35 +99,35 @@ AstNode* BinAstDeserializer::DeserializeUncompressedAst(
   return result.value;
 }
 
-BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeVariableMap(uint8_t* serialized_binast, int offset, Scope* scope) {
-  auto total_local_variables = DeserializeUint32(serialized_binast, offset);
+BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeVariableMap(int offset, Scope* scope) {
+  auto total_local_variables = DeserializeUint32(offset);
   offset = total_local_variables.new_offset;
 
   for (uint32_t i = 0; i < total_local_variables.value; ++i) {
     auto new_variable =
-        DeserializeLocalVariable(serialized_binast, offset, scope);
+        DeserializeLocalVariable(offset, scope);
     offset = new_variable.new_offset;
   }
 
-  auto total_nonlocal_variables = DeserializeUint32(serialized_binast, offset);
+  auto total_nonlocal_variables = DeserializeUint32(offset);
   offset = total_nonlocal_variables.new_offset;
 
   for (uint32_t i = 0; i < total_nonlocal_variables.value; ++i) {
     auto new_variable =
-        DeserializeNonLocalVariable(serialized_binast, offset, scope);
+        DeserializeNonLocalVariable(offset, scope);
     offset = new_variable.new_offset;
   }
 
   return {nullptr, offset};
 }
 
-BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeUnresolvedList(uint8_t* serialized_binast, int offset, Scope* scope) {
-  auto total_unresolved_variables = DeserializeUint32(serialized_binast, offset);
+BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeUnresolvedList(int offset, Scope* scope) {
+  auto total_unresolved_variables = DeserializeUint32(offset);
   offset = total_unresolved_variables.new_offset;
 
   bool add_unresolved = false;
   for (uint32_t i = 0; i < total_unresolved_variables.value; ++i) {
-    auto variable_proxy = DeserializeVariableProxy(serialized_binast, offset, add_unresolved);
+    auto variable_proxy = DeserializeVariableProxy(offset, add_unresolved);
     offset = variable_proxy.new_offset;
 
     // Normally we add variable proxies to the unresolved_list_ when we encounter them inside
@@ -139,20 +141,20 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   return {nullptr, offset};
 }
 
-BinAstDeserializer::DeserializeResult<Declaration*> BinAstDeserializer::DeserializeDeclaration(uint8_t* serialized_binast, int offset, Scope* scope) {
-  auto start_pos = DeserializeInt32(serialized_binast, offset);
+BinAstDeserializer::DeserializeResult<Declaration*> BinAstDeserializer::DeserializeDeclaration(int offset, Scope* scope) {
+  auto start_pos = DeserializeInt32(offset);
   offset = start_pos.new_offset;
 
-  auto decl_type = DeserializeUint8(serialized_binast, offset);
+  auto decl_type = DeserializeUint8(offset);
   offset = decl_type.new_offset;
 
-  auto variable = DeserializeVariableReference(serialized_binast, offset, scope);
+  auto variable = DeserializeVariableReference(offset, scope);
   offset = variable.new_offset;
 
   Declaration* result;
   switch (decl_type.value) {
     case Declaration::DeclType::VariableDecl: {
-      auto is_nested = DeserializeUint8(serialized_binast, offset);
+      auto is_nested = DeserializeUint8(offset);
       offset = is_nested.new_offset;
 
       // TODO(binast): Add support for nested var decls.
@@ -164,7 +166,7 @@ BinAstDeserializer::DeserializeResult<Declaration*> BinAstDeserializer::Deserial
       // We need to push the Scope being currently deserialized onto the Scope stack while deserializing
       // the FunctionLiterals inside FunctionDeclarations, otherwise their scope chain will end up skipping it.
       Parser::FunctionState function_state(&parser_->function_state_, &parser_->scope_, scope->AsDeclarationScope());
-      auto func = DeserializeAstNode(serialized_binast, offset);
+      auto func = DeserializeAstNode(offset);
       offset = func.new_offset;
 
       result = zone()->New<FunctionDeclaration>((void*)func.value, start_pos.value);
@@ -178,12 +180,12 @@ BinAstDeserializer::DeserializeResult<Declaration*> BinAstDeserializer::Deserial
   return {result, offset};
 }
 
-BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeDeclarations(uint8_t* serialized_binast, int offset, Scope* scope) {
-  auto num_decls = DeserializeUint32(serialized_binast, offset);
+BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeDeclarations(int offset, Scope* scope) {
+  auto num_decls = DeserializeUint32(offset);
   offset = num_decls.new_offset;
 
   for (uint32_t i = 0; i < num_decls.value; ++i) {
-    auto decl_result = DeserializeDeclaration(serialized_binast, offset, scope);
+    auto decl_result = DeserializeDeclaration(offset, scope);
     scope->decls_.Add(decl_result.value);
     offset = decl_result.new_offset;
   }
@@ -191,13 +193,13 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
   return {nullptr, offset};
 }
 
-BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeParameters(uint8_t* serialized_binast, int offset, DeclarationScope* scope) {
-  auto num_parameters_result = DeserializeInt32(serialized_binast, offset);
+BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeScopeParameters(int offset, DeclarationScope* scope) {
+  auto num_parameters_result = DeserializeInt32(offset);
   offset = num_parameters_result.new_offset;
   scope->num_parameters_ = num_parameters_result.value;
 
   for (int i = 0; i < num_parameters_result.value; ++i) {
-    auto param_result = DeserializeVariableReference(serialized_binast, offset, scope);
+    auto param_result = DeserializeVariableReference(offset, scope);
     offset = param_result.new_offset;
     scope->params_.Add(param_result.value, zone());
   }
@@ -237,49 +239,49 @@ void BinAstDeserializer::HandleFunctionSkipping(Scope* scope) {
   produced_preparse_data_by_start_position_[decl_scope->start_position()] = preparse_data;
 }
 
-BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeCommonScopeFields(uint8_t* serialized_binast, int offset, Scope* scope) {
-  auto variable_map_result = DeserializeScopeVariableMap(serialized_binast, offset, scope);
+BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeCommonScopeFields(int offset, Scope* scope) {
+  auto variable_map_result = DeserializeScopeVariableMap(offset, scope);
   offset = variable_map_result.new_offset;
 
-  auto unresolved_list_result = DeserializeScopeUnresolvedList(serialized_binast, offset, scope);
+  auto unresolved_list_result = DeserializeScopeUnresolvedList(offset, scope);
   offset = unresolved_list_result.new_offset;
 
   // scope_info_ TODO(binast): do we need this?
 #ifdef DEBUG
-  auto has_scope_name = DeserializeUint8(serialized_binast, offset);
+  auto has_scope_name = DeserializeUint8(offset);
   offset = has_scope_name.new_offset;
 
   if (has_scope_name.value) {
-    auto scope_name_result = DeserializeRawStringReference(serialized_binast, offset);
+    auto scope_name_result = DeserializeRawStringReference(offset);
     offset = scope_name_result.new_offset;
     scope->SetScopeName(scope_name_result.value);
   }
 
-  auto already_resolved_result = DeserializeUint8(serialized_binast, offset);
+  auto already_resolved_result = DeserializeUint8(offset);
   offset = already_resolved_result.new_offset;
   scope->already_resolved_ = already_resolved_result.value;
 
-  auto needs_migration_result = DeserializeUint8(serialized_binast, offset);
+  auto needs_migration_result = DeserializeUint8(offset);
   offset = needs_migration_result.new_offset;
   scope->needs_migration_ = needs_migration_result.value;
 #endif
-  auto start_position_result = DeserializeInt32(serialized_binast, offset);
+  auto start_position_result = DeserializeInt32(offset);
   offset = start_position_result.new_offset;
   scope->set_start_position(start_position_result.value);
 
-  auto end_position_result = DeserializeInt32(serialized_binast, offset);
+  auto end_position_result = DeserializeInt32(offset);
   offset = end_position_result.new_offset;
   scope->set_end_position(end_position_result.value);
 
-  auto num_stack_slots_result = DeserializeInt32(serialized_binast, offset);
+  auto num_stack_slots_result = DeserializeInt32(offset);
   offset = num_stack_slots_result.new_offset;
   scope->num_stack_slots_ = num_stack_slots_result.value;
 
-  auto num_heap_slots_result = DeserializeInt32(serialized_binast, offset);
+  auto num_heap_slots_result = DeserializeInt32(offset);
   offset = num_heap_slots_result.new_offset;
   scope->num_heap_slots_ = num_heap_slots_result.value;
 
-  auto encoded_boolean_flags_result = DeserializeUint16Flags(serialized_binast, offset);
+  auto encoded_boolean_flags_result = DeserializeUint16Flags(offset);
   offset = encoded_boolean_flags_result.new_offset;
 
   scope->is_strict_ = encoded_boolean_flags_result.value[0];
@@ -309,15 +311,15 @@ BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::Deseri
     HandleFunctionSkipping(scope);
   }
 
-  auto declarations_result = DeserializeScopeDeclarations(serialized_binast, offset, scope);
+  auto declarations_result = DeserializeScopeDeclarations(offset, scope);
   offset = declarations_result.new_offset;
 
   return {nullptr, offset};
 }
 
-BinAstDeserializer::DeserializeResult<Scope*> BinAstDeserializer::DeserializeScope(uint8_t* serialized_binast, int offset) {
+BinAstDeserializer::DeserializeResult<Scope*> BinAstDeserializer::DeserializeScope(int offset) {
   Scope* scope = nullptr;
-  auto scope_type = DeserializeUint8(serialized_binast, offset);
+  auto scope_type = DeserializeUint8(offset);
   offset = scope_type.new_offset;
 
   switch (scope_type.value) {
@@ -349,16 +351,16 @@ BinAstDeserializer::DeserializeResult<Scope*> BinAstDeserializer::DeserializeSco
   }
   DCHECK(scope_type.value == scope->scope_type());
 
-  auto common_fields_result = DeserializeCommonScopeFields(serialized_binast, offset, scope);
+  auto common_fields_result = DeserializeCommonScopeFields(offset, scope);
   offset = common_fields_result.new_offset;
 
   return {scope, offset};
 }
 
 
-BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::DeserializeDeclarationScope(uint8_t* serialized_binast, int offset) {
+BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::DeserializeDeclarationScope(int offset) {
   DeclarationScope* scope = nullptr;
-  auto scope_type = DeserializeUint8(serialized_binast, offset);
+  auto scope_type = DeserializeUint8(offset);
   offset = scope_type.new_offset;
 
   switch (scope_type.value) {
@@ -372,7 +374,7 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
       UNREACHABLE();
     }
     case FUNCTION_SCOPE: {
-      auto function_kind = DeserializeUint8(serialized_binast, offset);
+      auto function_kind = DeserializeUint8(offset);
       offset = function_kind.new_offset;
 
       scope = parser_->NewFunctionScope(static_cast<FunctionKind>(function_kind.value));
@@ -388,11 +390,11 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
   }
   DCHECK(scope_type.value == scope->scope_type());
 
-  auto common_fields_result = DeserializeCommonScopeFields(serialized_binast, offset, scope);
+  auto common_fields_result = DeserializeCommonScopeFields(offset, scope);
   offset = common_fields_result.new_offset;
 
   // DeclarationScope data:
-  auto encoded_decl_scope_bool_flags_result = DeserializeUint16Flags(serialized_binast, offset);
+  auto encoded_decl_scope_bool_flags_result = DeserializeUint16Flags(offset);
   offset = encoded_decl_scope_bool_flags_result.new_offset;
 
   scope->has_simple_parameters_ = encoded_decl_scope_bool_flags_result.value[0];
@@ -411,24 +413,24 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
   scope->has_this_declaration_ = encoded_decl_scope_bool_flags_result.value[12];
   scope->needs_private_name_context_chain_recalc_ = encoded_decl_scope_bool_flags_result.value[13];
 
-  auto params_result = DeserializeScopeParameters(serialized_binast, offset, scope);
+  auto params_result = DeserializeScopeParameters(offset, scope);
   offset = params_result.new_offset;
 
   // TODO(binast): sloppy_block_functions_ (needed for non-strict mode support)
 
-  auto receiver_result = DeserializeVariableReference(serialized_binast, offset, scope);
+  auto receiver_result = DeserializeVariableReference(offset, scope);
   offset = receiver_result.new_offset;
   scope->receiver_ = receiver_result.value;
 
-  auto function_result = DeserializeVariableReference(serialized_binast, offset, scope);
+  auto function_result = DeserializeVariableReference(offset, scope);
   offset = function_result.new_offset;
   scope->function_ = function_result.value;
 
-  auto new_target_result = DeserializeVariableReference(serialized_binast, offset, scope);
+  auto new_target_result = DeserializeVariableReference(offset, scope);
   offset = new_target_result.new_offset;
   scope->new_target_ = new_target_result.value;
 
-  auto arguments_result = DeserializeVariableReference(serialized_binast, offset, scope);
+  auto arguments_result = DeserializeVariableReference(offset, scope);
   offset = arguments_result.new_offset;
   scope->arguments_ = arguments_result.value;
 
@@ -436,30 +438,30 @@ BinAstDeserializer::DeserializeResult<DeclarationScope*> BinAstDeserializer::Des
   return {scope, offset};
 }
 
-BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::DeserializeFunctionLiteral(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::DeserializeFunctionLiteral(uint32_t bit_field, int32_t position, int offset) {
   // Swap in a new map for string offsets.
   std::vector<const AstRawString*> temp_strings;
   strings_.swap(temp_strings);
 
-  auto proxy_string_table_offset = DeserializeUint32(serialized_binast, offset);
+  auto proxy_string_table_offset = DeserializeUint32(offset);
   offset = proxy_string_table_offset.new_offset;
 
-  auto proxy_string_table = DeserializeProxyStringTable(serialized_binast, proxy_string_table_offset.value);
+  auto proxy_string_table = DeserializeProxyStringTable(proxy_string_table_offset.value);
   // Note: We set the offset after processing the body of the function.
 
   std::vector<Variable*> temp_variables;
   variables_.swap(temp_variables);
 
-  auto proxy_variable_table_offset = DeserializeUint32(serialized_binast, offset);
+  auto proxy_variable_table_offset = DeserializeUint32(offset);
   offset = proxy_variable_table_offset.new_offset;
 
   auto previous_proxy_variable_table_base_offset = proxy_variable_table_base_offset_;
   proxy_variable_table_base_offset_ = proxy_variable_table_offset.value;
-  auto proxy_variable_table = DeserializeProxyVariableTable(serialized_binast, proxy_variable_table_offset.value);
+  auto proxy_variable_table = DeserializeProxyVariableTable(proxy_variable_table_offset.value);
   // Note: We set the offset after processing the body of the function.
 
   // TODO(binast): Kind of silly that we serialize a cons string only to deserialized into a raw string
-  auto name = DeserializeConsString(serialized_binast, offset);
+  auto name = DeserializeConsString(offset);
   offset = name.new_offset;
 
   const AstRawString* raw_name = nullptr;
@@ -473,25 +475,25 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
     }
   }
 
-  auto scope = DeserializeDeclarationScope(serialized_binast, offset);
+  auto scope = DeserializeDeclarationScope(offset);
   offset = scope.new_offset;
   
-  auto expected_property_count = DeserializeInt32(serialized_binast, offset);
+  auto expected_property_count = DeserializeInt32(offset);
   offset = expected_property_count.new_offset;
 
-  auto parameter_count = DeserializeInt32(serialized_binast, offset);
+  auto parameter_count = DeserializeInt32(offset);
   offset = parameter_count.new_offset;
 
-  auto function_length = DeserializeInt32(serialized_binast, offset);
+  auto function_length = DeserializeInt32(offset);
   offset = function_length.new_offset;
 
-  auto function_token_position = DeserializeInt32(serialized_binast, offset);
+  auto function_token_position = DeserializeInt32(offset);
   offset = function_token_position.new_offset;
 
-  auto suspend_count = DeserializeInt32(serialized_binast, offset);
+  auto suspend_count = DeserializeInt32(offset);
   offset = suspend_count.new_offset;
 
-  auto function_literal_id = DeserializeInt32(serialized_binast, offset);
+  auto function_literal_id = DeserializeInt32(offset);
   offset = function_literal_id.new_offset;
 
   FunctionLiteral::ParameterFlag has_duplicate_parameters = FunctionLiteral::HasDuplicateParameters::decode(bit_field) ? FunctionLiteral::ParameterFlag::kHasDuplicateParameters : FunctionLiteral::ParameterFlag::kNoDuplicateParameters;
@@ -499,7 +501,7 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   FunctionLiteral::EagerCompileHint eager_compile_hint = scope.value->ShouldEagerCompile() ? FunctionLiteral::kShouldEagerCompile : FunctionLiteral::kShouldLazyCompile;
   bool has_braces = FunctionLiteral::HasBracesField::decode(bit_field);
 
-  auto num_statements = DeserializeInt32(serialized_binast, offset);
+  auto num_statements = DeserializeInt32(offset);
   offset = num_statements.new_offset;
 
   ScopedPtrList<Statement> body(pointer_buffer());
@@ -512,7 +514,7 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
     Parser::FunctionState function_state(&parser_->function_state_, &parser_->scope_, scope.value);
 
     for (int i = 0; i < num_statements.value; ++i) {
-      auto statement = DeserializeAstNode(serialized_binast, offset);
+      auto statement = DeserializeAstNode(offset);
       offset = statement.new_offset;
       DCHECK(statement.value != nullptr);
       DCHECK(statement.value->AsStatement() != nullptr);
@@ -552,27 +554,27 @@ BinAstDeserializer::DeserializeResult<FunctionLiteral*> BinAstDeserializer::Dese
   return {result, offset};
 }
 
-BinAstDeserializer::DeserializeResult<ObjectLiteral*> BinAstDeserializer::DeserializeObjectLiteral(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
-  auto properties_length = DeserializeInt32(serialized_binast, offset);
+BinAstDeserializer::DeserializeResult<ObjectLiteral*> BinAstDeserializer::DeserializeObjectLiteral(uint32_t bit_field, int32_t position, int offset) {
+  auto properties_length = DeserializeInt32(offset);
   offset = properties_length.new_offset;
 
-  auto boilerplate_properties = DeserializeInt32(serialized_binast, offset);
+  auto boilerplate_properties = DeserializeInt32(offset);
   offset = boilerplate_properties.new_offset;
 
   ScopedPtrList<ObjectLiteral::Property> properties(pointer_buffer());
   properties.Reserve(properties_length.value);
 
   for (int i = 0; i < properties_length.value; i++) {
-    auto key = DeserializeAstNode(serialized_binast, offset);
+    auto key = DeserializeAstNode(offset);
     offset = key.new_offset;
 
-    auto value = DeserializeAstNode(serialized_binast, offset);
+    auto value = DeserializeAstNode(offset);
     offset = value.new_offset;
 
-    auto kind = DeserializeUint8(serialized_binast, offset);
+    auto kind = DeserializeUint8(offset);
     offset = kind.new_offset;
 
-    auto is_computed_name = DeserializeUint8(serialized_binast, offset);
+    auto is_computed_name = DeserializeUint8(offset);
     offset = is_computed_name.new_offset;
 
     auto property = parser_->factory()->NewObjectLiteralProperty(
@@ -584,7 +586,7 @@ BinAstDeserializer::DeserializeResult<ObjectLiteral*> BinAstDeserializer::Deseri
     properties.Add(property);
   }
 
-  auto home_object = DeserializeVariableReference(serialized_binast, offset);
+  auto home_object = DeserializeVariableReference(offset);
   offset = home_object.new_offset;
 
   bool has_rest_property = false;
@@ -596,13 +598,12 @@ BinAstDeserializer::DeserializeResult<ObjectLiteral*> BinAstDeserializer::Deseri
 }
 
 BinAstDeserializer::DeserializeResult<ArrayLiteral*>
-BinAstDeserializer::DeserializeArrayLiteral(uint8_t* serialized_binast,
-                                            uint32_t bit_field,
+BinAstDeserializer::DeserializeArrayLiteral(uint32_t bit_field,
                                             int32_t position, int offset) {
-  auto array_length = DeserializeInt32(serialized_binast, offset);
+  auto array_length = DeserializeInt32(offset);
   offset = array_length.new_offset;
 
-  auto first_spread_index = DeserializeInt32(serialized_binast, offset);
+  auto first_spread_index = DeserializeInt32(offset);
   offset = first_spread_index.new_offset;
 
   DCHECK(first_spread_index.value == -1);
@@ -611,7 +612,7 @@ BinAstDeserializer::DeserializeArrayLiteral(uint8_t* serialized_binast,
   values.Reserve(array_length.value);
 
   for (int i = 0; i < array_length.value; i++) {
-    auto value = DeserializeAstNode(serialized_binast, offset);
+    auto value = DeserializeAstNode(offset);
     offset = value.new_offset;
 
     values.Add(static_cast<Expression*>(value.value));
@@ -624,25 +625,24 @@ BinAstDeserializer::DeserializeArrayLiteral(uint8_t* serialized_binast,
 }
 
 BinAstDeserializer::DeserializeResult<NaryOperation*>
-BinAstDeserializer::DeserializeNaryOperation(uint8_t* serialized_binast,
-                                             uint32_t bit_field,
+BinAstDeserializer::DeserializeNaryOperation(uint32_t bit_field,
                                              int32_t position, int offset) {
   Token::Value op = NaryOperation::OperatorField::decode(bit_field);
 
-  auto first = DeserializeAstNode(serialized_binast, offset);
+  auto first = DeserializeAstNode(offset);
   offset = first.new_offset;
 
-  auto subsequent_length = DeserializeUint32(serialized_binast, offset);
+  auto subsequent_length = DeserializeUint32(offset);
   offset = subsequent_length.new_offset;
 
   NaryOperation* result = parser_->factory()->NewNaryOperation(
       op, static_cast<Expression*>(first.value), subsequent_length.value);
 
   for (uint32_t i = 0; i < subsequent_length.value; i++) {
-    auto expr = DeserializeAstNode(serialized_binast, offset);
+    auto expr = DeserializeAstNode(offset);
     offset = expr.new_offset;
 
-    auto pos = DeserializeInt32(serialized_binast, offset);
+    auto pos = DeserializeInt32(offset);
     offset = pos.new_offset;
 
     result->AddSubsequent(static_cast<Expression*>(expr.value), pos.value);
@@ -653,16 +653,15 @@ BinAstDeserializer::DeserializeNaryOperation(uint8_t* serialized_binast,
 }
 
 BinAstDeserializer::DeserializeResult<Conditional*>
-BinAstDeserializer::DeserializeConditional(uint8_t* serialized_binast,
-                                           uint32_t bit_field, int32_t position,
+BinAstDeserializer::DeserializeConditional(uint32_t bit_field, int32_t position,
                                            int offset) {
-  auto condition = DeserializeAstNode(serialized_binast, offset);
+  auto condition = DeserializeAstNode(offset);
   offset = condition.new_offset;
 
-  auto then_expression = DeserializeAstNode(serialized_binast, offset);
+  auto then_expression = DeserializeAstNode(offset);
   offset = then_expression.new_offset;
 
-  auto else_expression = DeserializeAstNode(serialized_binast, offset);
+  auto else_expression = DeserializeAstNode(offset);
   offset = else_expression.new_offset;
 
   Conditional* result = parser_->factory()->NewConditional(
@@ -675,30 +674,29 @@ BinAstDeserializer::DeserializeConditional(uint8_t* serialized_binast,
 }
 
 BinAstDeserializer::DeserializeResult<TryCatchStatement*>
-BinAstDeserializer::DeserializeTryCatchStatement(uint8_t* serialized_binast,
-                                                 uint32_t bit_field,
+BinAstDeserializer::DeserializeTryCatchStatement(uint32_t bit_field,
                                                  int32_t position, int offset) {
-  auto try_block = DeserializeAstNode(serialized_binast, offset);
+  auto try_block = DeserializeAstNode(offset);
   offset = try_block.new_offset;
 
-  auto has_scope = DeserializeUint8(serialized_binast, offset);
+  auto has_scope = DeserializeUint8(offset);
   offset = has_scope.new_offset;
 
   Scope* scope_ptr = nullptr;
   Block* catch_block = nullptr;
   if (has_scope.value) {
-    auto scope = DeserializeScope(serialized_binast, offset);
+    auto scope = DeserializeScope(offset);
     offset = scope.new_offset;
 
     DCHECK(scope.value != nullptr);
     scope_ptr = scope.value;
 
     Parser::BlockState catch_variable_block_state(&parser_->scope_, scope_ptr);
-    auto catch_block_result = DeserializeAstNode(serialized_binast, offset);
+    auto catch_block_result = DeserializeAstNode(offset);
     catch_block = static_cast<Block*>(catch_block_result.value);
     offset = catch_block_result.new_offset;
   } else {
-    auto catch_block_result = DeserializeAstNode(serialized_binast, offset);
+    auto catch_block_result = DeserializeAstNode(offset);
     catch_block = static_cast<Block*>(catch_block_result.value);
     offset = catch_block_result.new_offset;
   }
@@ -711,13 +709,12 @@ BinAstDeserializer::DeserializeTryCatchStatement(uint8_t* serialized_binast,
 }
 
 BinAstDeserializer::DeserializeResult<RegExpLiteral*>
-BinAstDeserializer::DeserializeRegExpLiteral(uint8_t* serialized_binast,
-                                                 uint32_t bit_field,
-                                                 int32_t position, int offset) {
-  auto raw_pattern = DeserializeRawStringReference(serialized_binast, offset);
+BinAstDeserializer::DeserializeRegExpLiteral(uint32_t bit_field,
+                                             int32_t position, int offset) {
+  auto raw_pattern = DeserializeRawStringReference(offset);
   offset = raw_pattern.new_offset;
 
-  auto flags = DeserializeInt32(serialized_binast, offset);
+  auto flags = DeserializeInt32(offset);
   offset = flags.new_offset;
 
   RegExpLiteral* result = parser_->factory()->NewRegExpLiteral(
@@ -727,26 +724,25 @@ BinAstDeserializer::DeserializeRegExpLiteral(uint8_t* serialized_binast,
 }
 
 BinAstDeserializer::DeserializeResult<SwitchStatement*>
-BinAstDeserializer::DeserializeSwitchStatement(uint8_t* serialized_binast,
-                                               uint32_t bit_field,
+BinAstDeserializer::DeserializeSwitchStatement(uint32_t bit_field,
                                                int32_t position, int offset) {
-  auto tag = DeserializeAstNode(serialized_binast, offset);
+  auto tag = DeserializeAstNode(offset);
   offset = tag.new_offset;
 
   SwitchStatement* result = parser_->factory()->NewSwitchStatement(
       static_cast<Expression*>(tag.value), position);
 
-  auto num_cases = DeserializeInt32(serialized_binast, offset);
+  auto num_cases = DeserializeInt32(offset);
   offset = num_cases.new_offset;
 
   for (int i = 0; i < num_cases.value; i++) {
-    auto is_default = DeserializeUint8(serialized_binast, offset);
+    auto is_default = DeserializeUint8(offset);
     offset = is_default.new_offset;
 
     Expression* label;
 
     if (is_default.value == 0) {
-      auto deserialized_label = DeserializeAstNode(serialized_binast, offset);
+      auto deserialized_label = DeserializeAstNode(offset);
       offset = deserialized_label.new_offset;
 
       label = static_cast<Expression*>(deserialized_label.value);
@@ -754,14 +750,14 @@ BinAstDeserializer::DeserializeSwitchStatement(uint8_t* serialized_binast,
       label = nullptr;
     }
 
-    auto statements_length = DeserializeInt32(serialized_binast, offset);
+    auto statements_length = DeserializeInt32(offset);
     offset = statements_length.new_offset;
 
     ScopedPtrList<Statement> statements(pointer_buffer());
     statements.Reserve(statements_length.value);
 
     for (int i = 0; i < statements_length.value; i++) {
-      auto statement = DeserializeAstNode(serialized_binast, offset);
+      auto statement = DeserializeAstNode(offset);
       offset = statement.new_offset;
 
       statements.Add(static_cast<Statement*>(statement.value));
@@ -776,30 +772,29 @@ BinAstDeserializer::DeserializeSwitchStatement(uint8_t* serialized_binast,
 }
 
 BinAstDeserializer::DeserializeResult<BreakStatement*>
-BinAstDeserializer::DeserializeBreakStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+BinAstDeserializer::DeserializeBreakStatement(uint32_t bit_field, int32_t position, int offset) {
   BreakStatement* result = parser_->factory()->NewBreakStatement(nullptr, position);
 
-  auto target = DeserializeNodeReference(serialized_binast, offset, reinterpret_cast<void**>(&result->target_));
+  auto target = DeserializeNodeReference(offset, reinterpret_cast<void**>(&result->target_));
   offset = target.new_offset;
 
   return {result, offset};
 }
 
 BinAstDeserializer::DeserializeResult<ContinueStatement*>
-BinAstDeserializer::DeserializeContinueStatement(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+BinAstDeserializer::DeserializeContinueStatement(uint32_t bit_field, int32_t position, int offset) {
   ContinueStatement* result = parser_->factory()->NewContinueStatement(nullptr, position);
 
-  auto target = DeserializeNodeReference(serialized_binast, offset, reinterpret_cast<void**>(&result->target_));
+  auto target = DeserializeNodeReference(offset, reinterpret_cast<void**>(&result->target_));
   offset = target.new_offset;
 
   return {result, offset};
 }
 
 BinAstDeserializer::DeserializeResult<Throw*>
-BinAstDeserializer::DeserializeThrow(uint8_t* serialized_binast,
-                                     uint32_t bit_field, int32_t position,
+BinAstDeserializer::DeserializeThrow(uint32_t bit_field, int32_t position,
                                      int offset) {
-  auto exception = DeserializeAstNode(serialized_binast, offset);
+  auto exception = DeserializeAstNode(offset);
   offset = exception.new_offset;
 
   Throw* result = parser_->factory()->NewThrow(
@@ -809,7 +804,7 @@ BinAstDeserializer::DeserializeThrow(uint8_t* serialized_binast,
 }
 
 // This is just a placeholder while we implement the various nodes that we'll support.
-BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeNodeStub(uint8_t* serialized_binast, uint32_t bit_field, int32_t position, int offset) {
+BinAstDeserializer::DeserializeResult<std::nullptr_t> BinAstDeserializer::DeserializeNodeStub(uint32_t bit_field, int32_t position, int offset) {
   UNREACHABLE();
   return {nullptr, offset};
 }
