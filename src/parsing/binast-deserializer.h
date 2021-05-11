@@ -39,10 +39,22 @@ class BinAstDeserializer {
                           base::Optional<uint32_t> length = base::nullopt);
 
  private:
-  template <typename T>
-  struct DeserializeResult {
-    T value;
-    int new_offset;
+  class OffsetRestorationScope {
+   public:
+    OffsetRestorationScope(BinAstDeserializer* deserializer)
+      : deserializer_(deserializer)
+      , old_current_offset_(deserializer->current_offset_)
+    {
+    }
+
+    ~OffsetRestorationScope()
+    {
+      deserializer_->current_offset_ = old_current_offset_;
+    }
+
+   private:
+    BinAstDeserializer* deserializer_;
+    int old_current_offset_;
   };
 
   Zone* zone();
@@ -56,89 +68,87 @@ class BinAstDeserializer {
                                       uint8_t* uncompressed_ast,
                                       size_t uncompressed_size);
 
-  DeserializeResult<AstNode*> DeserializeMaybeAstNode(int offset);
+  AstNode* DeserializeMaybeAstNode();
 
-  DeserializeResult<uint64_t> DeserializeUint64(int offset);
-  DeserializeResult<uint32_t> DeserializeUint32(int offset);
-  DeserializeResult<uint32_t> DeserializeVarUint32(int offset);
+  uint64_t DeserializeUint64();
+  uint32_t DeserializeUint32();
+  uint32_t DeserializeVarUint32();
 
-  DeserializeResult<uint16_t> DeserializeUint16(int offset);
-  DeserializeResult<uint8_t> DeserializeUint8(int offset);
-  DeserializeResult<int32_t> DeserializeInt32(int offset);
-  DeserializeResult<std::array<bool, 16>> DeserializeUint16Flags(int offset);
-  DeserializeResult<double> DeserializeDouble(int offset);
+  uint16_t DeserializeUint16();
+  uint8_t DeserializeUint8();
+  int32_t DeserializeInt32();
+  std::array<bool, 16> DeserializeUint16Flags();
+  double DeserializeDouble();
 
-  DeserializeResult<AstNode*> DeserializeNodeReference(int offset, void** patchable_field);
+  void DeserializeNodeReference(void** patchable_field);
   void RecordBreakableStatement(uint32_t offset, BreakableStatement* node);
   void PatchPendingNodeReferences(uint32_t offset, AstNode* node);
 
-  DeserializeResult<const char*> DeserializeCString(int offset);
-  DeserializeResult<const AstRawString*> DeserializeRawString(int offset);
-  DeserializeResult<const AstRawString*> DeserializeProxyString(int offset);
-  DeserializeResult<std::nullptr_t> DeserializeStringTable(int offset);
-  DeserializeResult<std::nullptr_t> DeserializeProxyStringTable(int offset);
-  DeserializeResult<const AstRawString*> DeserializeRawStringReference(int offset, bool fixed_size = false);
-  DeserializeResult<const AstRawString*> DeserializeGlobalRawStringReference(int offset);
-  DeserializeResult<AstConsString*> DeserializeConsString(int offset);
+  const char* DeserializeCString();
+  const AstRawString* DeserializeRawString(int header_index);
+  const AstRawString* DeserializeProxyString();
+  void DeserializeStringTable();
+  void DeserializeProxyStringTable();
+  const AstRawString* DeserializeRawStringReference(bool fixed_size = false);
+  AstConsString* DeserializeConsString();
 
   Variable* CreateLocalTemporaryVariable(Scope* scope, const AstRawString* name, int index, int initializer_position, uint32_t bit_field);
   Variable* CreateLocalNonTemporaryVariable(Scope* scope, const AstRawString* name, int index, int initializer_position, uint32_t bit_field);
 
   void HandleFunctionSkipping(Scope* scope);
 
-  DeserializeResult<std::nullptr_t> DeserializeProxyVariableTable(int offset);
-  DeserializeResult<RawVariableData> DeserializeGlobalVariableReference(int offset);
-  DeserializeResult<RawVariableData> DeserializeProxyVariableReference(int offset);
-  DeserializeResult<Variable*> DeserializeLocalVariable(int offset, Scope* scope);
-  DeserializeResult<Variable*> DeserializeNonLocalVariable(int offset, Scope* scope);
-  DeserializeResult<Variable*> DeserializeVariableReference(int offset, Scope* scope = nullptr);
-  DeserializeResult<Variable*> DeserializeScopeVariable(int offset, Scope* scope);
-  DeserializeResult<Variable*> DeserializeNonScopeVariable(int offset);
-  DeserializeResult<Variable*> DeserializeNonScopeVariableOrReference(int offset);
-  DeserializeResult<std::nullptr_t> DeserializeScopeVariableMap(int offset, Scope* scope);
-  DeserializeResult<std::nullptr_t> DeserializeScopeUnresolvedList(int offset, Scope* scope);
-  DeserializeResult<Declaration*> DeserializeDeclaration(int offset, Scope* scope);
-  DeserializeResult<std::nullptr_t> DeserializeScopeDeclarations(int offset, Scope* scope);
-  DeserializeResult<std::nullptr_t> DeserializeScopeParameters(int offset, DeclarationScope* scope);
-  DeserializeResult<std::nullptr_t> DeserializeCommonScopeFields(int offset, Scope* scope);
-  DeserializeResult<Scope*> DeserializeScope(int offset);
-  DeserializeResult<DeclarationScope*> DeserializeDeclarationScope(int offset);
+  void DeserializeProxyVariableTable();
+  RawVariableData DeserializeGlobalVariableReference();
+  RawVariableData DeserializeProxyVariableReference();
+  void DeserializeLocalVariable(Scope* scope);
+  Variable* DeserializeNonLocalVariable(Scope* scope);
+  Variable* DeserializeVariableReference(Scope* scope = nullptr);
+  Variable* DeserializeScopeVariable(Scope* scope);
+  Variable* DeserializeNonScopeVariable();
+  Variable* DeserializeNonScopeVariableOrReference();
+  void DeserializeScopeVariableMap(Scope* scope);
+  void DeserializeScopeUnresolvedList(Scope* scope);
+  Declaration* DeserializeDeclaration(Scope* scope);
+  void DeserializeScopeDeclarations(Scope* scope);
+  void DeserializeScopeParameters(DeclarationScope* scope);
+  void DeserializeCommonScopeFields(Scope* scope);
+  Scope* DeserializeScope();
+  DeclarationScope* DeserializeDeclarationScope();
 
-  DeserializeResult<AstNode*> DeserializeAstNode(int offset, bool is_toplevel = false);
-  DeserializeResult<FunctionLiteral*> DeserializeFunctionLiteral(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<ReturnStatement*> DeserializeReturnStatement(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<BinaryOperation*> DeserializeBinaryOperation(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<Property*> DeserializeProperty(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<ExpressionStatement*> DeserializeExpressionStatement(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<VariableProxy*> DeserializeVariableProxy(int offset, bool add_unresolved = true);
-  DeserializeResult<VariableProxyExpression*> DeserializeVariableProxyExpression(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<Literal*> DeserializeLiteral(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<Call*> DeserializeCall(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<CallNew*> DeserializeCallNew(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<IfStatement*> DeserializeIfStatement(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<Block*> DeserializeBlock(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<Assignment*> DeserializeAssignment(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<CompareOperation*> DeserializeCompareOperation(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<EmptyStatement*> DeserializeEmptyStatement(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<ForStatement*> DeserializeForStatement(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<ForInStatement*> DeserializeForInStatement(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<WhileStatement*> DeserializeWhileStatement(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<DoWhileStatement*> DeserializeDoWhileStatement(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<CountOperation*> DeserializeCountOperation(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<CompoundAssignment*> DeserializeCompoundAssignment(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<UnaryOperation*> DeserializeUnaryOperation(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<ThisExpression*> DeserializeThisExpression(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<ObjectLiteral*> DeserializeObjectLiteral(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<ArrayLiteral*> DeserializeArrayLiteral(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<NaryOperation*> DeserializeNaryOperation(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<Conditional*> DeserializeConditional(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<TryCatchStatement*> DeserializeTryCatchStatement(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<RegExpLiteral*> DeserializeRegExpLiteral(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<SwitchStatement*> DeserializeSwitchStatement(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<BreakStatement*> DeserializeBreakStatement(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<ContinueStatement*> DeserializeContinueStatement(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<Throw*> DeserializeThrow(uint32_t bit_field, int32_t position, int offset);
-  DeserializeResult<std::nullptr_t> DeserializeNodeStub(uint32_t bit_field, int32_t position, int offset);
+  AstNode* DeserializeAstNode(bool is_toplevel = false);
+  FunctionLiteral* DeserializeFunctionLiteral(uint32_t bit_field, int32_t position);
+  ReturnStatement* DeserializeReturnStatement(uint32_t bit_field, int32_t position);
+  BinaryOperation* DeserializeBinaryOperation(uint32_t bit_field, int32_t position);
+  Property* DeserializeProperty(uint32_t bit_field, int32_t position);
+  ExpressionStatement* DeserializeExpressionStatement(uint32_t bit_field, int32_t position);
+  VariableProxy* DeserializeVariableProxy(bool add_unresolved = true);
+  VariableProxyExpression* DeserializeVariableProxyExpression(uint32_t bit_field, int32_t position);
+  Literal* DeserializeLiteral(uint32_t bit_field, int32_t position);
+  Call* DeserializeCall(uint32_t bit_field, int32_t position);
+  CallNew* DeserializeCallNew(uint32_t bit_field, int32_t position);
+  IfStatement* DeserializeIfStatement(uint32_t bit_field, int32_t position);
+  Block* DeserializeBlock(uint32_t bit_field, int32_t position);
+  Assignment* DeserializeAssignment(uint32_t bit_field, int32_t position);
+  CompareOperation* DeserializeCompareOperation(uint32_t bit_field, int32_t position);
+  EmptyStatement* DeserializeEmptyStatement(uint32_t bit_field, int32_t position);
+  ForStatement* DeserializeForStatement(uint32_t bit_field, int32_t position);
+  ForInStatement* DeserializeForInStatement(uint32_t bit_field, int32_t position);
+  WhileStatement* DeserializeWhileStatement(uint32_t bit_field, int32_t position);
+  DoWhileStatement* DeserializeDoWhileStatement(uint32_t bit_field, int32_t position);
+  CountOperation* DeserializeCountOperation(uint32_t bit_field, int32_t position);
+  CompoundAssignment* DeserializeCompoundAssignment(uint32_t bit_field, int32_t position);
+  UnaryOperation* DeserializeUnaryOperation(uint32_t bit_field, int32_t position);
+  ThisExpression* DeserializeThisExpression(uint32_t bit_field, int32_t position);
+  ObjectLiteral* DeserializeObjectLiteral(uint32_t bit_field, int32_t position);
+  ArrayLiteral* DeserializeArrayLiteral(uint32_t bit_field, int32_t position);
+  NaryOperation* DeserializeNaryOperation(uint32_t bit_field, int32_t position);
+  Conditional* DeserializeConditional(uint32_t bit_field, int32_t position);
+  TryCatchStatement* DeserializeTryCatchStatement(uint32_t bit_field, int32_t position);
+  RegExpLiteral* DeserializeRegExpLiteral(uint32_t bit_field, int32_t position);
+  SwitchStatement* DeserializeSwitchStatement(uint32_t bit_field, int32_t position);
+  BreakStatement* DeserializeBreakStatement(uint32_t bit_field, int32_t position);
+  ContinueStatement* DeserializeContinueStatement(uint32_t bit_field, int32_t position);
+  Throw* DeserializeThrow(uint32_t bit_field, int32_t position);
 
   Isolate* isolate_;
   Parser* parser_;
@@ -146,6 +156,7 @@ class BinAstDeserializer {
   MaybeHandle<PreparseData> preparse_data_;
   std::unique_ptr<ConsumedPreparseData> consumed_preparse_data_;
   uint8_t* serialized_ast_;
+  int current_offset_;
 
   std::vector<void*> pointer_buffer_;
   std::vector<const AstRawString*> strings_;
